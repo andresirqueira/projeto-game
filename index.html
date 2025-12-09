@@ -1247,11 +1247,71 @@
                 margin-top: -30px;
             }
         }
+        
+        /* Botões de Áudio */
+        .audio-controls {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+        
+        .audio-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+        
+        .audio-btn:hover {
+            background: rgba(0, 0, 0, 0.7);
+            transform: scale(1.1);
+        }
+        
+        .audio-btn.muted {
+            opacity: 0.5;
+            background: rgba(231, 76, 60, 0.5);
+        }
+        
+        .audio-btn.muted:hover {
+            background: rgba(231, 76, 60, 0.7);
+        }
+        
+        @media screen and (max-width: 750px) {
+            .audio-controls {
+                top: 10px;
+                right: 10px;
+                gap: 8px;
+            }
+            
+            .audio-btn {
+                width: 35px;
+                height: 35px;
+                font-size: 16px;
+            }
+        }
     </style>
 </head>
 <body>
     <!-- Menu Inicial -->
     <div class="menu-overlay" id="menuOverlay">
+        <!-- Botões de Áudio -->
+        <div class="audio-controls">
+            <button class="audio-btn" id="musicBtn" onclick="toggleMusic()" title="Música">🎵</button>
+            <button class="audio-btn" id="sfxBtn" onclick="toggleSFX()" title="Efeitos Sonoros">🔊</button>
+        </div>
+        
         <div class="menu-title">🎮 Batalha dos Pássaros 🎮</div>
         <div class="menu-subtitle">Quem come mais, vence!</div>
         
@@ -1397,27 +1457,27 @@
 
     <!-- Container do Jogo -->
     <div class="game-container" id="gameContainer">
-        <h1>🐦 Batalha dos Pássaros 🐦</h1>
-        
-        <div class="score-board" id="scoreBoard">
-            <div class="score player-score" id="playerScoreContainer">🐦 Você: <span id="playerScore">0</span></div>
-            <div class="score cpu-score" id="cpuScoreContainer">🤖 CPU: <span id="cpuScore">0</span></div>
+        <!-- Botões de Áudio -->
+        <div class="audio-controls">
+            <button class="audio-btn" id="musicBtnGame" onclick="toggleMusic()" title="Música">🎵</button>
+            <button class="audio-btn" id="sfxBtnGame" onclick="toggleSFX()" title="Efeitos Sonoros">🔊</button>
         </div>
         
+        <!-- Elementos HTML escondidos (agora desenhados no canvas) -->
         <!-- UI especial para fase bônus -->
         <div class="bonus-ui" id="bonusUI" style="display: none;">
             <div class="bonus-counter">🪱 Minhocas: <span id="wormCount">0</span> / <span id="wormGoal">25</span></div>
         </div>
         
-        <div class="timer">⏱️ Tempo: <span id="timer">60</span>s</div>
+        <div class="timer" id="timerContainer" style="display: none;">⏱️ Tempo: <span id="timer">60</span>s</div>
         
-        <div class="cooldown-container" id="cooldownContainer">
+        <div class="cooldown-container" id="cooldownContainer" style="display: none;">
             💥 Stun: <div class="cooldown-bar"><div class="cooldown-fill" id="cooldownFill"></div></div> <span id="cooldownText">0/20</span>
         </div>
         
         <canvas id="game" width="800" height="500"></canvas>
         
-        <p class="instructions" id="gameInstructions">Use as <strong>SETAS</strong> ou <strong>WASD</strong> para mover! 💥 <strong>Colida</strong> com o adversário para atordoá-lo!</p>
+        <p class="instructions" id="gameInstructions" style="display: none;"></p>
 
         <div class="game-over" id="gameOver">
             <canvas id="winnerCanvas" width="400" height="150"></canvas>
@@ -1453,6 +1513,7 @@
             worm: new Audio('sounds/worm.mp3'),
             hawk: new Audio('sounds/hawk.mp3'),
             powerup: new Audio('sounds/powerup.mp3'),
+            introSound: new Audio('sounds/intro-sound.mp3'),
         };
 
         // Volume geral (0 a 1)
@@ -1462,12 +1523,113 @@
         Object.values(sounds).forEach(sound => {
             if (sound) sound.volume = masterVolume;
         });
+        
+        // Configurar música de introdução para loop
+        if (sounds.introSound) {
+            sounds.introSound.loop = true;
+            sounds.introSound.volume = masterVolume * 0.6; // Música de fundo um pouco mais baixa
+        }
+        
+        // Controles de áudio
+        let musicMuted = false;
+        let sfxMuted = false;
+        
+        // Carregar preferências salvas
+        const savedMusicMuted = localStorage.getItem('musicMuted');
+        const savedSfxMuted = localStorage.getItem('sfxMuted');
+        if (savedMusicMuted !== null) musicMuted = savedMusicMuted === 'true';
+        if (savedSfxMuted !== null) sfxMuted = savedSfxMuted === 'true';
+        
+        // Aplicar estado inicial dos botões
+        function updateAudioButtons() {
+            const musicBtn = document.getElementById('musicBtn');
+            const musicBtnGame = document.getElementById('musicBtnGame');
+            const sfxBtn = document.getElementById('sfxBtn');
+            const sfxBtnGame = document.getElementById('sfxBtnGame');
+            
+            if (musicBtn) {
+                musicBtn.textContent = musicMuted ? '🔇' : '🎵';
+                musicBtn.classList.toggle('muted', musicMuted);
+            }
+            if (musicBtnGame) {
+                musicBtnGame.textContent = musicMuted ? '🔇' : '🎵';
+                musicBtnGame.classList.toggle('muted', musicMuted);
+            }
+            if (sfxBtn) {
+                sfxBtn.textContent = sfxMuted ? '🔇' : '🔊';
+                sfxBtn.classList.toggle('muted', sfxMuted);
+            }
+            if (sfxBtnGame) {
+                sfxBtnGame.textContent = sfxMuted ? '🔇' : '🔊';
+                sfxBtnGame.classList.toggle('muted', sfxMuted);
+            }
+            
+            // Aplicar mute na música
+            if (sounds.introSound) {
+                if (musicMuted) {
+                    sounds.introSound.pause();
+                } else {
+                    playIntroMusic();
+                }
+            }
+        }
+        
+        // Função para mutar/desmutar música
+        function toggleMusic() {
+            musicMuted = !musicMuted;
+            localStorage.setItem('musicMuted', musicMuted);
+            updateAudioButtons();
+        }
+        
+        // Função para mutar/desmutar efeitos sonoros
+        function toggleSFX() {
+            sfxMuted = !sfxMuted;
+            localStorage.setItem('sfxMuted', sfxMuted);
+            updateAudioButtons();
+        }
+        
+        // Função para tocar música de introdução
+        function playIntroMusic() {
+            if (sounds.introSound && !musicMuted) {
+                // Verificar se o menu está visível
+                const menuOverlay = document.getElementById('menuOverlay');
+                if (menuOverlay && menuOverlay.style.display !== 'none') {
+                    // Se a música já está tocando, não fazer nada
+                    if (!sounds.introSound.paused) {
+                        return;
+                    }
+                    
+                    sounds.introSound.currentTime = 0;
+                    sounds.introSound.play().catch(e => {
+                        // Se falhar, tentar novamente após interação do usuário
+                        console.log('Erro ao tocar música de introdução:', e);
+                        const tryPlayAgain = function() {
+                            if (sounds.introSound && sounds.introSound.paused) {
+                                sounds.introSound.play().catch(() => {});
+                            }
+                            document.removeEventListener('click', tryPlayAgain);
+                            document.removeEventListener('keydown', tryPlayAgain);
+                            document.removeEventListener('touchstart', tryPlayAgain);
+                        };
+                        document.addEventListener('click', tryPlayAgain, { once: true });
+                        document.addEventListener('keydown', tryPlayAgain, { once: true });
+                        document.addEventListener('touchstart', tryPlayAgain, { once: true });
+                    });
+                }
+            }
+        }
 
         // Função para tocar som
-        function playSound(soundName) {
+        function playSound(soundName, volumeMultiplier = 1) {
+            // Não tocar se efeitos sonoros estiverem mutados (exceto música de introdução)
+            if (sfxMuted && soundName !== 'introSound') {
+                return;
+            }
+            
             const sound = sounds[soundName];
             if (sound) {
                 sound.currentTime = 0; // Reinicia o som
+                sound.volume = masterVolume * volumeMultiplier;
                 sound.play().catch(e => {
                     // Ignora erros de autoplay (navegadores bloqueiam)
                     console.log('Áudio bloqueado pelo navegador');
@@ -2739,7 +2901,7 @@
                     player.lastEatenEmoji = food.emoji;
                     foods.splice(i, 1);
                     playerScore += food.points;
-                    document.getElementById('playerScore').textContent = playerScore;
+                    // Placar agora é desenhado no canvas
                     
                     // 🔊 Som de comer
                     playSound('eat');
@@ -2764,7 +2926,7 @@
                     cpu.lastEatenEmoji = food.emoji;
                     foods.splice(i, 1);
                     cpuScore += food.points;
-                    document.getElementById('cpuScore').textContent = cpuScore;
+                    // Placar agora é desenhado no canvas
                     
                     // 🔊 Som de comer (mais baixo para CPU)
                     const eatSound = sounds.eat;
@@ -2802,7 +2964,7 @@
                     player.lastEatenEmoji = food.emoji;
                     specialFoods.splice(i, 1);
                     playerScore += food.points;
-                    document.getElementById('playerScore').textContent = playerScore;
+                    // Placar agora é desenhado no canvas
                     
                     // 🔊 Som yummy (comida especial)
                     playSound('yummy');
@@ -2828,7 +2990,7 @@
                     cpu.lastEatenEmoji = food.emoji;
                     specialFoods.splice(i, 1);
                     cpuScore += food.points;
-                    document.getElementById('cpuScore').textContent = cpuScore;
+                    // Placar agora é desenhado no canvas
                     
                     // 🔊 Som yummy (mais baixo para CPU)
                     const yummySound = sounds.yummy;
@@ -3732,6 +3894,136 @@
                 drawBird(player, true);
                 drawBird(cpu, false);
             }
+            
+            // Desenhar UI no canvas
+            drawGameUI();
+        }
+        
+        // Desenhar UI do jogo no canvas
+        function drawGameUI() {
+            const padding = 15;
+            const fontSize = 22; // Aumentado de 18 para 22
+            const topY = padding;
+            const boxHeight = 45; // Aumentado de 35 para 45
+            
+            ctx.save();
+            ctx.font = `bold ${fontSize}px Arial`;
+            ctx.textBaseline = 'top';
+            
+            if (isBonusStage) {
+                // UI da fase bônus - Player esquerda, Tempo centro
+                // Player (Minhocas) - Superior esquerdo
+                ctx.textAlign = 'left';
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                const playerText = `🪱 Minhocas: ${playerScore} / 25`;
+                const playerWidth = ctx.measureText(playerText).width + 25;
+                ctx.fillRect(padding, topY, playerWidth, boxHeight);
+                
+                ctx.fillStyle = '#f39c12';
+                ctx.fillText(playerText, padding + 12, topY + 12);
+                
+                // Timer - Centro (apenas número, cor que se destaca do céu)
+                ctx.textAlign = 'center';
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                const timerText = `${timeLeft}s`;
+                const timerWidth = ctx.measureText(timerText).width + 25;
+                ctx.fillRect(canvas.width / 2 - timerWidth / 2, topY, timerWidth, boxHeight);
+                
+                // Cor amarela/laranja para se destacar do céu azul
+                ctx.fillStyle = timeLeft <= 10 ? '#ff4444' : '#ffaa00';
+                // Sombra para melhor visibilidade
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                ctx.shadowBlur = 4;
+                ctx.fillText(timerText, canvas.width / 2, topY + 12);
+                ctx.shadowBlur = 0;
+            } else {
+                // Fase normal
+                // Player - Superior esquerdo
+                ctx.textAlign = 'left';
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                const playerText = `🐦 Você: ${playerScore}`;
+                const playerWidth = ctx.measureText(playerText).width + 25;
+                ctx.fillRect(padding, topY, playerWidth, boxHeight);
+                
+                ctx.fillStyle = '#2ecc71';
+                ctx.fillText(playerText, padding + 12, topY + 12);
+                
+                // Timer - Centro (apenas número, cor que se destaca do céu)
+                ctx.textAlign = 'center';
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                const timerText = `${timeLeft}s`;
+                const timerWidth = ctx.measureText(timerText).width + 25;
+                ctx.fillRect(canvas.width / 2 - timerWidth / 2, topY, timerWidth, boxHeight);
+                
+                // Cor amarela/laranja para se destacar do céu azul
+                ctx.fillStyle = timeLeft <= 10 ? '#ff4444' : '#ffaa00';
+                // Sombra para melhor visibilidade
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                ctx.shadowBlur = 4;
+                ctx.fillText(timerText, canvas.width / 2, topY + 12);
+                ctx.shadowBlur = 0;
+                
+                // CPU - Superior direito
+                ctx.textAlign = 'right';
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                const cpuText = `🤖 CPU: ${cpuScore}`;
+                const cpuWidth = ctx.measureText(cpuText).width + 25;
+                ctx.fillRect(canvas.width - padding - cpuWidth, topY, cpuWidth, boxHeight);
+                
+                ctx.fillStyle = '#e74c3c';
+                ctx.fillText(cpuText, canvas.width - padding - 12, topY + 12);
+                
+                // Barra de Stun - Canto inferior esquerdo (mais baixo possível)
+                const stunBarWidth = 200; // Aumentado de 180 para 200
+                const stunBarHeight = 22; // Aumentado de 18 para 22
+                const stunBarX = padding + 10;
+                const stunBarY = canvas.height - padding - stunBarHeight; // Mais baixo possível
+                
+                // Fundo mais transparente para stun (aumentado para acomodar texto maior)
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                ctx.fillRect(padding, stunBarY - 5, stunBarWidth + 140, stunBarHeight + 10);
+                
+                // Fundo da barra
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.fillRect(stunBarX, stunBarY, stunBarWidth, stunBarHeight);
+                
+                // Preenchimento da barra
+                const stunProgress = player.stunCharge / 20;
+                ctx.fillStyle = player.stunCharge >= 20 ? '#f39c12' : '#9b59b6';
+                ctx.fillRect(stunBarX, stunBarY, stunBarWidth * stunProgress, stunBarHeight);
+                
+                // Borda da barra
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(stunBarX, stunBarY, stunBarWidth, stunBarHeight);
+                
+                // Texto do stun (aumentado)
+                ctx.textAlign = 'left';
+                ctx.font = `bold ${fontSize - 1}px Arial`;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                if (player.stunCharge >= 20) {
+                    // Mostrar timer quando stun está pronto
+                    const secondsLeft = Math.ceil(player.stunChargeTimer / 60);
+                    ctx.fillText(`💥 ⚡${secondsLeft}s`, stunBarX + stunBarWidth + 10, stunBarY + 3);
+                    
+                    // Aviso quando tempo está acabando
+                    if (secondsLeft <= 2) {
+                        ctx.fillStyle = '#e74c3c';
+                        ctx.font = `bold ${fontSize + 1}px Arial`;
+                        ctx.fillText('⚠️', stunBarX + stunBarWidth + 10, stunBarY + 25);
+                        ctx.font = `bold ${fontSize - 1}px Arial`;
+                    } else {
+                        ctx.fillStyle = '#2ecc71';
+                        ctx.font = `bold ${fontSize + 1}px Arial`;
+                        ctx.fillText('⚡', stunBarX + stunBarWidth + 10, stunBarY + 25);
+                        ctx.font = `bold ${fontSize - 1}px Arial`;
+                    }
+                } else {
+                    ctx.fillText(`💥 ${player.stunCharge}/20`, stunBarX + stunBarWidth + 10, stunBarY + 3);
+                }
+            }
+            
+            ctx.restore();
         }
 
         // Desenhar pássaro feliz (vencedor)
@@ -4202,11 +4494,17 @@
             // Atualizar UI para o tipo de fase
             updateStageUI();
 
-            document.getElementById('playerScore').textContent = '0';
-            document.getElementById('cooldownText').textContent = '0/20';
-            document.getElementById('cooldownFill').style.width = '0%';
-            document.getElementById('cpuScore').textContent = '0';
-            document.getElementById('timer').textContent = timeLeft;
+            // Placar, timer e stun agora são desenhados no canvas
+            // Manter referências apenas para elementos que ainda existem
+            const timerEl = document.getElementById('timer');
+            if (timerEl) timerEl.textContent = timeLeft;
+            
+            const cooldownText = document.getElementById('cooldownText');
+            if (cooldownText) cooldownText.textContent = '0/20';
+            
+            const cooldownFill = document.getElementById('cooldownFill');
+            if (cooldownFill) cooldownFill.style.width = '0%';
+            
             document.getElementById('gameOver').style.display = 'none';
             
             // Parar animação do vencedor
@@ -4229,7 +4527,9 @@
                 }
 
                 timeLeft--;
-                document.getElementById('timer').textContent = timeLeft;
+                // Timer agora é desenhado no canvas, mas manter sincronização com HTML se existir
+                const timerEl = document.getElementById('timer');
+                if (timerEl) timerEl.textContent = timeLeft;
 
                 // Aviso quando faltam 10 segundos
                 if (timeLeft === 10) {
@@ -4507,32 +4807,22 @@
 
         // Atualizar UI baseado no tipo de fase
         function updateStageUI() {
-            const scoreBoard = document.getElementById('scoreBoard');
             const bonusUI = document.getElementById('bonusUI');
             const cooldownContainer = document.getElementById('cooldownContainer');
-            const gameInstructions = document.getElementById('gameInstructions');
             
             if (isBonusStage) {
-                // Fase bônus - esconder placar normal e stun
-                scoreBoard.style.display = 'none';
+                // Fase bônus - esconder stun (placar já está no canvas)
                 cooldownContainer.style.display = 'none';
-                bonusUI.style.display = 'block';
+                bonusUI.style.display = 'none'; // UI bônus também está no canvas agora
                 
-                // Atualizar meta de minhocas
+                // Atualizar meta de minhocas (para referência interna)
                 const config = substageConfig[currentSubstage];
                 document.getElementById('wormGoal').textContent = config.goalScore;
                 document.getElementById('wormCount').textContent = '0';
-                
-                // Instruções especiais
-                gameInstructions.innerHTML = 'Use as <strong>SETAS</strong> ou <strong>WASD</strong> para pegar as minhocas! 🪱';
             } else {
-                // Fase normal - mostrar placar e stun
-                scoreBoard.style.display = 'flex';
-                cooldownContainer.style.display = 'flex';
+                // Fase normal - esconder elementos HTML (tudo está no canvas)
+                cooldownContainer.style.display = 'none';
                 bonusUI.style.display = 'none';
-                
-                // Instruções normais
-                gameInstructions.innerHTML = 'Use as <strong>SETAS</strong> ou <strong>WASD</strong> para mover! 💥 <strong>Colida</strong> com o adversário para atordoá-lo!';
             }
         }
 
@@ -4547,8 +4837,7 @@
             // Zerar placar ao iniciar nova fase
             playerScore = 0;
             cpuScore = 0;
-            document.getElementById('playerScore').textContent = '0';
-            document.getElementById('cpuScore').textContent = '0';
+            // Placar agora é desenhado no canvas, não precisa atualizar HTML
             
             // Zerar stun ao iniciar nova fase
             player.stunCharge = 0;
@@ -4576,8 +4865,9 @@
             // Atualizar UI para o tipo de fase
             updateStageUI();
             
-            // Atualizar display do timer
-            document.getElementById('timer').textContent = timeLeft;
+            // Timer agora é desenhado no canvas, mas manter sincronização com HTML se existir
+            const timerEl = document.getElementById('timer');
+            if (timerEl) timerEl.textContent = timeLeft;
             
             if (!isBonusStage) {
                 setCpuForSubstage(area, substage);
@@ -4585,6 +4875,12 @@
             
             closeSubstages();
             closeRoadmap();
+            
+            // Parar música de introdução quando iniciar o jogo
+            if (sounds.introSound) {
+                sounds.introSound.pause();
+                sounds.introSound.currentTime = 0;
+            }
             
             document.getElementById('menuOverlay').style.display = 'none';
             document.getElementById('gameContainer').classList.add('active');
@@ -5061,6 +5357,9 @@
                 cancelAnimationFrame(winnerCanvas.animFrame);
             }
             
+            // Tocar música de introdução em loop
+            playIntroMusic();
+            
             // Atualizar cor da CPU para ser diferente
             updateCpuColor();
             
@@ -5097,9 +5396,9 @@
             player.stunned = false;
             player.stunTime = 0;
             
-            document.getElementById('playerScore').textContent = '0';
-            document.getElementById('cpuScore').textContent = '0';
-            document.getElementById('timer').textContent = '60';
+            // Placar agora é desenhado no canvas
+            const timerEl = document.getElementById('timer');
+            if (timerEl) timerEl.textContent = '60';
         }
 
         // Desenhar pássaro do menu (amigável)
@@ -5333,37 +5632,32 @@
         }
 
         // Mostrar/esconder créditos
-        let creditsLoaded = false;
-        
         async function showCredits() {
             const creditsOverlay = document.getElementById('creditsOverlay');
             const creditsContent = document.getElementById('creditsContent');
             
-            // Carregar créditos apenas na primeira vez
-            if (!creditsLoaded) {
-                try {
-                    const response = await fetch('sounds/audios.txt');
-                    const text = await response.text();
+            // Sempre recarregar créditos para pegar atualizações
+            try {
+                const response = await fetch('sounds/audios.txt');
+                const text = await response.text();
+                
+                // Processar o texto mantendo os links HTML
+                let lines = text.split('\n').map(line => line.trim()).filter(line => line !== '');
+                let formattedText = '';
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
                     
-                    // Processar o texto mantendo os links HTML
-                    let lines = text.split('\n').map(line => line.trim()).filter(line => line !== '');
-                    let formattedText = '';
-                    
-                    for (let i = 0; i < lines.length; i++) {
-                        const line = lines[i];
-                        
-                        // Cada linha que contém "Sound Effect" é um crédito completo
-                        if (line.includes('Sound Effect')) {
-                            // Adicionar cada crédito em uma linha separada
-                            formattedText += '<p style="margin-bottom: 15px; line-height: 1.6;">' + line + '</p>';
-                        }
+                    // Cada linha que contém "Sound Effect" ou "Music:" é um crédito completo
+                    if (line.includes('Sound Effect') || line.includes('Music:')) {
+                        // Adicionar cada crédito em uma linha separada
+                        formattedText += '<p style="margin-bottom: 15px; line-height: 1.6;">' + line + '</p>';
                     }
-                    
-                    creditsContent.innerHTML = formattedText;
-                    creditsLoaded = true;
-                } catch (error) {
-                    creditsContent.innerHTML = '<p style="color: #e74c3c;">Erro ao carregar créditos. Verifique se o arquivo sounds/audios.txt existe.</p>';
                 }
+                
+                creditsContent.innerHTML = formattedText;
+            } catch (error) {
+                creditsContent.innerHTML = '<p style="color: #e74c3c;">Erro ao carregar créditos. Verifique se o arquivo sounds/audios.txt existe.</p>';
             }
             
             creditsOverlay.classList.add('active');
@@ -5615,6 +5909,44 @@
 
         // Iniciar animação do menu
         animateMenu();
+        
+        // Inicializar botões de áudio
+        setTimeout(() => {
+            updateAudioButtons();
+        }, 100);
+        
+        // Tocar música de introdução quando a página carregar
+        // Usar setTimeout para garantir que o DOM esteja pronto
+        setTimeout(() => {
+            playIntroMusic();
+        }, 100);
+        
+        // Tentar tocar música quando houver interação do usuário (para contornar políticas de autoplay)
+        let introMusicAttempted = false;
+        function attemptPlayIntroOnInteraction() {
+            if (sounds.introSound && sounds.introSound.paused) {
+                const menuOverlay = document.getElementById('menuOverlay');
+                if (menuOverlay && menuOverlay.style.display !== 'none') {
+                    playIntroMusic();
+                    introMusicAttempted = true;
+                }
+            }
+        }
+        
+        // Adicionar listeners para interações do usuário
+        document.addEventListener('click', attemptPlayIntroOnInteraction, { once: true });
+        document.addEventListener('keydown', attemptPlayIntroOnInteraction, { once: true });
+        document.addEventListener('touchstart', attemptPlayIntroOnInteraction, { once: true });
+        
+        // Verificar periodicamente se a música deve tocar (para casos de recarregar página)
+        setInterval(() => {
+            const menuOverlay = document.getElementById('menuOverlay');
+            if (menuOverlay && menuOverlay.style.display !== 'none') {
+                if (sounds.introSound && sounds.introSound.paused) {
+                    playIntroMusic();
+                }
+            }
+        }, 2000); // Verificar a cada 2 segundos
         
         // Inicializar UI de dificuldade
         initDifficultyUI();
