@@ -23,6 +23,7 @@ const sounds = {
     hawk: new Audio('sounds/hawk.mp3'),
     powerup: new Audio('sounds/powerup.mp3'),
     introSound: new Audio('sounds/Intro-sound.mp3'),
+    owl: new Audio('sounds/owl-sound.mp3'), // Som da coruja boss
 };
 
 // Volume geral (0 a 1)
@@ -570,17 +571,22 @@ function drawHawk() {
     ctx.restore();
 }
 
-// ========== FASE BÔNUS - MINHOCAS ==========
+// ========== FASE BÔNUS - MINHOCAS E COBRAS ==========
 let wormHoles = []; // Buracos no chão
-let worms = []; // Minhocas ativas
-let wormEatEffects = []; // Efeitos visuais ao comer minhoca
+let worms = []; // Minhocas e cobras ativas (worms têm propriedade isSnake)
+let wormEatEffects = []; // Efeitos visuais ao comer minhoca ou ser stunnado
 let isBonusStage = false;
+let snakeSpawnCounter = 0; // Contador para spawnar cobras ocasionalmente
+
+// ========== SISTEMA DE SUOR NO DESERTO ==========
+let sweatDrops = []; // Gotas de suor dos pássaros no deserto
 
 // Inicializar buracos para fase bônus
 function initWormHoles() {
     wormHoles = [];
     worms = [];
     wormEatEffects = [];
+    snakeSpawnCounter = 0; // Reset contador de cobras
     
     // Criar 5 buracos distribuídos no chão
     const spacing = canvas.width / 6;
@@ -596,7 +602,7 @@ function initWormHoles() {
     }
 }
 
-// Spawn de minhoca em um buraco aleatório
+// Spawn de minhoca ou cobra em um buraco aleatório
 function spawnWorm() {
     if (!isBonusStage) return;
     
@@ -608,15 +614,28 @@ function spawnWorm() {
     const hole = availableHoles[Math.floor(Math.random() * availableHoles.length)];
     hole.hasWorm = true;
     
+    // Incrementar contador de cobras
+    snakeSpawnCounter++;
+    
+    // Chance de spawnar cobra aumenta com o tempo (a cada 3-5 minhocas, uma cobra)
+    // Base: 15% de chance, aumenta para 25% após muitas minhocas
+    const isSnake = snakeSpawnCounter >= 3 && Math.random() < (0.15 + (snakeSpawnCounter > 10 ? 0.1 : 0));
+    
+    // Se spawnou cobra, resetar contador parcialmente
+    if (isSnake) {
+        snakeSpawnCounter = Math.max(0, snakeSpawnCounter - 5);
+    }
+    
     worms.push({
         x: hole.x,
         y: hole.y - 10,
         hole: hole,
         emergeProgress: 0, // 0 = enterrado, 1 = totalmente exposto
         timeVisible: 0,
-        maxTimeVisible: 60 + Math.random() * 60, // 1-2 segundos
+        maxTimeVisible: isSnake ? 90 + Math.random() * 60 : 60 + Math.random() * 60, // Cobras ficam mais tempo
         retreating: false,
-        eaten: false
+        eaten: false,
+        isSnake: isSnake // Marca se é cobra ou minhoca
     });
 }
 
@@ -663,7 +682,7 @@ function updateWorms() {
     }
 }
 
-// Verificar colisão com minhocas
+// Verificar colisão com minhocas e cobras
 function checkWormCollisions() {
     if (!isBonusStage) return;
     
@@ -674,29 +693,90 @@ function checkWormCollisions() {
         const wormY = worm.y - 20 * worm.emergeProgress;
         const dist = Math.hypot(player.x - worm.x, player.y - wormY);
         if (dist < player.size + 20) {
-            worm.eaten = true;
-            worm.hole.hasWorm = false;
-            worm.hole.cooldown = 20 + Math.random() * 20;
-            
-            playerScore++;
-            
-            // Atualizar contador de minhocas (fase bônus)
-            document.getElementById('wormCount').textContent = playerScore;
-            
-            // 🔊 Som de pegar minhoca
-            playSound('worm');
-            
-            // Animação de comer
-            player.eatAnimation = 15;
-            player.eatEmoji = '🪱';
-            
-            // Criar efeito visual de captura
-            createWormEatEffect(worm.x, wormY);
+            if (worm.isSnake) {
+                // Player tocou na COBRA - stunnar!
+                if (!player.stunned) {
+                    player.stunned = true;
+                    player.stunTime = 180; // 3 segundos de stun (180 frames a 60fps)
+                    
+                    // 🔊 Som de stun
+                    playSound('stun');
+                    
+                    // Criar efeito visual de stun
+                    createSnakeStunEffect(worm.x, wormY);
+                }
+                
+                // Cobra desaparece após atacar
+                worm.eaten = true;
+                worm.hole.hasWorm = false;
+                worm.hole.cooldown = 60 + Math.random() * 60; // Cooldown maior após atacar
+            } else {
+                // Player tocou na MINHOCA - dar pontos!
+                worm.eaten = true;
+                worm.hole.hasWorm = false;
+                worm.hole.cooldown = 20 + Math.random() * 20;
+                
+                playerScore++;
+                
+                // Atualizar contador de minhocas (fase bônus)
+                document.getElementById('wormCount').textContent = playerScore;
+                
+                // 🔊 Som de pegar minhoca
+                playSound('worm');
+                
+                // Animação de comer
+                player.eatAnimation = 15;
+                player.eatEmoji = '🪱';
+                
+                // Criar efeito visual de captura
+                createWormEatEffect(worm.x, wormY);
+            }
         }
     }
 }
 
-// Criar efeito visual ao comer minhoca
+// Criar efeito visual ao ser stunnado por cobra
+function createSnakeStunEffect(x, y) {
+    // Partículas vermelhas (perigo)
+    for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2;
+        wormEatEffects.push({
+            type: 'particle',
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * (4 + Math.random() * 3),
+            vy: Math.sin(angle) * (4 + Math.random() * 3),
+            life: 40,
+            maxLife: 40,
+            color: '#e74c3c' // Cor vermelha de perigo
+        });
+    }
+    
+    // Texto STUNNED! subindo
+    wormEatEffects.push({
+        type: 'text',
+        x: x,
+        y: y,
+        vy: -2.5,
+        life: 60,
+        maxLife: 60,
+        text: '💥 STUNNED!'
+    });
+    
+    // Anel de expansão vermelho
+    wormEatEffects.push({
+        type: 'ring',
+        x: x,
+        y: y,
+        radius: 15,
+        maxRadius: 80,
+        life: 30,
+        maxLife: 30,
+        text: 'STUNNED' // Marca para identificar cor vermelha
+    });
+}
+
+// Criar efeito visual ao comer minhoca (mantido para compatibilidade, mas não usado mais)
 function createWormEatEffect(x, y) {
     // Partículas explodindo
     for (let i = 0; i < 8; i++) {
@@ -781,7 +861,9 @@ function drawWormEatEffects() {
             ctx.save();
             ctx.globalAlpha = alpha;
             ctx.font = 'bold 20px Arial';
-            ctx.fillStyle = '#2ecc71';
+            // Cor vermelha para stun, verde para captura antiga
+            const textColor = effect.text && effect.text.includes('STUNNED') ? '#e74c3c' : '#2ecc71';
+            ctx.fillStyle = textColor;
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 3;
             ctx.textAlign = 'center';
@@ -793,7 +875,9 @@ function drawWormEatEffects() {
         if (effect.type === 'ring') {
             ctx.save();
             ctx.globalAlpha = alpha * 0.5;
-            ctx.strokeStyle = '#9b59b6';
+            // Cor vermelha para stun, roxa para captura antiga
+            const ringColor = effect.text && effect.text.includes('STUNNED') ? '#e74c3c' : '#9b59b6';
+            ctx.strokeStyle = ringColor;
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
@@ -831,41 +915,120 @@ function drawWormHoles() {
         ctx.restore();
     });
     
-    // Desenhar minhocas
+    // Desenhar minhocas e cobras
     worms.forEach(worm => {
         if (worm.eaten) return;
         
         ctx.save();
         ctx.translate(worm.x, worm.y);
         
-        const emergeY = -30 * worm.emergeProgress;
-        const wiggle = Math.sin(Date.now() / 100) * 3 * worm.emergeProgress;
+        const emergeY = worm.isSnake ? -35 * worm.emergeProgress : -30 * worm.emergeProgress;
+        const wiggle = Math.sin(Date.now() / (worm.isSnake ? 80 : 100)) * (worm.isSnake ? 4 : 3) * worm.emergeProgress;
         
-        // Corpo da minhoca (segmentos)
-        ctx.fillStyle = '#E8B4B8';
-        for (let j = 0; j < 4; j++) {
-            const segY = emergeY + j * 8;
-            if (segY < 0) { // Só desenha acima do buraco
-                const segWiggle = wiggle * (1 - j * 0.2);
+        if (worm.isSnake) {
+            // DESENHAR COBRA
+            const bodyWiggle = Math.sin(Date.now() / 100 + 1) * 2 * worm.emergeProgress;
+            
+            // Corpo da cobra (segmentos mais longos e sinuosos)
+            ctx.fillStyle = '#2d5016'; // Verde escuro
+            ctx.strokeStyle = '#1a3009';
+            ctx.lineWidth = 2;
+            
+            for (let j = 0; j < 6; j++) {
+                const segY = emergeY + j * 10;
+                if (segY < 0) { // Só desenha acima do buraco
+                    const segWiggle = wiggle * (1 - j * 0.15) + bodyWiggle * Math.sin(j * 0.5);
+                    const segSize = 10 - j * 0.5; // Diminui gradualmente
+                    ctx.beginPath();
+                    ctx.ellipse(segWiggle, segY, segSize, 6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+            }
+            
+            // Cabeça da cobra (maior e mais ameaçadora)
+            if (emergeY + 10 < 0) {
+                const headWiggle = wiggle;
+                
+                // Cabeça
+                ctx.fillStyle = '#3d6b1f';
                 ctx.beginPath();
-                ctx.ellipse(segWiggle, segY, 8, 5, 0, 0, Math.PI * 2);
+                ctx.ellipse(headWiggle, emergeY - 8, 12, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Padrão de escamas na cabeça
+                ctx.fillStyle = '#2d5016';
+                for (let s = 0; s < 3; s++) {
+                    ctx.beginPath();
+                    ctx.arc(headWiggle - 6 + s * 6, emergeY - 8, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Olhos vermelhos (ameaçadores)
+                ctx.fillStyle = '#e74c3c';
+                ctx.beginPath();
+                ctx.arc(headWiggle - 5, emergeY - 10, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(headWiggle + 5, emergeY - 10, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Língua bifurcada (piscando)
+                const tongueOut = Math.sin(Date.now() / 200) > 0.5;
+                if (tongueOut) {
+                    ctx.strokeStyle = '#ff6b9d';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(headWiggle + 10, emergeY - 6);
+                    ctx.lineTo(headWiggle + 15, emergeY - 8);
+                    ctx.lineTo(headWiggle + 15, emergeY - 4);
+                    ctx.moveTo(headWiggle + 10, emergeY - 6);
+                    ctx.lineTo(headWiggle + 15, emergeY - 6);
+                    ctx.lineTo(headWiggle + 15, emergeY - 2);
+                    ctx.stroke();
+                }
+                
+                // Aura de perigo (brilho vermelho sutil)
+                if (worm.emergeProgress > 0.7) {
+                    ctx.globalAlpha = (worm.emergeProgress - 0.7) * 0.3;
+                    ctx.shadowColor = '#e74c3c';
+                    ctx.shadowBlur = 15;
+                    ctx.beginPath();
+                    ctx.arc(headWiggle, emergeY - 8, 15, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    ctx.globalAlpha = 1;
+                }
+            }
+        } else {
+            // DESENHAR MINHOCA NORMAL
+            // Corpo da minhoca (segmentos)
+            ctx.fillStyle = '#E8B4B8';
+            for (let j = 0; j < 4; j++) {
+                const segY = emergeY + j * 8;
+                if (segY < 0) { // Só desenha acima do buraco
+                    const segWiggle = wiggle * (1 - j * 0.2);
+                    ctx.beginPath();
+                    ctx.ellipse(segWiggle, segY, 8, 5, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            // Cabeça da minhoca
+            if (emergeY + 8 < 0) {
+                ctx.fillStyle = '#D4A5A5';
+                ctx.beginPath();
+                ctx.arc(wiggle, emergeY - 5, 10, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Olhinhos
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(wiggle - 4, emergeY - 7, 2, 0, Math.PI * 2);
+                ctx.arc(wiggle + 4, emergeY - 7, 2, 0, Math.PI * 2);
                 ctx.fill();
             }
-        }
-        
-        // Cabeça
-        if (emergeY + 8 < 0) {
-            ctx.fillStyle = '#D4A5A5';
-            ctx.beginPath();
-            ctx.arc(wiggle, emergeY - 5, 10, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Olhinhos
-            ctx.fillStyle = 'black';
-            ctx.beginPath();
-            ctx.arc(wiggle - 4, emergeY - 7, 2, 0, Math.PI * 2);
-            ctx.arc(wiggle + 4, emergeY - 7, 2, 0, Math.PI * 2);
-            ctx.fill();
         }
         
         ctx.restore();
@@ -1780,6 +1943,11 @@ function drawBird(bird, isPlayer) {
         drawCpuTypeDetails(bird, hasStunReady);
     }
     
+    // Gotas de suor no deserto (área 2)
+    if (currentArea === 2 && !bird.stunned) {
+        drawSweatDrops(bird, isPlayer);
+    }
+    
     ctx.shadowBlur = 0; // Reset shadow
 
     // Olho - diferente para cada tipo de CPU
@@ -2195,6 +2363,12 @@ let butterflies = []; // Borboletas
 let fallingLeaves = []; // Folhas caindo
 let fireflies = []; // Vaga-lumes
 
+// Elementos decorativos do deserto
+let cacti = []; // Cactos
+let mirages = []; // Miragens
+let heatWaves = []; // Ondas de calor
+let desertBirds = []; // Pássaros do deserto
+
 // Desenhar nuvem
 function drawCloud(x, y, size) {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
@@ -2253,6 +2427,10 @@ function initBackgroundDecorations() {
     butterflies = [];
     fallingLeaves = [];
     fireflies = [];
+    cacti = [];
+    mirages = [];
+    heatWaves = [];
+    desertBirds = [];
 
     if (currentArea === 1 && currentSubstage >= 1 && currentSubstage <= 6) {
         if (currentSubstage === 1) {
@@ -2387,6 +2565,190 @@ function initBackgroundDecorations() {
                     speedY: (Math.random() - 0.5) * 0.3,
                     glowPhase: Math.random() * Math.PI * 2,
                     glowSpeed: 0.02 + Math.random() * 0.02
+                });
+            }
+        }
+    } else if (currentArea === 2 && currentSubstage >= 1 && currentSubstage <= 7) {
+        // Área 2: Deserto
+        if (currentSubstage === 1) {
+            // 2-1: Deserto fresco - Cactos e pássaros
+            for (let i = 0; i < 3; i++) {
+                cacti.push({
+                    x: 150 + i * 200,
+                    y: canvas.height - 60,
+                    size: 60 + Math.random() * 40
+                });
+            }
+            for (let i = 0; i < 2; i++) {
+                desertBirds.push({
+                    x: Math.random() * canvas.width,
+                    y: 100 + Math.random() * 80,
+                    speed: 0.4 + Math.random() * 0.3,
+                    size: 0.5 + Math.random() * 0.3,
+                    wingFlap: Math.random() * Math.PI * 2,
+                    color: '#D2691E',
+                    wingColor: '#CD853F'
+                });
+            }
+        } else if (currentSubstage === 2) {
+            // 2-2: Começando a esquentar - Mais cactos
+            for (let i = 0; i < 4; i++) {
+                cacti.push({
+                    x: 100 + i * 180,
+                    y: canvas.height - 60,
+                    size: 50 + Math.random() * 50
+                });
+            }
+            for (let i = 0; i < 2; i++) {
+                heatWaves.push({
+                    x: -200 + i * 400,
+                    y: canvas.height / 2,
+                    width: 150,
+                    height: 30,
+                    speed: 0.3,
+                    alpha: 0.1,
+                    time: Math.random() * 100
+                });
+            }
+        } else if (currentSubstage === 3) {
+            // 2-3: Esquentando - Cactos e ondas de calor
+            for (let i = 0; i < 3; i++) {
+                cacti.push({
+                    x: 120 + i * 250,
+                    y: canvas.height - 60,
+                    size: 55 + Math.random() * 45
+                });
+            }
+            for (let i = 0; i < 3; i++) {
+                heatWaves.push({
+                    x: -200 + i * 300,
+                    y: canvas.height / 2 + 20,
+                    width: 180,
+                    height: 40,
+                    speed: 0.4,
+                    alpha: 0.15,
+                    time: Math.random() * 100
+                });
+            }
+            for (let i = 0; i < 1; i++) {
+                desertBirds.push({
+                    x: Math.random() * canvas.width,
+                    y: 90 + Math.random() * 70,
+                    speed: 0.5 + Math.random() * 0.3,
+                    size: 0.4 + Math.random() * 0.3,
+                    wingFlap: Math.random() * Math.PI * 2,
+                    color: '#CD853F',
+                    wingColor: '#D2691E'
+                });
+            }
+        } else if (currentSubstage === 4) {
+            // 2-4: Quente - Cactos, ondas de calor e primeira miragem
+            for (let i = 0; i < 4; i++) {
+                cacti.push({
+                    x: 100 + i * 200,
+                    y: canvas.height - 60,
+                    size: 50 + Math.random() * 50
+                });
+            }
+            for (let i = 0; i < 4; i++) {
+                heatWaves.push({
+                    x: -200 + i * 250,
+                    y: canvas.height / 2 + 10,
+                    width: 200,
+                    height: 50,
+                    speed: 0.5,
+                    alpha: 0.2,
+                    time: Math.random() * 100
+                });
+            }
+            mirages.push({
+                x: canvas.width / 2,
+                y: canvas.height / 2 - 50,
+                alpha: 0.2,
+                time: Math.random() * 100
+            });
+        } else if (currentSubstage === 5) {
+            // 2-5: Muito quente - Mais elementos de calor
+            for (let i = 0; i < 3; i++) {
+                cacti.push({
+                    x: 150 + i * 220,
+                    y: canvas.height - 60,
+                    size: 45 + Math.random() * 45
+                });
+            }
+            for (let i = 0; i < 5; i++) {
+                heatWaves.push({
+                    x: -200 + i * 200,
+                    y: canvas.height / 2,
+                    width: 220,
+                    height: 60,
+                    speed: 0.6,
+                    alpha: 0.25,
+                    time: Math.random() * 100
+                });
+            }
+            for (let i = 0; i < 2; i++) {
+                mirages.push({
+                    x: 200 + i * 400,
+                    y: canvas.height / 2 - 40,
+                    alpha: 0.3,
+                    time: Math.random() * 100
+                });
+            }
+        } else if (currentSubstage === 6) {
+            // 2-6: Extremamente quente - Todos os elementos
+            for (let i = 0; i < 4; i++) {
+                cacti.push({
+                    x: 100 + i * 200,
+                    y: canvas.height - 60,
+                    size: 40 + Math.random() * 40
+                });
+            }
+            for (let i = 0; i < 6; i++) {
+                heatWaves.push({
+                    x: -200 + i * 180,
+                    y: canvas.height / 2 - 10,
+                    width: 250,
+                    height: 70,
+                    speed: 0.7,
+                    alpha: 0.3,
+                    time: Math.random() * 100
+                });
+            }
+            for (let i = 0; i < 3; i++) {
+                mirages.push({
+                    x: 150 + i * 300,
+                    y: canvas.height / 2 - 30,
+                    alpha: 0.4,
+                    time: Math.random() * 100
+                });
+            }
+        } else if (currentSubstage === 7) {
+            // 2-7: Boss - Deserto extremo
+            for (let i = 0; i < 5; i++) {
+                cacti.push({
+                    x: 80 + i * 160,
+                    y: canvas.height - 60,
+                    size: 35 + Math.random() * 35
+                });
+            }
+            for (let i = 0; i < 8; i++) {
+                heatWaves.push({
+                    x: -200 + i * 150,
+                    y: canvas.height / 2 - 20,
+                    width: 280,
+                    height: 80,
+                    speed: 0.8,
+                    alpha: 0.5,
+                    time: Math.random() * 100
+                });
+            }
+            for (let i = 0; i < 4; i++) {
+                mirages.push({
+                    x: 100 + i * 250,
+                    y: canvas.height / 2 - 20,
+                    alpha: 0.6,
+                    time: Math.random() * 100
                 });
             }
         }
@@ -2628,6 +2990,14 @@ function getDayNightProgress() {
     return Math.max(0, Math.min(0.85, progress)); // Máximo 0.85 para 1-6
 }
 
+// Calcular progresso do calor no deserto (0 = fresco, 1 = muito quente)
+function getHeatProgress() {
+    if (currentArea !== 2 || currentSubstage >= 7) return 0; // 2-7 usa drawExtremeDesertBackground
+    // 2-1 = 0.0 (fresco), 2-2 = 0.2, 2-3 = 0.4, 2-4 = 0.6, 2-5 = 0.8, 2-6 = 1.0 (muito quente)
+    const progress = (currentSubstage - 1) / 6;
+    return Math.max(0, Math.min(1.0, progress));
+}
+
 // Interpolar entre duas cores
 function interpolateColor(color1, color2, t) {
     // Converter hex para RGB
@@ -2797,6 +3167,136 @@ function drawForestBackground() {
     }
 }
 
+// Desenhar cacto
+function drawCactus(x, y, size, heatProgress) {
+    ctx.save();
+    ctx.translate(x, y);
+    
+    // Cacto fica mais "murcho" com o calor extremo
+    const heatEffect = heatProgress * 0.1;
+    const cactusSize = size * (1 - heatEffect);
+    
+    // Cor do cacto (mais amarelado com calor)
+    const cactusColor = interpolateColor('#228B22', '#8B6914', heatProgress * 0.3);
+    
+    // Corpo principal
+    ctx.fillStyle = cactusColor;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, cactusSize * 0.3, cactusSize * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Braço esquerdo
+    ctx.beginPath();
+    ctx.ellipse(-cactusSize * 0.25, -cactusSize * 0.2, cactusSize * 0.15, cactusSize * 0.4, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Braço direito
+    ctx.beginPath();
+    ctx.ellipse(cactusSize * 0.25, -cactusSize * 0.15, cactusSize * 0.15, cactusSize * 0.35, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Espinhos (menos visíveis com calor)
+    ctx.strokeStyle = '#654321';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1 - heatProgress * 0.5;
+    for (let i = -cactusSize * 0.6; i < cactusSize * 0.6; i += cactusSize * 0.15) {
+        ctx.beginPath();
+        ctx.moveTo(i, -cactusSize * 0.3);
+        ctx.lineTo(i, -cactusSize * 0.35);
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    
+    ctx.restore();
+}
+
+// Desenhar miragem (ondas de calor distorcendo a imagem)
+function drawMirage(mirage) {
+    ctx.save();
+    ctx.globalAlpha = mirage.alpha;
+    
+    // Desenhar "reflexo" distorcido (simulando miragem)
+    const distortion = Math.sin(mirage.time / 50) * 5;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    
+    // Forma ondulada da miragem
+    for (let i = 0; i < 3; i++) {
+        const y = mirage.y + i * 20 + distortion;
+        ctx.beginPath();
+        ctx.moveTo(mirage.x - 40, y);
+        ctx.quadraticCurveTo(mirage.x, y + distortion, mirage.x + 40, y);
+        ctx.quadraticCurveTo(mirage.x + 20, y - distortion, mirage.x - 40, y);
+        ctx.closePath();
+        ctx.fill();
+    }
+    
+    ctx.restore();
+}
+
+// Desenhar onda de calor
+function drawHeatWave(wave) {
+    ctx.save();
+    ctx.globalAlpha = wave.alpha;
+    
+    // Gradiente para onda de calor
+    const gradient = ctx.createLinearGradient(wave.x - wave.width / 2, wave.y, wave.x + wave.width / 2, wave.y);
+    gradient.addColorStop(0, 'rgba(255, 200, 0, 0)');
+    gradient.addColorStop(0.5, 'rgba(255, 150, 0, 0.3)');
+    gradient.addColorStop(1, 'rgba(255, 200, 0, 0)');
+    
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(wave.x - wave.width / 2, wave.y);
+    ctx.quadraticCurveTo(wave.x, wave.y - wave.height, wave.x + wave.width / 2, wave.y);
+    ctx.lineTo(wave.x + wave.width / 2, canvas.height);
+    ctx.lineTo(wave.x - wave.width / 2, canvas.height);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.restore();
+}
+
+// Desenhar pássaro do deserto
+function drawDesertBird(bird) {
+    ctx.save();
+    ctx.translate(bird.x, bird.y);
+    ctx.scale(bird.size, bird.size);
+    
+    bird.wingFlap += 0.12;
+    const wingOffset = Math.sin(bird.wingFlap) * 4;
+    
+    // Corpo
+    ctx.fillStyle = bird.color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 7, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Asas
+    ctx.fillStyle = bird.wingColor || bird.color;
+    ctx.beginPath();
+    ctx.ellipse(-5, wingOffset, 8, 3, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-5, -wingOffset, 8, 3, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Cabeça
+    ctx.beginPath();
+    ctx.arc(3, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Bico
+    ctx.fillStyle = '#FF8C00';
+    ctx.beginPath();
+    ctx.moveTo(5, 0);
+    ctx.lineTo(8, -1);
+    ctx.lineTo(8, 1);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.restore();
+}
+
 // Desenhar cenário genérico (para outras áreas por enquanto)
 function drawGenericBackground() {
     ctx.fillStyle = '#87CEEB';
@@ -2923,6 +3423,237 @@ function drawNightForestBackground() {
     ctx.shadowBlur = 0;
 }
 
+// Desenhar cenário do deserto com transição de calor
+function drawDesertBackground() {
+    const heatProgress = getHeatProgress();
+    
+    // Interpolar cores do céu entre fresco e quente
+    const skyTopCool = '#87CEEB'; // Azul claro (fresco)
+    const skyTopHot = '#FF8C00'; // Laranja (quente)
+    const skyBottomCool = '#E0F6FF'; // Azul muito claro
+    const skyBottomHot = '#FF6347'; // Vermelho-laranja
+    
+    const skyTop = interpolateColor(skyTopCool, skyTopHot, heatProgress);
+    const skyBottom = interpolateColor(skyBottomCool, skyBottomHot, heatProgress);
+    
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
+    skyGradient.addColorStop(0, skyTop);
+    skyGradient.addColorStop(1, skyBottom);
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Sol (mais intenso com calor)
+    const sunX = 700;
+    const sunY = 100;
+    const sunSize = 50 + heatProgress * 20;
+    const sunGlow = 30 + heatProgress * 40;
+    
+    ctx.fillStyle = '#FFD700';
+    ctx.shadowColor = '#FF8C00';
+    ctx.shadowBlur = sunGlow;
+    ctx.globalAlpha = 0.8 + heatProgress * 0.2;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, sunSize, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    
+    // Ondas de calor (mais visíveis com calor)
+    if (heatProgress > 0.3) {
+        for (let wave of heatWaves) {
+            wave.x += wave.speed;
+            wave.time += 0.5;
+            if (wave.x > canvas.width + 200) {
+                wave.x = -200;
+            }
+            wave.alpha = (heatProgress - 0.3) * 0.5;
+            drawHeatWave(wave);
+        }
+    }
+    
+    // Nuvens (menos visíveis com calor)
+    for (let cloud of clouds) {
+        cloud.x += cloud.speed;
+        if (cloud.x > canvas.width + 100) {
+            cloud.x = -100;
+        }
+        ctx.globalAlpha = 1 - heatProgress * 0.8; // Nuvens desaparecem com calor
+        drawCloud(cloud.x, cloud.y, cloud.size);
+        ctx.globalAlpha = 1;
+    }
+    
+    // Atualizar elementos decorativos
+    updateDesertDecorations();
+    
+    // Dunas de areia ao fundo (mais avermelhadas com calor)
+    const duneColor1 = interpolateColor('#D2B48C', '#CD853F', heatProgress);
+    const duneColor2 = interpolateColor('#DEB887', '#A0522D', heatProgress);
+    
+    ctx.fillStyle = duneColor1;
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height - 40);
+    ctx.quadraticCurveTo(200, canvas.height - 120, 400, canvas.height - 40);
+    ctx.lineTo(0, canvas.height - 40);
+    ctx.fill();
+    
+    ctx.fillStyle = duneColor2;
+    ctx.beginPath();
+    ctx.moveTo(300, canvas.height - 40);
+    ctx.quadraticCurveTo(500, canvas.height - 140, 700, canvas.height - 40);
+    ctx.lineTo(300, canvas.height - 40);
+    ctx.fill();
+    
+    ctx.fillStyle = duneColor1;
+    ctx.beginPath();
+    ctx.moveTo(600, canvas.height - 40);
+    ctx.quadraticCurveTo(750, canvas.height - 110, 800, canvas.height - 40);
+    ctx.lineTo(600, canvas.height - 40);
+    ctx.fill();
+    
+    // Desenhar cactos
+    for (let cactus of cacti) {
+        drawCactus(cactus.x, cactus.y, cactus.size, heatProgress);
+    }
+    
+    // Desenhar pássaros do deserto
+    for (let bird of desertBirds) {
+        drawDesertBird(bird);
+    }
+    
+    // Desenhar miragens (apenas quando muito quente)
+    if (heatProgress > 0.5) {
+        for (let mirage of mirages) {
+            mirage.time += 0.3;
+            mirage.alpha = (heatProgress - 0.5) * 0.6;
+            drawMirage(mirage);
+        }
+    }
+    
+    // Areia (mais avermelhada com calor)
+    const sandTop = interpolateColor('#F4A460', '#CD853F', heatProgress);
+    const sandBottom = interpolateColor('#DEB887', '#A0522D', heatProgress);
+    const sandGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
+    sandGradient.addColorStop(0, sandTop);
+    sandGradient.addColorStop(1, sandBottom);
+    ctx.fillStyle = sandGradient;
+    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+    
+    // Detalhes na areia (ondas de calor)
+    ctx.fillStyle = interpolateColor('#E6D5B8', '#8B4513', heatProgress);
+    for (let i = 0; i < canvas.width; i += 40) {
+        ctx.beginPath();
+        ctx.moveTo(i, canvas.height - 40);
+        ctx.quadraticCurveTo(i + 20, canvas.height - 45, i + 40, canvas.height - 40);
+        ctx.stroke();
+    }
+}
+
+// Desenhar cenário extremo do deserto (para o boss Falcão - 2-7)
+function drawExtremeDesertBackground() {
+    // Céu extremamente quente (vermelho-laranja intenso)
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
+    skyGradient.addColorStop(0, '#FF4500'); // Vermelho-laranja
+    skyGradient.addColorStop(0.5, '#FF6347'); // Tomate
+    skyGradient.addColorStop(1, '#CD5C5C'); // Vermelho indiano
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Sol extremamente intenso
+    const sunX = 700;
+    const sunY = 100;
+    ctx.fillStyle = '#FFD700';
+    ctx.shadowColor = '#FF4500';
+    ctx.shadowBlur = 80;
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 80, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    
+    // Múltiplas ondas de calor intensas
+    for (let wave of heatWaves) {
+        wave.x += wave.speed * 1.5;
+        wave.time += 1;
+        if (wave.x > canvas.width + 200) {
+            wave.x = -200;
+        }
+        wave.alpha = 0.6;
+        drawHeatWave(wave);
+    }
+    
+    // Miragens intensas
+    for (let mirage of mirages) {
+        mirage.time += 0.5;
+        mirage.alpha = 0.7;
+        drawMirage(mirage);
+    }
+    
+    // Dunas extremamente avermelhadas
+    ctx.fillStyle = '#8B4513';
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height - 40);
+    ctx.quadraticCurveTo(200, canvas.height - 120, 400, canvas.height - 40);
+    ctx.lineTo(0, canvas.height - 40);
+    ctx.fill();
+    
+    ctx.fillStyle = '#A0522D';
+    ctx.beginPath();
+    ctx.moveTo(300, canvas.height - 40);
+    ctx.quadraticCurveTo(500, canvas.height - 140, 700, canvas.height - 40);
+    ctx.lineTo(300, canvas.height - 40);
+    ctx.fill();
+    
+    ctx.fillStyle = '#8B4513';
+    ctx.beginPath();
+    ctx.moveTo(600, canvas.height - 40);
+    ctx.quadraticCurveTo(750, canvas.height - 110, 800, canvas.height - 40);
+    ctx.lineTo(600, canvas.height - 40);
+    ctx.fill();
+    
+    // Cactos murchos
+    for (let cactus of cacti) {
+        drawCactus(cactus.x, cactus.y, cactus.size, 1.0);
+    }
+    
+    // Pássaros do deserto
+    for (let bird of desertBirds) {
+        drawDesertBird(bird);
+    }
+    
+    // Areia extremamente quente
+    const sandGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
+    sandGradient.addColorStop(0, '#CD853F');
+    sandGradient.addColorStop(1, '#8B4513');
+    ctx.fillStyle = sandGradient;
+    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+    
+    // Ondas de calor na areia
+    ctx.strokeStyle = '#A0522D';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < canvas.width; i += 30) {
+        ctx.beginPath();
+        ctx.moveTo(i, canvas.height - 40);
+        ctx.quadraticCurveTo(i + 15, canvas.height - 48, i + 30, canvas.height - 40);
+        ctx.stroke();
+    }
+}
+
+// Atualizar elementos decorativos do deserto
+function updateDesertDecorations() {
+    // Atualizar pássaros do deserto
+    for (let bird of desertBirds) {
+        bird.x += bird.speed;
+        if (bird.x > canvas.width + 50) {
+            bird.x = -50;
+        }
+    }
+    
+    // Atualizar miragens
+    for (let mirage of mirages) {
+        mirage.time += 0.2;
+    }
+}
+
 // Árvore silhueta para cena noturna
 function drawNightTree(x, height, trunkWidth) {
     // Tronco escuro
@@ -2965,6 +3696,13 @@ function draw() {
             drawNightForestBackground();
         } else {
             drawForestBackground();
+        }
+    } else if (currentArea === 2) {
+        // Fase do boss (Falcão) = deserto extremo
+        if (currentSubstage === 7) {
+            drawExtremeDesertBackground();
+        } else {
+            drawDesertBackground();
         }
     } else {
         drawGenericBackground();
@@ -3984,6 +4722,9 @@ function gameLoop() {
         checkBirdCollision();
         checkCollisions();
         
+        // Atualizar gotas de suor no deserto
+        updateSweatDrops();
+        
         // Verificar expiração do stun carregado (5 segundos)
         if (player.stunCharge >= player.stunChargeMax && !player.stunned) {
             const oldSeconds = Math.ceil(player.stunChargeTimer / 60);
@@ -4573,6 +5314,19 @@ function showCountdown() {
     
     overlay.style.display = 'flex';
     effectsEl.innerHTML = '';
+    
+    // Tocar som especial do boss coruja se for a fase do boss coruja
+    const config = substageConfig[currentSubstage];
+    if (config && config.isBoss && currentArea === 1) {
+        const bossType = bossCpuTypes[currentArea];
+        if (bossType && bossType.type === 'owl' && sounds.owl && !sfxMuted) {
+            sounds.owl.currentTime = 0;
+            sounds.owl.volume = masterVolume;
+            sounds.owl.play().catch(e => {
+                console.log('Erro ao tocar som da coruja:', e);
+            });
+        }
+    }
     
     let count = 3;
     numberEl.textContent = count;
@@ -5420,3 +6174,101 @@ setInterval(() => {
 
 // Inicializar UI de dificuldade
 initDifficultyUI();
+
+// ========== FUNÇÕES DE SUOR NO DESERTO ==========
+
+// Criar gota de suor
+function createSweatDrop(bird, isPlayer) {
+    // Posição aleatória ao redor do pássaro (principalmente na parte superior)
+    const angle = Math.random() * Math.PI * 0.6 - Math.PI * 0.3; // -30° a +30°
+    const distance = bird.size * 0.7 + Math.random() * bird.size * 0.3;
+    const startX = bird.x + Math.cos(angle) * distance;
+    const startY = bird.y - bird.size * 0.5 + Math.sin(angle) * distance;
+    
+    sweatDrops.push({
+        x: startX,
+        y: startY,
+        vx: (Math.random() - 0.5) * 0.4, // Velocidade horizontal leve (meio termo)
+        vy: 0.7 + Math.random() * 0.35, // Velocidade vertical (caindo, meio termo)
+        size: 2 + Math.random() * 1.5, // Tamanho intermediário
+        life: 50 + Math.random() * 25, // Duração intermediária da gota
+        maxLife: 50 + Math.random() * 25,
+        birdId: isPlayer ? 'player' : 'cpu',
+        alpha: 0.6 + Math.random() * 0.25 // Transparência intermediária
+    });
+}
+
+// Atualizar gotas de suor
+function updateSweatDrops() {
+    if (currentArea !== 2) {
+        sweatDrops = [];
+        return;
+    }
+    
+    // Limitar número máximo de gotas por pássaro
+    const playerDrops = sweatDrops.filter(d => d.birdId === 'player').length;
+    const cpuDrops = sweatDrops.filter(d => d.birdId === 'cpu').length;
+    const maxDropsPerBird = 5; // Máximo de 5 gotas por pássaro (meio termo)
+    
+    // Criar novas gotas periodicamente para cada pássaro (probabilidade intermediária)
+    if (!player.stunned && playerDrops < maxDropsPerBird && Math.random() < 0.08) {
+        createSweatDrop(player, true);
+    }
+    if (!cpu.stunned && cpuDrops < maxDropsPerBird && Math.random() < 0.08) {
+        createSweatDrop(cpu, false);
+    }
+    
+    // Atualizar gotas existentes
+    for (let i = sweatDrops.length - 1; i >= 0; i--) {
+        const drop = sweatDrops[i];
+        
+        // Mover gota
+        drop.x += drop.vx;
+        drop.y += drop.vy;
+        
+        // Aceleração gravitacional
+        drop.vy += 0.1;
+        
+        // Reduzir vida
+        drop.life--;
+        
+        // Remover se saiu da tela ou acabou a vida
+        if (drop.life <= 0 || drop.y > canvas.height + 20) {
+            sweatDrops.splice(i, 1);
+        }
+    }
+}
+
+// Desenhar gotas de suor ao redor do pássaro
+function drawSweatDrops(bird, isPlayer) {
+    const birdId = isPlayer ? 'player' : 'cpu';
+    
+    // Desenhar apenas as gotas deste pássaro
+    sweatDrops.forEach(drop => {
+        if (drop.birdId === birdId) {
+            const alpha = (drop.life / drop.maxLife) * drop.alpha;
+            
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            
+            // Cor da gota (azul claro/transparente)
+            ctx.fillStyle = '#87CEEB';
+            ctx.strokeStyle = '#5F9EA0';
+            ctx.lineWidth = 0.5;
+            
+            // Desenhar gota (formato de lágrima)
+            ctx.beginPath();
+            ctx.arc(drop.x, drop.y, drop.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Brilho na gota
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.beginPath();
+            ctx.arc(drop.x - drop.size * 0.3, drop.y - drop.size * 0.3, drop.size * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+    });
+}
