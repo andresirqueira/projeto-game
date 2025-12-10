@@ -22,7 +22,7 @@ const sounds = {
     worm: new Audio('sounds/worm.mp3'),
     hawk: new Audio('sounds/hawk.mp3'),
     powerup: new Audio('sounds/powerup.mp3'),
-    introSound: new Audio('sounds/intro-sound.mp3'),
+    introSound: new Audio('sounds/Intro-sound.mp3'),
 };
 
 // Volume geral (0 a 1)
@@ -33,10 +33,20 @@ Object.values(sounds).forEach(sound => {
     if (sound) sound.volume = masterVolume;
 });
 
-// Configurar música de introdução para loop
+// Configurar música de introdução para loop e preload
 if (sounds.introSound) {
     sounds.introSound.loop = true;
     sounds.introSound.volume = masterVolume * 0.6; // Música de fundo um pouco mais baixa
+    sounds.introSound.preload = 'auto'; // Garantir pré-carregamento
+    
+    // Adicionar tratamento de erro para carregamento
+    sounds.introSound.addEventListener('error', function(e) {
+        console.error('Erro ao carregar música de introdução:', e);
+        console.error('Caminho tentado:', sounds.introSound.src);
+    });
+    
+    // Tentar carregar o arquivo explicitamente
+    sounds.introSound.load();
 }
 
 // Configurar som de vitória do boss (efeito sonoro, não música)
