@@ -1020,6 +1020,85 @@
             display: flex;
         }
 
+        /* Botões de Debug */
+        /* Indicador de Debug Mode */
+        .debug-indicator {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 2000;
+            background: rgba(241, 196, 15, 0.9);
+            color: #000;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            display: none;
+            border: 2px solid #f39c12;
+            box-shadow: 0 0 10px rgba(241, 196, 15, 0.5);
+        }
+
+        .debug-indicator.active {
+            display: block;
+        }
+
+        .debug-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #f1c40f;
+        }
+
+        .debug-panel.active {
+            display: flex;
+        }
+
+        .debug-btn {
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .debug-btn:hover {
+            background: #2980b9;
+        }
+
+        .debug-btn.boss {
+            background: #e74c3c;
+        }
+
+        .debug-btn.boss:hover {
+            background: #c0392b;
+        }
+
+        .debug-btn.victory {
+            background: #2ecc71;
+        }
+
+        .debug-btn.victory:hover {
+            background: #27ae60;
+        }
+
+        .debug-btn.defeat {
+            background: #95a5a6;
+        }
+
+        .debug-btn.defeat:hover {
+            background: #7f8c8d;
+        }
+
         /* Contagem Regressiva */
         .countdown-overlay {
             position: fixed;
@@ -1479,6 +1558,15 @@
         
         <p class="instructions" id="gameInstructions" style="display: none;"></p>
 
+        <!-- Painel de Debug -->
+        <div class="debug-panel" id="debugPanel">
+            <div style="color: #f1c40f; font-size: 0.7rem; margin-bottom: 5px; text-align: center;">🔧 DEBUG MODE</div>
+            <button class="debug-btn boss" onclick="simulateBossVictory()">👑 Vitória Boss</button>
+            <button class="debug-btn victory" onclick="simulateVictory()">🎉 Vitória Normal</button>
+            <button class="debug-btn defeat" onclick="simulateDefeat()">😔 Derrota</button>
+            <div style="color: #bdc3c7; font-size: 0.65rem; margin-top: 5px; text-align: center;">Ctrl+Shift+D</div>
+        </div>
+
         <div class="game-over" id="gameOver">
             <canvas id="winnerCanvas" width="400" height="150"></canvas>
             <h2 id="resultTitle">Fim de Jogo!</h2>
@@ -1508,6 +1596,7 @@
             stunLoaded: new Audio('sounds/stun-carregado.mp3'),
             stun: new Audio('sounds/stun.mp3'),
             win: new Audio('sounds/win.mp3'),
+            bossWin: new Audio('sounds/boss-win.mp3'), // Música de vitória do boss
             lose: new Audio('sounds/lose.mp3'),
             yummy: new Audio('sounds/yummy.mp3'),
             worm: new Audio('sounds/worm.mp3'),
@@ -1528,6 +1617,25 @@
         if (sounds.introSound) {
             sounds.introSound.loop = true;
             sounds.introSound.volume = masterVolume * 0.6; // Música de fundo um pouco mais baixa
+        }
+        
+        // Configurar som de vitória do boss (efeito sonoro, não música)
+        if (sounds.bossWin) {
+            // NÃO configurar loop - é efeito sonoro, não música
+            sounds.bossWin.volume = masterVolume; // Volume normal de efeito sonoro
+            sounds.bossWin.preload = 'auto';
+            
+            // Adicionar listeners para debug
+            sounds.bossWin.addEventListener('loadeddata', () => {
+                console.log('✅ boss-win.mp3 carregado com sucesso');
+            });
+            sounds.bossWin.addEventListener('canplaythrough', () => {
+                console.log('✅ boss-win.mp3 pronto para tocar');
+            });
+            sounds.bossWin.addEventListener('error', (e) => {
+                console.error('❌ Erro ao carregar boss-win.mp3');
+                console.error('Verifique se o arquivo existe em: sounds/boss-win.mp3');
+            });
         }
         
         // Controles de áudio
@@ -1579,6 +1687,19 @@
             musicMuted = !musicMuted;
             localStorage.setItem('musicMuted', musicMuted);
             updateAudioButtons();
+            
+            // Controlar som de vitória do boss se estiver tocando (efeito sonoro)
+            if (sounds.bossWin) {
+                if (sfxMuted) {
+                    // Se efeitos sonoros estão mutados, pausar
+                    sounds.bossWin.pause();
+                } else if (sounds.bossWin.paused && document.getElementById('gameOver').style.display === 'block' && currentSubstage === 7) {
+                    // Se estiver na tela de vitória do boss e efeitos não estiverem mutados, tocar
+                    sounds.bossWin.play().catch(e => {
+                        console.log('Erro ao tocar boss-win:', e);
+                    });
+                }
+            }
         }
         
         // Função para mutar/desmutar efeitos sonoros
@@ -2324,9 +2445,63 @@
         // Controles
         const keys = {};
 
+        // Modo Debug (ativar no console: window.debugMode = true)
+        let debugMode = false;
+        window.debugMode = false; // Pode ser ativado no console do navegador
+        
+        // Atalho para ativar/desativar debug: Ctrl+Shift+D
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
+                debugMode = !debugMode;
+                window.debugMode = debugMode;
+                console.log('🔧 Modo Debug:', debugMode ? 'ATIVADO' : 'DESATIVADO');
+                
+                // Mostrar/esconder indicador de debug
+                const debugIndicator = document.getElementById('debugIndicator');
+                if (debugIndicator) {
+                    if (debugMode) {
+                        debugIndicator.classList.add('active');
+                    } else {
+                        debugIndicator.classList.remove('active');
+                    }
+                }
+                
+                // Mostrar/esconder painel de debug
+                const debugPanel = document.getElementById('debugPanel');
+                if (debugPanel) {
+                    if (debugMode && gameRunning) {
+                        debugPanel.classList.add('active');
+                    } else {
+                        debugPanel.classList.remove('active');
+                    }
+                }
+                
+                e.preventDefault();
+            }
+        });
+
         document.addEventListener('keydown', (e) => {
             keys[e.key.toLowerCase()] = true;
             keys[e.code] = true;
+            
+            // Atalhos de debug (só funcionam se debugMode estiver ativo)
+            if (debugMode && gameRunning) {
+                // Pressionar 'D' + 'B' para simular vitória do boss
+                if (e.key.toLowerCase() === 'b' && keys['d']) {
+                    simulateBossVictory();
+                    e.preventDefault();
+                }
+                // Pressionar 'D' + 'V' para simular vitória normal
+                else if (e.key.toLowerCase() === 'v' && keys['d']) {
+                    simulateVictory();
+                    e.preventDefault();
+                }
+                // Pressionar 'D' + 'L' para simular derrota
+                else if (e.key.toLowerCase() === 'l' && keys['d']) {
+                    simulateDefeat();
+                    e.preventDefault();
+                }
+            }
         });
 
         document.addEventListener('keyup', (e) => {
@@ -3584,6 +3759,12 @@
             { x: 750, y: 100, size: 0.7, speed: 0.4 }
         ];
 
+        // Elementos decorativos do cenário (variam por subfase)
+        let backgroundBirds = []; // Pássaros voando no fundo
+        let butterflies = []; // Borboletas
+        let fallingLeaves = []; // Folhas caindo
+        let fireflies = []; // Vaga-lumes
+
         // Desenhar nuvem
         function drawCloud(x, y, size) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
@@ -3595,17 +3776,21 @@
             ctx.fill();
         }
 
-        // Desenhar árvore
-        function drawTree(x, height, trunkWidth) {
-            // Tronco
-            ctx.fillStyle = '#8B4513';
+        // Desenhar árvore (com progresso de noite opcional)
+        function drawTree(x, height, trunkWidth, nightProgress = 0) {
+            // Tronco (mais escuro conforme anoitece)
+            const trunkColor = interpolateColor('#8B4513', '#1a1a1a', nightProgress);
+            ctx.fillStyle = trunkColor;
             ctx.fillRect(x - trunkWidth/2, canvas.height - 40 - height * 0.4, trunkWidth, height * 0.4 + 40);
             
-            // Copa (3 camadas)
-            ctx.fillStyle = '#228B22';
+            // Copa (3 camadas) - mais escura conforme anoitece
+            const leafColor1 = interpolateColor('#228B22', '#0a1a0a', nightProgress);
+            const leafColor2 = interpolateColor('#2E8B57', '#0a2a0a', nightProgress);
+            const leafColor3 = interpolateColor('#3CB371', '#0a2a0a', nightProgress);
             const leafSize = height * 0.35;
             
             // Camada inferior
+            ctx.fillStyle = leafColor1;
             ctx.beginPath();
             ctx.moveTo(x - leafSize, canvas.height - 40 - height * 0.3);
             ctx.lineTo(x + leafSize, canvas.height - 40 - height * 0.3);
@@ -3614,7 +3799,7 @@
             ctx.fill();
             
             // Camada do meio
-            ctx.fillStyle = '#2E8B57';
+            ctx.fillStyle = leafColor2;
             ctx.beginPath();
             ctx.moveTo(x - leafSize * 0.8, canvas.height - 40 - height * 0.5);
             ctx.lineTo(x + leafSize * 0.8, canvas.height - 40 - height * 0.5);
@@ -3623,7 +3808,7 @@
             ctx.fill();
             
             // Camada superior
-            ctx.fillStyle = '#3CB371';
+            ctx.fillStyle = leafColor3;
             ctx.beginPath();
             ctx.moveTo(x - leafSize * 0.6, canvas.height - 40 - height * 0.65);
             ctx.lineTo(x + leafSize * 0.6, canvas.height - 40 - height * 0.65);
@@ -3632,65 +3817,547 @@
             ctx.fill();
         }
 
+        // Inicializar elementos decorativos baseado na subfase
+        function initBackgroundDecorations() {
+            backgroundBirds = [];
+            butterflies = [];
+            fallingLeaves = [];
+            fireflies = [];
+
+            if (currentArea === 1 && currentSubstage >= 1 && currentSubstage <= 6) {
+                if (currentSubstage === 1) {
+                    // 1-1: Pássaros voando no fundo
+                    for (let i = 0; i < 3; i++) {
+                        backgroundBirds.push({
+                            x: Math.random() * canvas.width,
+                            y: 80 + Math.random() * 100,
+                            speed: 0.5 + Math.random() * 0.5,
+                            size: 0.4 + Math.random() * 0.2,
+                            wingFlap: 0,
+                            color: ['#8B4513', '#654321', '#A0522D'][Math.floor(Math.random() * 3)]
+                        });
+                    }
+                } else if (currentSubstage === 2) {
+                    // 1-2: Borboletas
+                    for (let i = 0; i < 4; i++) {
+                        butterflies.push({
+                            x: Math.random() * canvas.width,
+                            y: 100 + Math.random() * 150,
+                            speedX: (Math.random() - 0.5) * 0.8,
+                            speedY: Math.sin(Math.random() * Math.PI * 2) * 0.3,
+                            size: 0.6 + Math.random() * 0.4,
+                            wingFlap: Math.random() * Math.PI * 2,
+                            color: ['#FFD700', '#FF69B4', '#87CEEB', '#FF6347'][Math.floor(Math.random() * 4)]
+                        });
+                    }
+                } else if (currentSubstage === 3) {
+                    // 1-3: Pássaros + folhas caindo
+                    for (let i = 0; i < 2; i++) {
+                        backgroundBirds.push({
+                            x: Math.random() * canvas.width,
+                            y: 70 + Math.random() * 80,
+                            speed: 0.4 + Math.random() * 0.4,
+                            size: 0.35 + Math.random() * 0.15,
+                            wingFlap: 0,
+                            color: ['#8B4513', '#654321'][Math.floor(Math.random() * 2)]
+                        });
+                    }
+                    for (let i = 0; i < 5; i++) {
+                        fallingLeaves.push({
+                            x: Math.random() * canvas.width,
+                            y: -20 - Math.random() * 50,
+                            speedX: (Math.random() - 0.5) * 0.5,
+                            speedY: 0.3 + Math.random() * 0.4,
+                            rotation: Math.random() * Math.PI * 2,
+                            rotationSpeed: (Math.random() - 0.5) * 0.05,
+                            size: 0.5 + Math.random() * 0.5,
+                            color: ['#FF8C00', '#FFA500', '#FF6347'][Math.floor(Math.random() * 3)]
+                        });
+                    }
+                } else if (currentSubstage === 4) {
+                    // 1-4: Combinação de todos os elementos
+                    for (let i = 0; i < 2; i++) {
+                        backgroundBirds.push({
+                            x: Math.random() * canvas.width,
+                            y: 90 + Math.random() * 90,
+                            speed: 0.5 + Math.random() * 0.5,
+                            size: 0.4 + Math.random() * 0.2,
+                            wingFlap: 0,
+                            color: ['#8B4513', '#654321', '#A0522D'][Math.floor(Math.random() * 3)]
+                        });
+                    }
+                    for (let i = 0; i < 3; i++) {
+                        butterflies.push({
+                            x: Math.random() * canvas.width,
+                            y: 120 + Math.random() * 120,
+                            speedX: (Math.random() - 0.5) * 0.7,
+                            speedY: Math.sin(Math.random() * Math.PI * 2) * 0.3,
+                            size: 0.6 + Math.random() * 0.4,
+                            wingFlap: Math.random() * Math.PI * 2,
+                            color: ['#FFD700', '#FF69B4', '#87CEEB'][Math.floor(Math.random() * 3)]
+                        });
+                    }
+                    for (let i = 0; i < 4; i++) {
+                        fallingLeaves.push({
+                            x: Math.random() * canvas.width,
+                            y: -20 - Math.random() * 40,
+                            speedX: (Math.random() - 0.5) * 0.4,
+                            speedY: 0.3 + Math.random() * 0.3,
+                            rotation: Math.random() * Math.PI * 2,
+                            rotationSpeed: (Math.random() - 0.5) * 0.04,
+                            size: 0.5 + Math.random() * 0.5,
+                            color: ['#FF8C00', '#FFA500', '#FF6347', '#32CD32'][Math.floor(Math.random() * 4)]
+                        });
+                    }
+                } else if (currentSubstage === 5) {
+                    // 1-5: Crepúsculo - Morcegos voando
+                    for (let i = 0; i < 3; i++) {
+                        backgroundBirds.push({
+                            x: Math.random() * canvas.width,
+                            y: 100 + Math.random() * 120,
+                            speed: 0.6 + Math.random() * 0.4,
+                            size: 0.3 + Math.random() * 0.15,
+                            wingFlap: 0,
+                            color: '#2C2C2C', // Cor escura para morcegos
+                            isBat: true
+                        });
+                    }
+                    // Algumas folhas ainda caindo
+                    for (let i = 0; i < 3; i++) {
+                        fallingLeaves.push({
+                            x: Math.random() * canvas.width,
+                            y: -20 - Math.random() * 30,
+                            speedX: (Math.random() - 0.5) * 0.3,
+                            speedY: 0.2 + Math.random() * 0.3,
+                            rotation: Math.random() * Math.PI * 2,
+                            rotationSpeed: (Math.random() - 0.5) * 0.03,
+                            size: 0.4 + Math.random() * 0.4,
+                            color: ['#8B4513', '#654321', '#5D4037'][Math.floor(Math.random() * 3)] // Folhas mais escuras
+                        });
+                    }
+                } else if (currentSubstage === 6) {
+                    // 1-6: Quase noite - Morcegos + primeiros vaga-lumes
+                    for (let i = 0; i < 4; i++) {
+                        backgroundBirds.push({
+                            x: Math.random() * canvas.width,
+                            y: 110 + Math.random() * 100,
+                            speed: 0.7 + Math.random() * 0.3,
+                            size: 0.3 + Math.random() * 0.15,
+                            wingFlap: 0,
+                            color: '#1a1a1a', // Morcegos mais escuros
+                            isBat: true
+                        });
+                    }
+                    // Primeiros vaga-lumes aparecendo
+                    for (let i = 0; i < 5; i++) {
+                        fireflies.push({
+                            x: 50 + Math.random() * (canvas.width - 100),
+                            y: 150 + Math.random() * 150,
+                            speedX: (Math.random() - 0.5) * 0.3,
+                            speedY: (Math.random() - 0.5) * 0.3,
+                            glowPhase: Math.random() * Math.PI * 2,
+                            glowSpeed: 0.02 + Math.random() * 0.02
+                        });
+                    }
+                }
+            }
+        }
+
+        // Desenhar pássaro de fundo
+        function drawBackgroundBird(bird) {
+            ctx.save();
+            ctx.translate(bird.x, bird.y);
+            ctx.scale(bird.size, bird.size);
+            
+            bird.wingFlap += 0.15;
+            const wingOffset = Math.sin(bird.wingFlap) * 5;
+            
+            if (bird.isBat) {
+                // Desenhar morcego
+                // Corpo pequeno
+                ctx.fillStyle = bird.color;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 4, 3, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Asas de morcego (mais alongadas e pontiagudas)
+                ctx.fillStyle = bird.color;
+                ctx.globalAlpha = 0.7;
+                
+                // Asa superior esquerda
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(-15, -8 - wingOffset);
+                ctx.lineTo(-25, -5 - wingOffset);
+                ctx.lineTo(-20, 0);
+                ctx.lineTo(-10, -2);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Asa superior direita
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(-15, 8 + wingOffset);
+                ctx.lineTo(-25, 5 + wingOffset);
+                ctx.lineTo(-20, 0);
+                ctx.lineTo(-10, 2);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.globalAlpha = 1;
+                
+                // Cabeça pequena
+                ctx.beginPath();
+                ctx.arc(2, 0, 2, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // Desenhar pássaro normal
+                // Corpo
+                ctx.fillStyle = bird.color;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 8, 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Asas
+                ctx.fillStyle = bird.color;
+                ctx.beginPath();
+                ctx.ellipse(-5, wingOffset, 6, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(-5, -wingOffset, 6, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Cabeça
+                ctx.beginPath();
+                ctx.arc(5, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
+
+        // Desenhar borboleta
+        function drawButterfly(butterfly) {
+            ctx.save();
+            ctx.translate(butterfly.x, butterfly.y);
+            ctx.scale(butterfly.size, butterfly.size);
+            
+            butterfly.wingFlap += 0.2;
+            const wingAngle = Math.sin(butterfly.wingFlap) * 0.3;
+            
+            // Corpo
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-1, -8, 2, 16);
+            
+            // Asas superiores
+            ctx.fillStyle = butterfly.color;
+            ctx.globalAlpha = 0.8;
+            ctx.save();
+            ctx.rotate(wingAngle);
+            ctx.beginPath();
+            ctx.ellipse(-8, -5, 10, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            ctx.save();
+            ctx.rotate(-wingAngle);
+            ctx.beginPath();
+            ctx.ellipse(8, -5, 10, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            // Asas inferiores
+            ctx.globalAlpha = 0.6;
+            ctx.save();
+            ctx.rotate(wingAngle * 0.7);
+            ctx.beginPath();
+            ctx.ellipse(-6, 3, 8, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            ctx.save();
+            ctx.rotate(-wingAngle * 0.7);
+            ctx.beginPath();
+            ctx.ellipse(6, 3, 8, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
+
+        // Desenhar folha caindo
+        function drawFallingLeaf(leaf) {
+            ctx.save();
+            ctx.translate(leaf.x, leaf.y);
+            ctx.rotate(leaf.rotation);
+            ctx.scale(leaf.size, leaf.size);
+            
+            ctx.fillStyle = leaf.color;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.quadraticCurveTo(-8, -5, -5, -10);
+            ctx.quadraticCurveTo(0, -12, 5, -10);
+            ctx.quadraticCurveTo(8, -5, 0, 0);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Veia da folha
+            ctx.strokeStyle = 'rgba(139, 69, 19, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(0, -10);
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+
+        // Desenhar vaga-lume
+        function drawFirefly(firefly) {
+            firefly.glowPhase += firefly.glowSpeed;
+            const glow = 0.3 + Math.sin(firefly.glowPhase) * 0.7;
+            
+            ctx.save();
+            ctx.globalAlpha = glow;
+            ctx.shadowColor = '#ffff00';
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = '#ffff00';
+            ctx.beginPath();
+            ctx.arc(firefly.x, firefly.y, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Atualizar elementos decorativos
+        function updateBackgroundDecorations() {
+            // Atualizar pássaros de fundo
+            for (let bird of backgroundBirds) {
+                bird.x += bird.speed;
+                if (bird.x > canvas.width + 30) {
+                    bird.x = -30;
+                    bird.y = 80 + Math.random() * 100;
+                }
+            }
+            
+            // Atualizar borboletas
+            for (let butterfly of butterflies) {
+                butterfly.x += butterfly.speedX;
+                butterfly.y += butterfly.speedY;
+                
+                // Movimento flutuante
+                butterfly.speedY += Math.sin(Date.now() / 1000 + butterfly.x) * 0.01;
+                butterfly.speedY = Math.max(-0.5, Math.min(0.5, butterfly.speedY));
+                
+                if (butterfly.x < -20) butterfly.x = canvas.width + 20;
+                if (butterfly.x > canvas.width + 20) butterfly.x = -20;
+                if (butterfly.y < 50) butterfly.speedY = Math.abs(butterfly.speedY);
+                if (butterfly.y > canvas.height - 100) butterfly.speedY = -Math.abs(butterfly.speedY);
+            }
+            
+            // Atualizar folhas caindo
+            for (let i = fallingLeaves.length - 1; i >= 0; i--) {
+                const leaf = fallingLeaves[i];
+                leaf.x += leaf.speedX;
+                leaf.y += leaf.speedY;
+                leaf.rotation += leaf.rotationSpeed;
+                
+                if (leaf.y > canvas.height + 20) {
+                    // Reposicionar no topo
+                    leaf.y = -20 - Math.random() * 50;
+                    leaf.x = Math.random() * canvas.width;
+                }
+            }
+            
+            // Atualizar vaga-lumes
+            for (let firefly of fireflies) {
+                firefly.x += firefly.speedX;
+                firefly.y += firefly.speedY;
+                
+                // Movimento flutuante suave
+                firefly.speedX += Math.sin(Date.now() / 2000 + firefly.y) * 0.01;
+                firefly.speedY += Math.cos(Date.now() / 1800 + firefly.x) * 0.01;
+                
+                // Limitar velocidade
+                firefly.speedX = Math.max(-0.5, Math.min(0.5, firefly.speedX));
+                firefly.speedY = Math.max(-0.5, Math.min(0.5, firefly.speedY));
+                
+                // Manter dentro da área visível
+                if (firefly.x < 20) firefly.speedX = Math.abs(firefly.speedX);
+                if (firefly.x > canvas.width - 20) firefly.speedX = -Math.abs(firefly.speedX);
+                if (firefly.y < 100) firefly.speedY = Math.abs(firefly.speedY);
+                if (firefly.y > canvas.height - 100) firefly.speedY = -Math.abs(firefly.speedY);
+            }
+        }
+
+        // Calcular progresso da transição dia/noite (0 = dia completo, 1 = noite completa)
+        function getDayNightProgress() {
+            if (currentArea !== 1 || currentSubstage >= 7) return 0; // 1-7 usa drawNightForestBackground
+            // 1-1 = 0.0, 1-2 = 0.15, 1-3 = 0.3, 1-4 = 0.5, 1-5 = 0.7, 1-6 = 0.85
+            const progress = (currentSubstage - 1) / 6;
+            return Math.max(0, Math.min(0.85, progress)); // Máximo 0.85 para 1-6
+        }
+
+        // Interpolar entre duas cores
+        function interpolateColor(color1, color2, t) {
+            // Converter hex para RGB
+            const hex1 = color1.replace('#', '');
+            const hex2 = color2.replace('#', '');
+            const r1 = parseInt(hex1.substr(0, 2), 16);
+            const g1 = parseInt(hex1.substr(2, 2), 16);
+            const b1 = parseInt(hex1.substr(4, 2), 16);
+            const r2 = parseInt(hex2.substr(0, 2), 16);
+            const g2 = parseInt(hex2.substr(2, 2), 16);
+            const b2 = parseInt(hex2.substr(4, 2), 16);
+            
+            const r = Math.round(r1 + (r2 - r1) * t);
+            const g = Math.round(g1 + (g2 - g1) * t);
+            const b = Math.round(b1 + (b2 - b1) * t);
+            
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+
         // Desenhar cenário da floresta
         function drawForestBackground() {
-            // Céu azul claro
+            const dayNightProgress = getDayNightProgress();
+            
+            // Interpolar cores do céu entre dia e noite
+            const skyTopDay = '#87CEEB';
+            const skyTopNight = '#0a0a20';
+            const skyBottomDay = '#E0F6FF';
+            const skyBottomNight = '#2a2a4a';
+            
+            const skyTop = interpolateColor(skyTopDay, skyTopNight, dayNightProgress);
+            const skyBottom = interpolateColor(skyBottomDay, skyBottomNight, dayNightProgress);
+            
             const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
-            skyGradient.addColorStop(0, '#87CEEB');
-            skyGradient.addColorStop(1, '#E0F6FF');
+            skyGradient.addColorStop(0, skyTop);
+            skyGradient.addColorStop(1, skyBottom);
             ctx.fillStyle = skyGradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Atualizar e desenhar nuvens
+            // Desenhar estrelas gradualmente (quanto mais escuro, mais estrelas)
+            if (dayNightProgress > 0.3) {
+                ctx.fillStyle = 'white';
+                const starCount = Math.floor(dayNightProgress * 50);
+                for (let i = 0; i < starCount; i++) {
+                    const x = (i * 137) % canvas.width;
+                    const y = (i * 73) % (canvas.height - 100);
+                    const twinkle = 0.3 + Math.sin(Date.now() / 500 + i) * 0.7 * dayNightProgress;
+                    ctx.globalAlpha = twinkle * dayNightProgress;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 1 + (i % 3), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            // Desenhar lua gradualmente
+            if (dayNightProgress > 0.4) {
+                const moonX = 650;
+                const moonY = 80;
+                const moonAlpha = (dayNightProgress - 0.4) / 0.6; // Aparece gradualmente
+                ctx.fillStyle = '#fffacd';
+                ctx.shadowColor = '#fffacd';
+                ctx.shadowBlur = 30 * moonAlpha;
+                ctx.globalAlpha = moonAlpha;
+                ctx.beginPath();
+                ctx.arc(moonX, moonY, 40, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                
+                // Crateras da lua
+                ctx.fillStyle = `rgba(200, 195, 150, ${0.3 * moonAlpha})`;
+                ctx.beginPath();
+                ctx.arc(moonX - 10, moonY - 5, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(moonX + 15, moonY + 10, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+
+            // Atualizar e desenhar nuvens (mais escuras conforme anoitece)
             for (let cloud of clouds) {
                 cloud.x += cloud.speed;
                 if (cloud.x > canvas.width + 100) {
                     cloud.x = -100;
                 }
+                ctx.globalAlpha = 1 - dayNightProgress * 0.7; // Nuvens desaparecem gradualmente
                 drawCloud(cloud.x, cloud.y, cloud.size);
+                ctx.globalAlpha = 1;
             }
 
-            // Montanhas ao fundo
-            ctx.fillStyle = '#6B8E23';
+            // Atualizar elementos decorativos (variam por subfase)
+            updateBackgroundDecorations();
+
+            // Montanhas ao fundo (mais escuras conforme anoitece)
+            const mountainColor1 = interpolateColor('#6B8E23', '#1a3a1a', dayNightProgress);
+            const mountainColor2 = interpolateColor('#556B2F', '#0a2a0a', dayNightProgress);
+            
+            ctx.fillStyle = mountainColor1;
             ctx.beginPath();
             ctx.moveTo(0, canvas.height - 40);
             ctx.lineTo(150, canvas.height - 150);
             ctx.lineTo(300, canvas.height - 40);
             ctx.fill();
             
-            ctx.fillStyle = '#556B2F';
+            ctx.fillStyle = mountainColor2;
             ctx.beginPath();
             ctx.moveTo(200, canvas.height - 40);
             ctx.lineTo(400, canvas.height - 180);
             ctx.lineTo(600, canvas.height - 40);
             ctx.fill();
             
-            ctx.fillStyle = '#6B8E23';
+            ctx.fillStyle = mountainColor1;
             ctx.beginPath();
             ctx.moveTo(500, canvas.height - 40);
             ctx.lineTo(700, canvas.height - 130);
             ctx.lineTo(800, canvas.height - 40);
             ctx.fill();
+            
+            // Desenhar folhas caindo (depois das montanhas, antes das árvores)
+            for (let leaf of fallingLeaves) {
+                drawFallingLeaf(leaf);
+            }
 
-            // Árvores de fundo (menores)
-            drawTree(50, 120, 12);
-            drawTree(180, 100, 10);
-            drawTree(620, 110, 11);
-            drawTree(750, 130, 13);
+            // Árvores de fundo (menores) - mais escuras conforme anoitece
+            drawTree(50, 120, 12, dayNightProgress);
+            drawTree(180, 100, 10, dayNightProgress);
+            drawTree(620, 110, 11, dayNightProgress);
+            drawTree(750, 130, 13, dayNightProgress);
 
-            // Árvores de frente (maiores, nas laterais)
-            drawTree(-20, 180, 18);
-            drawTree(820, 170, 16);
+            // Desenhar pássaros de fundo
+            for (let bird of backgroundBirds) {
+                drawBackgroundBird(bird);
+            }
 
-            // Grama com variação
+            // Desenhar borboletas
+            for (let butterfly of butterflies) {
+                drawButterfly(butterfly);
+            }
+
+            // Desenhar vaga-lumes (fase 1-6)
+            for (let firefly of fireflies) {
+                drawFirefly(firefly);
+            }
+
+            // Árvores de frente (maiores, nas laterais) - mais escuras conforme anoitece
+            drawTree(-20, 180, 18, dayNightProgress);
+            drawTree(820, 170, 16, dayNightProgress);
+
+            // Grama com variação (mais escura conforme anoitece)
+            const grassTop = interpolateColor('#2ecc71', '#1a4a1a', dayNightProgress);
+            const grassBottom = interpolateColor('#27ae60', '#0a3a0a', dayNightProgress);
             const grassGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
-            grassGradient.addColorStop(0, '#2ecc71');
-            grassGradient.addColorStop(1, '#27ae60');
+            grassGradient.addColorStop(0, grassTop);
+            grassGradient.addColorStop(1, grassBottom);
             ctx.fillStyle = grassGradient;
             ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
             
             // Detalhes na grama
-            ctx.fillStyle = '#27ae60';
+            const grassDetail = interpolateColor('#27ae60', '#0a3a0a', dayNightProgress);
+            ctx.fillStyle = grassDetail;
             for (let i = 0; i < canvas.width; i += 30) {
                 ctx.beginPath();
                 ctx.moveTo(i, canvas.height - 40);
@@ -4155,6 +4822,134 @@
             ctxW.restore();
         }
 
+        // Desenhar cena de vitória especial do boss
+        function drawBossVictoryScene() {
+            const winnerCanvas = document.getElementById('winnerCanvas');
+            const ctxW = winnerCanvas.getContext('2d');
+            
+            let animFrame;
+            let time = 0;
+            const particles = [];
+            
+            // Criar partículas de fogos de artifício (reduzido para melhor performance)
+            for (let i = 0; i < 15; i++) { // Reduzido de 30 para 15
+                particles.push({
+                    x: 200 + (Math.random() - 0.5) * 100,
+                    y: 50 + Math.random() * 50,
+                    vx: (Math.random() - 0.5) * 3,
+                    vy: (Math.random() - 0.5) * 3,
+                    life: 1,
+                    decay: 0.015 + Math.random() * 0.02,
+                    color: ['#FFD700', '#FF6347', '#FF1493', '#00CED1', '#FF4500'][Math.floor(Math.random() * 5)],
+                    size: 2 + Math.random() * 3 // Reduzido tamanho
+                });
+            }
+            
+            function animate() {
+                time += 0.03; // Reduzido para melhor performance
+                ctxW.clearRect(0, 0, winnerCanvas.width, winnerCanvas.height);
+                
+                const scale = 1.5;
+                const bounce = Math.sin(time * 2) * 5;
+                
+                // Fundo com gradiente dourado
+                const gradient = ctxW.createLinearGradient(0, 0, 0, winnerCanvas.height);
+                gradient.addColorStop(0, 'rgba(255, 215, 0, 0.3)');
+                gradient.addColorStop(1, 'rgba(255, 140, 0, 0.2)');
+                ctxW.fillStyle = gradient;
+                ctxW.fillRect(0, 0, winnerCanvas.width, winnerCanvas.height);
+                
+                // Coroa grande e brilhante
+                ctxW.font = '50px Arial';
+                ctxW.textAlign = 'center';
+                ctxW.shadowColor = '#FFD700';
+                ctxW.shadowBlur = 20;
+                ctxW.fillStyle = '#FFD700';
+                ctxW.fillText('👑', 200, 35 + bounce);
+                ctxW.shadowBlur = 0;
+                
+                // Múltiplas coroas pequenas ao redor (reduzido para melhor performance)
+                for (let i = 0; i < 6; i++) { // Reduzido de 8 para 6
+                    const angle = (i / 6) * Math.PI * 2 + time;
+                    const dist = 80;
+                    ctxW.font = '18px Arial'; // Reduzido tamanho da fonte
+                    ctxW.globalAlpha = 0.6;
+                    ctxW.fillText('👑', 200 + Math.cos(angle) * dist, 85 + Math.sin(angle) * dist * 0.5);
+                }
+                ctxW.globalAlpha = 1;
+                
+                // Partículas de fogos de artifício (otimizado)
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.08; // Gravidade reduzida
+                    p.life -= p.decay;
+                    
+                    if (p.life > 0) {
+                        ctxW.globalAlpha = p.life;
+                        // Remover shadowBlur para melhor performance
+                        ctxW.fillStyle = p.color;
+                        ctxW.beginPath();
+                        ctxW.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                        ctxW.fill();
+                        
+                        // Estrelas brilhantes (apenas se vida > 0.5 para reduzir desenho)
+                        if (p.life > 0.5) {
+                            ctxW.font = '12px Arial'; // Fonte menor
+                            ctxW.fillText('⭐', p.x, p.y);
+                        }
+                    } else {
+                        // Reposicionar partícula
+                        p.x = 200 + (Math.random() - 0.5) * 100;
+                        p.y = 50 + Math.random() * 50;
+                        p.vx = (Math.random() - 0.5) * 3;
+                        p.vy = (Math.random() - 0.5) * 3;
+                        p.life = 1;
+                    }
+                }
+                ctxW.globalAlpha = 1;
+                
+                // Pássaro do jogador grande e triunfante
+                drawHappyBird(ctxW, 200, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
+                
+                // Aura dourada ao redor do pássaro (sem shadow para melhor performance)
+                ctxW.strokeStyle = '#FFD700';
+                ctxW.lineWidth = 2;
+                ctxW.globalAlpha = 0.5 + Math.sin(time * 2) * 0.2; // Animação mais suave
+                ctxW.beginPath();
+                ctxW.arc(200, 85 + bounce, 60, 0, Math.PI * 2);
+                ctxW.stroke();
+                ctxW.globalAlpha = 1;
+                
+                // Texto "BOSS DERROTADO!"
+                ctxW.font = 'bold 18px Arial';
+                ctxW.fillStyle = '#FFD700';
+                ctxW.textAlign = 'center';
+                ctxW.shadowColor = '#000';
+                ctxW.shadowBlur = 3;
+                ctxW.fillText('⚔️ BOSS DERROTADO! ⚔️', 200, 140);
+                ctxW.shadowBlur = 0;
+                
+                // Estrelas brilhantes ao redor (reduzido para melhor performance)
+                for (let i = 0; i < 8; i++) { // Reduzido de 12 para 8
+                    const angle = (i / 8) * Math.PI * 2 + time * 1.5; // Rotação mais lenta
+                    const dist = 90;
+                    const starX = 200 + Math.cos(angle) * dist;
+                    const starY = 85 + Math.sin(angle) * dist * 0.6;
+                    ctxW.font = '16px Arial'; // Fonte menor
+                    ctxW.globalAlpha = 0.7 + Math.sin(time * 3 + i) * 0.2; // Animação mais suave
+                    ctxW.fillText('✨', starX, starY);
+                }
+                ctxW.globalAlpha = 1;
+                
+                animFrame = requestAnimationFrame(animate);
+            }
+            
+            animate();
+            winnerCanvas.animFrame = animFrame;
+        }
+
         // Desenhar cena de resultado
         function drawResultScene(playerWon, isDraw) {
             const winnerCanvas = document.getElementById('winnerCanvas');
@@ -4276,6 +5071,59 @@
             winnerCanvas.animFrame = animFrame;
         }
 
+        // ========== FUNÇÕES DE DEBUG ==========
+        
+        // Simular vitória do boss (para teste)
+        function simulateBossVictory() {
+            if (!debugMode && !window.debugMode) {
+                console.log('⚠️ Modo Debug não está ativo! Pressione Ctrl+Shift+D para ativar.');
+                return;
+            }
+            console.log('🔧 DEBUG: Simulando vitória do boss...');
+            
+            // Garantir que estamos em uma fase de boss
+            currentSubstage = 7;
+            
+            // Definir scores para vitória
+            playerScore = 30;
+            cpuScore = 10;
+            
+            // Chamar endGame normalmente
+            endGame();
+        }
+        
+        // Simular vitória normal (para teste)
+        function simulateVictory() {
+            if (!debugMode && !window.debugMode) {
+                console.log('⚠️ Modo Debug não está ativo! Pressione Ctrl+Shift+D para ativar.');
+                return;
+            }
+            console.log('🔧 DEBUG: Simulando vitória normal...');
+            
+            // Definir scores para vitória
+            playerScore = 20;
+            cpuScore = 10;
+            
+            // Chamar endGame normalmente
+            endGame();
+        }
+        
+        // Simular derrota (para teste)
+        function simulateDefeat() {
+            if (!debugMode && !window.debugMode) {
+                console.log('⚠️ Modo Debug não está ativo! Pressione Ctrl+Shift+D para ativar.');
+                return;
+            }
+            console.log('🔧 DEBUG: Simulando derrota...');
+            
+            // Definir scores para derrota
+            playerScore = 5;
+            cpuScore = 20;
+            
+            // Chamar endGame normalmente
+            endGame();
+        }
+
         // Fim do jogo
         function endGame() {
             gameRunning = false;
@@ -4288,13 +5136,53 @@
             const isVictory = isBonusStage ? (playerScore >= config.goalScore) : (playerScore > cpuScore);
 
             if (isVictory) {
-                resultTitle.textContent = isBonusStage ? '🪱 BÔNUS COMPLETO! 🪱' : '🎉 VOCÊ VENCEU! 🎉';
-                resultTitle.className = 'win';
-                
-                // 🔊 Som de vitória
-                playSound('win');
-                
-                drawResultScene(true, false);
+                // Vitória especial do boss
+                if (currentSubstage === 7) {
+                    resultTitle.textContent = '👑 BOSS DERROTADO! 👑';
+                    resultTitle.className = 'win';
+                    
+                    // 🔊 Som especial de vitória do boss (efeito sonoro com loop)
+                    // Parar música de introdução se estiver tocando
+                    if (sounds.introSound && !sounds.introSound.paused) {
+                        sounds.introSound.pause();
+                        sounds.introSound.currentTime = 0;
+                    }
+                    
+                    // 🔊 Tocar som de vitória do boss (efeito sonoro com loop)
+                    if (sounds.bossWin && !sfxMuted) {
+                        // Configurar como efeito sonoro especial com loop
+                        sounds.bossWin.loop = true;
+                        sounds.bossWin.volume = masterVolume;
+                        sounds.bossWin.currentTime = 0;
+                        
+                        // Tentar tocar diretamente (já que precisa de loop)
+                        sounds.bossWin.play().catch(e => {
+                            console.log('Erro ao tocar boss-win:', e);
+                            // Tentar após interação do usuário
+                            const tryPlay = () => {
+                                if (sounds.bossWin && !sfxMuted) {
+                                    sounds.bossWin.loop = true;
+                                    sounds.bossWin.currentTime = 0;
+                                    sounds.bossWin.play().catch(() => {});
+                                }
+                            };
+                            document.addEventListener('click', tryPlay, { once: true });
+                            document.addEventListener('keydown', tryPlay, { once: true });
+                            document.addEventListener('touchstart', tryPlay, { once: true });
+                        });
+                    }
+                    
+                    // Tela de vitória especial do boss
+                    drawBossVictoryScene();
+                } else {
+                    resultTitle.textContent = isBonusStage ? '🪱 BÔNUS COMPLETO! 🪱' : '🎉 VOCÊ VENCEU! 🎉';
+                    resultTitle.className = 'win';
+                    
+                    // 🔊 Som de vitória normal
+                    playSound('win');
+                    
+                    drawResultScene(true, false);
+                }
                 
                 // Inicializar arrays se não existirem
                 if (!gameProgress.completedStages[currentArea]) {
@@ -4381,32 +5269,39 @@
             const resultButtons = document.getElementById('resultButtons');
             
             if (isVictory) {
-                // Vitória - Próxima fase ou Menu
-                const hasNextStage = currentSubstage < 7 || (currentSubstage === 7 && currentArea < 5);
-                
-                if (hasNextStage) {
+                // Se derrotou o boss (subfase 7), mostrar apenas Roadmap
+                if (currentSubstage === 7) {
                     resultButtons.innerHTML = `
-                        <button class="result-btn next" onclick="goToNextStage()">➡️ Próxima Fase</button>
-                        <button class="result-btn menu" onclick="goToMenu()">🏠 Menu</button>
+                        <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
                     `;
                 } else {
-                    // Completou tudo!
-                    resultButtons.innerHTML = `
-                        <button class="result-btn retry" onclick="restartGame()">🔄 Jogar Novamente</button>
-                        <button class="result-btn menu" onclick="goToMenu()">🏠 Menu</button>
-                    `;
+                    // Vitória normal - Próxima fase ou Roadmap
+                    const hasNextStage = currentSubstage < 7 || (currentSubstage === 7 && currentArea < 5);
+                    
+                    if (hasNextStage) {
+                        resultButtons.innerHTML = `
+                            <button class="result-btn next" onclick="goToNextStage()">➡️ Próxima Fase</button>
+                            <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
+                        `;
+                    } else {
+                        // Completou tudo!
+                        resultButtons.innerHTML = `
+                            <button class="result-btn retry" onclick="restartGame()">🔄 Jogar Novamente</button>
+                            <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
+                        `;
+                    }
                 }
             } else if (cpuScore > playerScore) {
-                // Derrota - Tentar novamente ou Menu
+                // Derrota - Tentar novamente ou Roadmap (incluindo boss)
                 resultButtons.innerHTML = `
                     <button class="result-btn retry" onclick="restartGame()">🔄 Tentar Novamente</button>
-                    <button class="result-btn menu" onclick="goToMenu()">🏠 Menu</button>
+                    <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
                 `;
             } else {
-                // Empate - Jogar novamente ou Menu
+                // Empate - Jogar novamente ou Roadmap
                 resultButtons.innerHTML = `
                     <button class="result-btn retry" onclick="restartGame()">🔄 Jogar Novamente</button>
-                    <button class="result-btn menu" onclick="goToMenu()">🏠 Menu</button>
+                    <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
                 `;
             }
             
@@ -4439,6 +5334,52 @@
                 selectSubstage(nextArea, nextSubstage);
             } else {
                 goToMenu();
+            }
+        }
+
+        // Ir para roadmap (mantém menu visível ao fundo)
+        function goToRoadmap() {
+            // Parar animação do canvas de resultado
+            const winnerCanvas = document.getElementById('winnerCanvas');
+            if (winnerCanvas && winnerCanvas.animFrame) {
+                cancelAnimationFrame(winnerCanvas.animFrame);
+            }
+            
+            // Fechar tela de game over e jogo
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('gameContainer').classList.remove('active');
+            
+            // NÃO esconder o menu - ele deve ficar visível ao fundo
+            const menuOverlay = document.getElementById('menuOverlay');
+            if (menuOverlay) {
+                // Remover estilo inline se houver, para que o CSS padrão funcione
+                menuOverlay.style.removeProperty('display');
+            }
+            
+            // Fechar sub-fases se estiver aberta
+            const substagesOverlay = document.getElementById('substagesOverlay');
+            if (substagesOverlay) {
+                substagesOverlay.classList.remove('active');
+            }
+            
+            // Esconder painel de debug
+            const debugPanel = document.getElementById('debugPanel');
+            if (debugPanel) {
+                debugPanel.classList.remove('active');
+            }
+            
+            // Abrir roadmap usando apenas a classe CSS (sem estilo inline)
+            const roadmapOverlay = document.getElementById('roadmapOverlay');
+            if (roadmapOverlay) {
+                // Remover qualquer estilo inline que possa estar interferindo
+                roadmapOverlay.style.removeProperty('display');
+                roadmapOverlay.style.removeProperty('visibility');
+                
+                // Atualizar visual
+                updateRoadmapVisual();
+                
+                // Adicionar classe active (CSS já define display: flex)
+                roadmapOverlay.classList.add('active');
             }
         }
 
@@ -4702,15 +5643,45 @@
             }
         }
 
-        // Abrir roadmap
+        // Abrir roadmap (seleção de áreas)
         function openRoadmap() {
+            // Garantir que a tela de sub-fases está fechada (apenas remover classe, CSS controla display)
+            const substagesOverlay = document.getElementById('substagesOverlay');
+            if (substagesOverlay) {
+                substagesOverlay.classList.remove('active');
+                substagesOverlay.style.removeProperty('display'); // Remove qualquer display inline
+            }
+            
+            // Atualizar visual do roadmap
             updateRoadmapVisual();
-            document.getElementById('roadmapOverlay').classList.add('active');
+            
+            // Abrir roadmap (mostra seleção de áreas)
+            const roadmapOverlay = document.getElementById('roadmapOverlay');
+            if (!roadmapOverlay) {
+                console.error('Roadmap overlay não encontrado!');
+                return;
+            }
+            
+            roadmapOverlay.classList.add('active');
+            // Garantir que está visível (forçar display flex)
+            roadmapOverlay.style.display = 'flex';
         }
 
-        // Fechar roadmap
+        // Fechar roadmap (mantém menu visível ao fundo)
         function closeRoadmap() {
-            document.getElementById('roadmapOverlay').classList.remove('active');
+            const roadmapOverlay = document.getElementById('roadmapOverlay');
+            if (roadmapOverlay) {
+                roadmapOverlay.classList.remove('active');
+                // Remover estilo inline para que o CSS controle a exibição
+                roadmapOverlay.style.removeProperty('display');
+            }
+            // Não chamar goToMenu() - o menu já está visível ao fundo
+            // Apenas garantir que o menu está visível (caso tenha sido escondido)
+            const menuOverlay = document.getElementById('menuOverlay');
+            if (menuOverlay) {
+                // Remover estilo inline se houver, para que o CSS padrão funcione
+                menuOverlay.style.removeProperty('display');
+            }
         }
 
         // Abrir área (mostrar sub-fases)
@@ -4764,12 +5735,18 @@
                 grid.appendChild(card);
             }
             
-            document.getElementById('substagesOverlay').classList.add('active');
+            // Abrir overlay de sub-fases
+            const substagesOverlay = document.getElementById('substagesOverlay');
+            substagesOverlay.style.removeProperty('display'); // Remove qualquer display inline para permitir que CSS funcione
+            substagesOverlay.classList.add('active'); // CSS define display: flex quando tem classe 'active'
         }
 
-        // Fechar sub-fases
+        // Fechar sub-fases (volta para o roadmap)
         function closeSubstages() {
-            document.getElementById('substagesOverlay').classList.remove('active');
+            const substagesOverlay = document.getElementById('substagesOverlay');
+            substagesOverlay.classList.remove('active');
+            // Não definir style.display = 'none' para permitir que CSS controle a exibição
+            // O CSS já define display: none quando não tem a classe 'active'
         }
 
         // Configurar CPU para a sub-fase
@@ -4833,6 +5810,9 @@
             currentArea = area;
             currentSubstage = substage;
             currentLevel = area; // Compatibilidade
+            
+            // Inicializar elementos decorativos do cenário
+            initBackgroundDecorations();
             
             // Zerar placar ao iniciar nova fase
             playerScore = 0;
@@ -5334,6 +6314,14 @@
                     gameStarted = true;
                     gameRunning = true;
                     
+                    // Mostrar painel e indicador de debug se estiver ativo
+                    if (debugMode || window.debugMode) {
+                        const debugPanel = document.getElementById('debugPanel');
+                        const debugIndicator = document.getElementById('debugIndicator');
+                        if (debugPanel) debugPanel.classList.add('active');
+                        if (debugIndicator) debugIndicator.classList.add('active');
+                    }
+                    
                     spawnFood();
                     spawnFood();
                     spawnFood();
@@ -5345,16 +6333,42 @@
 
         // Voltar ao menu
         function goToMenu() {
-            document.getElementById('menuOverlay').style.display = 'flex';
+
+          
+            // Remover estilo inline para que o CSS padrão (display: flex) funcione
+            const menuOverlay = document.getElementById('menuOverlay');
+            if (menuOverlay) {
+                menuOverlay.style.removeProperty('display');  console.log('Voltando ao menu');
+            }
+            
             document.getElementById('gameContainer').classList.remove('active');
             document.getElementById('gameOver').style.display = 'none';
-            document.getElementById('roadmapOverlay').classList.remove('active');
-            document.getElementById('substagesOverlay').classList.remove('active');
+            
+            // Fechar roadmap (remover classe e estilo inline)
+            const roadmapOverlayEl = document.getElementById('roadmapOverlay');
+            if (roadmapOverlayEl) {
+                roadmapOverlayEl.classList.remove('active');
+                roadmapOverlayEl.style.removeProperty('display');
+            }
+            
+            // Fechar sub-fases (remover classe e estilo inline)
+            const substagesOverlayEl = document.getElementById('substagesOverlay');
+            if (substagesOverlayEl) {
+                substagesOverlayEl.classList.remove('active');
+                substagesOverlayEl.style.removeProperty('display');
+            }
             
             // Parar animação do vencedor
             const winnerCanvas = document.getElementById('winnerCanvas');
             if (winnerCanvas && winnerCanvas.animFrame) {
                 cancelAnimationFrame(winnerCanvas.animFrame);
+            }
+            
+            // Parar som de vitória do boss se estiver tocando (efeito sonoro)
+            if (sounds.bossWin && !sounds.bossWin.paused) {
+                sounds.bossWin.pause();
+                sounds.bossWin.currentTime = 0;
+                sounds.bossWin.loop = false; // Desativar loop ao sair
             }
             
             // Tocar música de introdução em loop
