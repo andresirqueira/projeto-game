@@ -19,28 +19,70 @@ let touchControls = {
 function resizeCanvas() {
     if (!canvas) return;
     
-    const maxWidth = Math.min(window.innerWidth - 20, 800);
-    const maxHeight = Math.min(window.innerHeight - 250, 500);
-    const aspectRatio = 800 / 500;
-    
-    let newWidth, newHeight;
-    
-    if (maxWidth / maxHeight > aspectRatio) {
-        newHeight = maxHeight;
-        newWidth = newHeight * aspectRatio;
+    // No mobile, usar toda a tela disponível
+    if (isMobile || isTouchDevice) {
+        const isPortrait = window.innerHeight > window.innerWidth;
+        
+        // Mostrar/esconder aviso de orientação
+        const orientationWarning = document.getElementById('orientationWarning');
+        if (orientationWarning) {
+            if (isPortrait) {
+                orientationWarning.style.display = 'flex';
+            } else {
+                orientationWarning.style.display = 'none';
+            }
+        }
+        
+        // Se estiver em retrato, não ajustar canvas (mostrar aviso)
+        if (isPortrait) {
+            return;
+        }
+        
+        // Modo paisagem: usar toda a tela
+        const availableWidth = window.innerWidth;
+        const availableHeight = window.innerHeight - 100; // Espaço para controles
+        
+        const aspectRatio = 800 / 500;
+        let newWidth, newHeight;
+        
+        // Calcular tamanho máximo mantendo proporção
+        if (availableWidth / availableHeight > aspectRatio) {
+            newHeight = availableHeight;
+            newWidth = newHeight * aspectRatio;
+        } else {
+            newWidth = availableWidth;
+            newHeight = newWidth / aspectRatio;
+        }
+        
+        canvas.style.width = newWidth + 'px';
+        canvas.style.height = newHeight + 'px';
+        canvas.style.maxWidth = '100%';
+        canvas.style.maxHeight = '100%';
     } else {
-        newWidth = maxWidth;
-        newHeight = newWidth / aspectRatio;
+        // Desktop: comportamento original
+        const maxWidth = Math.min(window.innerWidth - 20, 800);
+        const maxHeight = Math.min(window.innerHeight - 250, 500);
+        const aspectRatio = 800 / 500;
+        
+        let newWidth, newHeight;
+        
+        if (maxWidth / maxHeight > aspectRatio) {
+            newHeight = maxHeight;
+            newWidth = newHeight * aspectRatio;
+        } else {
+            newWidth = maxWidth;
+            newHeight = newWidth / aspectRatio;
+        }
+        
+        // Manter proporção mínima
+        if (newWidth < 320) {
+            newWidth = 320;
+            newHeight = 200;
+        }
+        
+        canvas.style.width = newWidth + 'px';
+        canvas.style.height = newHeight + 'px';
     }
-    
-    // Manter proporção mínima
-    if (newWidth < 320) {
-        newWidth = 320;
-        newHeight = 200;
-    }
-    
-    canvas.style.width = newWidth + 'px';
-    canvas.style.height = newHeight + 'px';
 }
 
 // Inicializar controles mobile
@@ -146,11 +188,17 @@ if (document.readyState === 'loading') {
         resizeCanvas();
         initMobileControls();
         window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(resizeCanvas, 100); // Delay para garantir que a orientação mudou
+        });
     });
 } else {
     resizeCanvas();
     initMobileControls();
     window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('orientationchange', () => {
+        setTimeout(resizeCanvas, 100); // Delay para garantir que a orientação mudou
+    });
 }
 
 // ========== SISTEMA DE ÁUDIO ==========
