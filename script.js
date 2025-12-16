@@ -1,206 +1,12 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-// Detecção de dispositivo mobile
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
-    || (window.innerWidth <= 768 && window.innerHeight <= 1024);
-let isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-
-// Controles touch para mobile
-let touchControls = {
-    up: false,
-    down: false,
-    left: false,
-    right: false,
-    active: false
-};
-
-// Configurar canvas responsivo
-function resizeCanvas() {
-    if (!canvas) return;
-    
-    // No mobile, usar toda a tela disponível
-    if (isMobile || isTouchDevice) {
-        const isPortrait = window.innerHeight > window.innerWidth;
-        
-        // Mostrar/esconder aviso de orientação
-        const orientationWarning = document.getElementById('orientationWarning');
-        if (orientationWarning) {
-            if (isPortrait) {
-                orientationWarning.style.display = 'flex';
-            } else {
-                orientationWarning.style.display = 'none';
-            }
-        }
-        
-        // Se estiver em retrato, não ajustar canvas (mostrar aviso)
-        if (isPortrait) {
-            return;
-        }
-        
-        // Modo paisagem: usar toda a tela (otimizado para mobile)
-        const availableWidth = window.innerWidth;
-        const availableHeight = window.innerHeight - 80; // Espaço reduzido para controles menores
-        
-        const aspectRatio = 800 / 500;
-        let newWidth, newHeight;
-        
-        // Calcular tamanho máximo mantendo proporção
-        if (availableWidth / availableHeight > aspectRatio) {
-            newHeight = availableHeight;
-            newWidth = newHeight * aspectRatio;
-        } else {
-            newWidth = availableWidth;
-            newHeight = newWidth / aspectRatio;
-        }
-        
-        // Garantir que use o máximo possível
-        canvas.style.width = newWidth + 'px';
-        canvas.style.height = newHeight + 'px';
-        canvas.style.maxWidth = '100%';
-        canvas.style.maxHeight = '100%';
-    } else {
-        // Desktop: comportamento original
-        const maxWidth = Math.min(window.innerWidth - 20, 800);
-        const maxHeight = Math.min(window.innerHeight - 250, 500);
-        const aspectRatio = 800 / 500;
-        
-        let newWidth, newHeight;
-        
-        if (maxWidth / maxHeight > aspectRatio) {
-            newHeight = maxHeight;
-            newWidth = newHeight * aspectRatio;
-        } else {
-            newWidth = maxWidth;
-            newHeight = newWidth / aspectRatio;
-        }
-        
-        // Manter proporção mínima
-        if (newWidth < 320) {
-            newWidth = 320;
-            newHeight = 200;
-        }
-        
-        canvas.style.width = newWidth + 'px';
-        canvas.style.height = newHeight + 'px';
-    }
-}
-
-// Inicializar controles mobile
-function initMobileControls() {
-    if (!isMobile && !isTouchDevice) return;
-    
-    const mobileControls = document.getElementById('mobileControls');
-    if (!mobileControls) return;
-    
-    // Mostrar controles mobile
-    mobileControls.style.display = 'flex';
-    
-    // Botões de direção
-    const btnUp = document.getElementById('btnUp');
-    const btnDown = document.getElementById('btnDown');
-    const btnLeft = document.getElementById('btnLeft');
-    const btnRight = document.getElementById('btnRight');
-    
-    // Função para ativar controle
-    const activateControl = (direction) => {
-        touchControls[direction] = true;
-        touchControls.active = true;
-    };
-    
-    // Função para desativar controle
-    const deactivateControl = (direction) => {
-        touchControls[direction] = false;
-        // Verificar se ainda há algum controle ativo
-        if (!touchControls.up && !touchControls.down && 
-            !touchControls.left && !touchControls.right) {
-            touchControls.active = false;
-        }
-    };
-    
-    // Eventos para cada botão
-    if (btnUp) {
-        btnUp.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            activateControl('up');
-        });
-        btnUp.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            deactivateControl('up');
-        });
-        btnUp.addEventListener('mousedown', () => activateControl('up'));
-        btnUp.addEventListener('mouseup', () => deactivateControl('up'));
-        btnUp.addEventListener('mouseleave', () => deactivateControl('up'));
-    }
-    
-    if (btnDown) {
-        btnDown.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            activateControl('down');
-        });
-        btnDown.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            deactivateControl('down');
-        });
-        btnDown.addEventListener('mousedown', () => activateControl('down'));
-        btnDown.addEventListener('mouseup', () => deactivateControl('down'));
-        btnDown.addEventListener('mouseleave', () => deactivateControl('down'));
-    }
-    
-    if (btnLeft) {
-        btnLeft.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            activateControl('left');
-        });
-        btnLeft.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            deactivateControl('left');
-        });
-        btnLeft.addEventListener('mousedown', () => activateControl('left'));
-        btnLeft.addEventListener('mouseup', () => deactivateControl('left'));
-        btnLeft.addEventListener('mouseleave', () => deactivateControl('left'));
-    }
-    
-    if (btnRight) {
-        btnRight.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            activateControl('right');
-        });
-        btnRight.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            deactivateControl('right');
-        });
-        btnRight.addEventListener('mousedown', () => activateControl('right'));
-        btnRight.addEventListener('mouseup', () => deactivateControl('right'));
-        btnRight.addEventListener('mouseleave', () => deactivateControl('right'));
-    }
-}
-
 // Estado do jogo
 let gameRunning = false;
 let gameStarted = false;
 let timeLeft = 60;
 let playerScore = 0;
 let cpuScore = 0;
-
-// Inicializar quando DOM estiver pronto
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        resizeCanvas();
-        initMobileControls();
-        window.addEventListener('resize', resizeCanvas);
-        window.addEventListener('orientationchange', () => {
-            setTimeout(resizeCanvas, 100); // Delay para garantir que a orientação mudou
-        });
-    });
-} else {
-    resizeCanvas();
-    initMobileControls();
-    window.addEventListener('resize', resizeCanvas);
-    window.addEventListener('orientationchange', () => {
-        setTimeout(resizeCanvas, 100); // Delay para garantir que a orientação mudou
-    });
-}
 
 // ========== SISTEMA DE ÁUDIO ==========
 const sounds = {
@@ -1616,19 +1422,15 @@ function updatePlayer() {
         return;
     }
     
-    // WASD, Setas E Controles Touch (mobile)
-    if (keys['w'] || keys['arrowup'] || keys['ArrowUp'] || touchControls.up) {
-        player.dy = -player.speed;
-    } else if (keys['s'] || keys['arrowdown'] || keys['ArrowDown'] || touchControls.down) {
-        player.dy = player.speed;
-    } else {
-        player.dy = 0;
-    }
+    // WASD e Setas
+    if (keys['w'] || keys['arrowup'] || keys['ArrowUp']) player.dy = -player.speed;
+    else if (keys['s'] || keys['arrowdown'] || keys['ArrowDown']) player.dy = player.speed;
+    else player.dy = 0;
 
-    if (keys['a'] || keys['arrowleft'] || keys['ArrowLeft'] || touchControls.left) {
+    if (keys['a'] || keys['arrowleft'] || keys['ArrowLeft']) {
         player.dx = -player.speed;
         player.facingRight = false;
-    } else if (keys['d'] || keys['arrowright'] || keys['ArrowRight'] || touchControls.right) {
+    } else if (keys['d'] || keys['arrowright'] || keys['ArrowRight']) {
         player.dx = player.speed;
         player.facingRight = true;
     } else {
@@ -5523,15 +5325,6 @@ function showCountdown() {
     const effectsEl = document.getElementById('countdownEffects');
     const countdownCanvas = document.getElementById('countdownCanvas');
     const ctxC = countdownCanvas.getContext('2d');
-    
-    // Ajustar tamanho do canvas de countdown no mobile
-    if (isMobile || isTouchDevice) {
-        const maxWidth = Math.min(window.innerWidth - 40, 600);
-        const maxHeight = Math.min(window.innerHeight * 0.4, 200);
-        countdownCanvas.style.width = maxWidth + 'px';
-        countdownCanvas.style.height = maxHeight + 'px';
-        countdownCanvas.style.maxWidth = '90vw';
-    }
     
     overlay.style.display = 'flex';
     effectsEl.innerHTML = '';

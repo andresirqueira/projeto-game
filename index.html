@@ -2,21 +2,11 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🦅 Asas em Combate</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Aviso de Orientação (Mobile) -->
-    <div class="orientation-warning" id="orientationWarning">
-        <div class="orientation-warning-content">
-            <div class="orientation-icon">📱</div>
-            <h2>Gire seu dispositivo</h2>
-            <p>Este jogo funciona melhor no modo paisagem (horizontal)</p>
-            <div class="orientation-arrow">↻</div>
-        </div>
-    </div>
-    
     <!-- Indicador de Debug Mode -->
     <div class="debug-indicator" id="debugIndicator">🔧 DEBUG MODE</div>
     
@@ -192,18 +182,6 @@
         </div>
         
         <canvas id="game" width="800" height="500"></canvas>
-        
-        <!-- Controles Mobile (só aparecem em dispositivos móveis) -->
-        <div class="mobile-controls" id="mobileControls">
-            <div class="mobile-controls-row">
-                <button class="mobile-btn mobile-btn-up" id="btnUp" aria-label="Cima">▲</button>
-            </div>
-            <div class="mobile-controls-row">
-                <button class="mobile-btn mobile-btn-left" id="btnLeft" aria-label="Esquerda">◄</button>
-                <button class="mobile-btn mobile-btn-down" id="btnDown" aria-label="Baixo">▼</button>
-                <button class="mobile-btn mobile-btn-right" id="btnRight" aria-label="Direita">►</button>
-            </div>
-        </div>
         
         <p class="instructions" id="gameInstructions" style="display: none;"></p>
 
