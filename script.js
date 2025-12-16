@@ -38,9 +38,9 @@ function resizeCanvas() {
             return;
         }
         
-        // Modo paisagem: usar toda a tela
+        // Modo paisagem: usar toda a tela (otimizado para mobile)
         const availableWidth = window.innerWidth;
-        const availableHeight = window.innerHeight - 100; // Espaço para controles
+        const availableHeight = window.innerHeight - 80; // Espaço reduzido para controles menores
         
         const aspectRatio = 800 / 500;
         let newWidth, newHeight;
@@ -54,6 +54,7 @@ function resizeCanvas() {
             newHeight = newWidth / aspectRatio;
         }
         
+        // Garantir que use o máximo possível
         canvas.style.width = newWidth + 'px';
         canvas.style.height = newHeight + 'px';
         canvas.style.maxWidth = '100%';
@@ -5522,6 +5523,15 @@ function showCountdown() {
     const effectsEl = document.getElementById('countdownEffects');
     const countdownCanvas = document.getElementById('countdownCanvas');
     const ctxC = countdownCanvas.getContext('2d');
+    
+    // Ajustar tamanho do canvas de countdown no mobile
+    if (isMobile || isTouchDevice) {
+        const maxWidth = Math.min(window.innerWidth - 40, 600);
+        const maxHeight = Math.min(window.innerHeight * 0.4, 200);
+        countdownCanvas.style.width = maxWidth + 'px';
+        countdownCanvas.style.height = maxHeight + 'px';
+        countdownCanvas.style.maxWidth = '90vw';
+    }
     
     overlay.style.display = 'flex';
     effectsEl.innerHTML = '';
