@@ -1,12 +1,157 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+// Detecção de dispositivo mobile
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+    || (window.innerWidth <= 768 && window.innerHeight <= 1024);
+let isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+// Controles touch para mobile
+let touchControls = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    active: false
+};
+
+// Configurar canvas responsivo
+function resizeCanvas() {
+    if (!canvas) return;
+    
+    const maxWidth = Math.min(window.innerWidth - 20, 800);
+    const maxHeight = Math.min(window.innerHeight - 250, 500);
+    const aspectRatio = 800 / 500;
+    
+    let newWidth, newHeight;
+    
+    if (maxWidth / maxHeight > aspectRatio) {
+        newHeight = maxHeight;
+        newWidth = newHeight * aspectRatio;
+    } else {
+        newWidth = maxWidth;
+        newHeight = newWidth / aspectRatio;
+    }
+    
+    // Manter proporção mínima
+    if (newWidth < 320) {
+        newWidth = 320;
+        newHeight = 200;
+    }
+    
+    canvas.style.width = newWidth + 'px';
+    canvas.style.height = newHeight + 'px';
+}
+
+// Inicializar controles mobile
+function initMobileControls() {
+    if (!isMobile && !isTouchDevice) return;
+    
+    const mobileControls = document.getElementById('mobileControls');
+    if (!mobileControls) return;
+    
+    // Mostrar controles mobile
+    mobileControls.style.display = 'flex';
+    
+    // Botões de direção
+    const btnUp = document.getElementById('btnUp');
+    const btnDown = document.getElementById('btnDown');
+    const btnLeft = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    
+    // Função para ativar controle
+    const activateControl = (direction) => {
+        touchControls[direction] = true;
+        touchControls.active = true;
+    };
+    
+    // Função para desativar controle
+    const deactivateControl = (direction) => {
+        touchControls[direction] = false;
+        // Verificar se ainda há algum controle ativo
+        if (!touchControls.up && !touchControls.down && 
+            !touchControls.left && !touchControls.right) {
+            touchControls.active = false;
+        }
+    };
+    
+    // Eventos para cada botão
+    if (btnUp) {
+        btnUp.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            activateControl('up');
+        });
+        btnUp.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            deactivateControl('up');
+        });
+        btnUp.addEventListener('mousedown', () => activateControl('up'));
+        btnUp.addEventListener('mouseup', () => deactivateControl('up'));
+        btnUp.addEventListener('mouseleave', () => deactivateControl('up'));
+    }
+    
+    if (btnDown) {
+        btnDown.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            activateControl('down');
+        });
+        btnDown.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            deactivateControl('down');
+        });
+        btnDown.addEventListener('mousedown', () => activateControl('down'));
+        btnDown.addEventListener('mouseup', () => deactivateControl('down'));
+        btnDown.addEventListener('mouseleave', () => deactivateControl('down'));
+    }
+    
+    if (btnLeft) {
+        btnLeft.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            activateControl('left');
+        });
+        btnLeft.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            deactivateControl('left');
+        });
+        btnLeft.addEventListener('mousedown', () => activateControl('left'));
+        btnLeft.addEventListener('mouseup', () => deactivateControl('left'));
+        btnLeft.addEventListener('mouseleave', () => deactivateControl('left'));
+    }
+    
+    if (btnRight) {
+        btnRight.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            activateControl('right');
+        });
+        btnRight.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            deactivateControl('right');
+        });
+        btnRight.addEventListener('mousedown', () => activateControl('right'));
+        btnRight.addEventListener('mouseup', () => deactivateControl('right'));
+        btnRight.addEventListener('mouseleave', () => deactivateControl('right'));
+    }
+}
+
 // Estado do jogo
 let gameRunning = false;
 let gameStarted = false;
 let timeLeft = 60;
 let playerScore = 0;
 let cpuScore = 0;
+
+// Inicializar quando DOM estiver pronto
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        resizeCanvas();
+        initMobileControls();
+        window.addEventListener('resize', resizeCanvas);
+    });
+} else {
+    resizeCanvas();
+    initMobileControls();
+    window.addEventListener('resize', resizeCanvas);
+}
 
 // ========== SISTEMA DE ÁUDIO ==========
 const sounds = {
@@ -406,8 +551,9 @@ function spawnHawk() {
 
 // Atualizar gavião
 function updateHawk() {
-    // Só ativa na fase 1-6 (área 1, substage 6)
-    if (currentArea !== 1 || currentSubstage !== 6) {
+    // Ativa na fase 1-6 (floresta) e 2-6 (deserto)
+    if ((currentArea !== 1 || currentSubstage !== 6) && 
+        (currentArea !== 2 || currentSubstage !== 6)) {
         hawk.active = false;
         return;
     }
@@ -461,7 +607,9 @@ function updateHawk() {
 
 // Desenhar gavião
 function drawHawk() {
-    if (currentArea !== 1 || currentSubstage !== 6) return;
+    // Ativa na fase 1-6 (floresta) e 2-6 (deserto)
+    if ((currentArea !== 1 || currentSubstage !== 6) && 
+        (currentArea !== 2 || currentSubstage !== 6)) return;
     if (!hawk.active) return;
     
     ctx.save();
@@ -580,6 +728,9 @@ let snakeSpawnCounter = 0; // Contador para spawnar cobras ocasionalmente
 
 // ========== SISTEMA DE SUOR NO DESERTO ==========
 let sweatDrops = []; // Gotas de suor dos pássaros no deserto
+
+// ========== SISTEMA DE CHUVA NA FLORESTA ==========
+let rainDrops = []; // Gotas de chuva na floresta
 
 // Inicializar buracos para fase bônus
 function initWormHoles() {
@@ -1416,15 +1567,19 @@ function updatePlayer() {
         return;
     }
     
-    // WASD e Setas
-    if (keys['w'] || keys['arrowup'] || keys['ArrowUp']) player.dy = -player.speed;
-    else if (keys['s'] || keys['arrowdown'] || keys['ArrowDown']) player.dy = player.speed;
-    else player.dy = 0;
+    // WASD, Setas E Controles Touch (mobile)
+    if (keys['w'] || keys['arrowup'] || keys['ArrowUp'] || touchControls.up) {
+        player.dy = -player.speed;
+    } else if (keys['s'] || keys['arrowdown'] || keys['ArrowDown'] || touchControls.down) {
+        player.dy = player.speed;
+    } else {
+        player.dy = 0;
+    }
 
-    if (keys['a'] || keys['arrowleft'] || keys['ArrowLeft']) {
+    if (keys['a'] || keys['arrowleft'] || keys['ArrowLeft'] || touchControls.left) {
         player.dx = -player.speed;
         player.facingRight = false;
-    } else if (keys['d'] || keys['arrowright'] || keys['ArrowRight']) {
+    } else if (keys['d'] || keys['arrowright'] || keys['ArrowRight'] || touchControls.right) {
         player.dx = player.speed;
         player.facingRight = true;
     } else {
@@ -3165,6 +3320,11 @@ function drawForestBackground() {
         ctx.lineTo(i + 10, canvas.height - 40);
         ctx.fill();
     }
+    
+    // Desenhar chuva (apenas na subfase 1-3)
+    if (currentArea === 1 && currentSubstage === 3) {
+        drawRain();
+    }
 }
 
 // Desenhar cacto
@@ -3722,7 +3882,7 @@ function draw() {
         // Comidas
         drawFood();
 
-        // Gavião (fase 1-6)
+        // Gavião (fase 1-6 e 2-6)
         drawHawk();
 
         // Pássaros
@@ -4725,6 +4885,9 @@ function gameLoop() {
         // Atualizar gotas de suor no deserto
         updateSweatDrops();
         
+        // Atualizar chuva na floresta
+        updateRain();
+        
         // Verificar expiração do stun carregado (5 segundos)
         if (player.stunCharge >= player.stunChargeMax && !player.stunned) {
             const oldSeconds = Math.ceil(player.stunChargeTimer / 60);
@@ -5603,20 +5766,53 @@ function goToMenu() {
 function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime) {
     ctxM.save();
     
-    // Determinar estado baseado no tempo de espera
-    let mood = 'normal'; // normal, warmup, bored, sleepy, impatient, angry
-    if (waitTime > 25) mood = 'angry';
-    else if (waitTime > 20) mood = 'impatient';
-    else if (waitTime > 15) mood = 'sleepy';
-    else if (waitTime > 10) mood = 'bored';
-    else if (waitTime > 5) mood = 'warmup';
+    // Ciclo de irritação/calma em loop (independente do tempo de espera)
+    // Alterna entre 'angry' e 'calm' a cada ~4 segundos
+    const cycleDuration = 8; // 8 segundos para um ciclo completo (4s irritado + 4s calmo)
+    const cyclePosition = (time % cycleDuration) / cycleDuration; // 0 a 1
+    
+    let mood = 'normal';
+    if (cyclePosition < 0.5) {
+        // Primeira metade: ficando irritado gradualmente
+        if (cyclePosition < 0.25) {
+            mood = 'calm'; // Calmo no início
+        } else {
+            mood = 'impatient'; // Ficando impaciente
+        }
+    } else {
+        // Segunda metade: irritado e depois acalmando
+        if (cyclePosition < 0.75) {
+            mood = 'angry'; // Irritado no pico
+        } else {
+            mood = 'calming'; // Acalmando gradualmente
+        }
+    }
     
     let hover = Math.sin(time * 2) * 5;
     let scale = 1.5;
     let shake = 0;
     
     // Ajustes por mood
-    if (mood === 'warmup') {
+    if (mood === 'calm') {
+        // Calmo - movimento suave e tranquilo
+        hover = Math.sin(time * 1.5) * 3;
+        scale = 1.5;
+    } else if (mood === 'impatient') {
+        // Ficando impaciente - movimento mais rápido
+        hover = Math.abs(Math.sin(time * 5)) * -10;
+        shake = Math.sin(time * 3) * 2;
+    } else if (mood === 'angry') {
+        // Irritado - treme e se move rápido
+        shake = (Math.random() - 0.5) * 5;
+        hover = Math.sin(time * 8) * 4;
+        scale = 1.6; // Ligeiramente maior quando irritado
+    } else if (mood === 'calming') {
+        // Acalmando - movimento gradualmente mais suave
+        const calmProgress = (cyclePosition - 0.75) / 0.25; // 0 a 1
+        hover = Math.sin(time * (3 - calmProgress * 1.5)) * (5 - calmProgress * 2);
+        shake = Math.sin(time * (3 - calmProgress * 2)) * (3 - calmProgress * 3);
+        scale = 1.6 - calmProgress * 0.1;
+    } else if (mood === 'warmup') {
         // Aquecendo - pula mais
         hover = Math.sin(time * 4) * 10;
     } else if (mood === 'bored') {
@@ -5625,13 +5821,6 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
     } else if (mood === 'sleepy') {
         // Sonolento - quase não se move
         hover = Math.sin(time * 0.5) * 2;
-    } else if (mood === 'impatient') {
-        // Impaciente - pula rápido
-        hover = Math.abs(Math.sin(time * 6)) * -15;
-    } else if (mood === 'angry') {
-        // Bravo - treme
-        shake = (Math.random() - 0.5) * 4;
-        hover = Math.sin(time * 8) * 3;
     }
     
     ctxM.translate(x + shake, y + hover);
@@ -5642,13 +5831,32 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
     
     // Aura (muda cor com mood)
     if (mood === 'angry') {
-        ctxM.shadowColor = '#e74c3c';
+        ctxM.shadowColor = '#e74c3c'; // Vermelho quando irritado
+        ctxM.shadowBlur = 20 + Math.sin(time * 6) * 8;
     } else if (mood === 'impatient') {
-        ctxM.shadowColor = '#f39c12';
+        ctxM.shadowColor = '#f39c12'; // Laranja quando impaciente
+        ctxM.shadowBlur = 18 + Math.sin(time * 4) * 6;
+    } else if (mood === 'calming') {
+        const calmProgress = (cyclePosition - 0.75) / 0.25;
+        // Interpolar entre vermelho e cor normal
+        const r1 = parseInt('#e74c3c'.substr(1, 2), 16);
+        const g1 = parseInt('#e74c3c'.substr(3, 2), 16);
+        const b1 = parseInt('#e74c3c'.substr(5, 2), 16);
+        const r2 = parseInt(color.substr(1, 2), 16);
+        const g2 = parseInt(color.substr(3, 2), 16);
+        const b2 = parseInt(color.substr(5, 2), 16);
+        const r = Math.round(r1 + (r2 - r1) * calmProgress);
+        const g = Math.round(g1 + (g2 - g1) * calmProgress);
+        const b = Math.round(b1 + (b2 - b1) * calmProgress);
+        ctxM.shadowColor = `rgb(${r}, ${g}, ${b})`;
+        ctxM.shadowBlur = 15 + Math.sin(time * 3) * (5 - calmProgress * 3);
+    } else if (mood === 'calm') {
+        ctxM.shadowColor = color; // Cor normal quando calmo
+        ctxM.shadowBlur = 10 + Math.sin(time * 2) * 3;
     } else {
         ctxM.shadowColor = color;
+        ctxM.shadowBlur = 15 + Math.sin(time * 3) * 5;
     }
-    ctxM.shadowBlur = 15 + Math.sin(time * 3) * 5;
     
     // Corpo
     ctxM.fillStyle = color;
@@ -5678,6 +5886,25 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
         lookX = 0;
         pupilSize = 3; // Pupila menor quando bravo
         ctxM.fillStyle = '#c0392b';
+    } else if (mood === 'impatient') {
+        lookX = Math.sin(time * 4) * 1;
+        pupilSize = 4;
+        ctxM.fillStyle = '#d35400';
+    } else if (mood === 'calming') {
+        const calmProgress = (cyclePosition - 0.75) / 0.25;
+        lookX = Math.sin(time) * (2 - calmProgress * 1);
+        pupilSize = 3 + calmProgress * 2;
+        const r1 = parseInt('#c0392b'.substr(1, 2), 16);
+        const g1 = parseInt('#c0392b'.substr(3, 2), 16);
+        const b1 = parseInt('#c0392b'.substr(5, 2), 16);
+        const r = Math.round(r1 + (0 - r1) * calmProgress);
+        const g = Math.round(g1 + (0 - g1) * calmProgress);
+        const b = Math.round(b1 + (0 - b1) * calmProgress);
+        ctxM.fillStyle = `rgb(${r}, ${g}, ${b})`;
+    } else if (mood === 'calm') {
+        lookX = Math.sin(time * 0.8) * 2;
+        pupilSize = 5;
+        ctxM.fillStyle = 'black';
     } else if (mood === 'sleepy') {
         pupilSize = 3;
         ctxM.fillStyle = 'black';
@@ -5697,13 +5924,35 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
     }
     
     // Sobrancelha (muda com mood)
-    if (mood === 'angry' || mood === 'impatient') {
+    if (mood === 'angry') {
+        // Sobrancelha muito franzida
+        ctxM.strokeStyle = 'black';
+        ctxM.lineWidth = 4;
+        ctxM.beginPath();
+        ctxM.moveTo(0, -20);
+        ctxM.lineTo(22, -10);
+        ctxM.stroke();
+    } else if (mood === 'impatient') {
+        // Sobrancelha começando a franzir
         ctxM.strokeStyle = 'black';
         ctxM.lineWidth = 3;
         ctxM.beginPath();
         ctxM.moveTo(2, -18);
         ctxM.lineTo(20, -12);
         ctxM.stroke();
+    } else if (mood === 'calming') {
+        // Sobrancelha relaxando gradualmente
+        const calmProgress = (cyclePosition - 0.75) / 0.25;
+        ctxM.strokeStyle = 'black';
+        ctxM.lineWidth = 4 - calmProgress * 2;
+        ctxM.beginPath();
+        const startY = -20 + calmProgress * 2;
+        const endY = -10 - calmProgress * 2;
+        ctxM.moveTo(0 + calmProgress * 2, startY);
+        ctxM.lineTo(22 - calmProgress * 2, endY);
+        ctxM.stroke();
+    } else if (mood === 'calm') {
+        // Sem sobrancelha franzida quando calmo
     } else if (mood === 'sleepy') {
         // Sobrancelha caída
         ctxM.strokeStyle = 'black';
@@ -5753,10 +6002,15 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
     
     // Asa batendo (velocidade muda com mood)
     let wingSpeed = 4;
-    if (mood === 'warmup') wingSpeed = 8;
+    if (mood === 'calm') wingSpeed = 3; // Movimento suave quando calmo
+    else if (mood === 'impatient') wingSpeed = 8; // Mais rápido quando impaciente
+    else if (mood === 'angry') wingSpeed = 12; // Muito rápido quando irritado
+    else if (mood === 'calming') {
+        const calmProgress = (cyclePosition - 0.75) / 0.25;
+        wingSpeed = 12 - calmProgress * 9; // Diminui gradualmente
+    }
+    else if (mood === 'warmup') wingSpeed = 8;
     else if (mood === 'sleepy') wingSpeed = 1;
-    else if (mood === 'impatient') wingSpeed = 10;
-    else if (mood === 'angry') wingSpeed = 12;
     
     const wingFlap = Math.sin(time * wingSpeed) * 0.4;
     const wingY = 5 + Math.sin(time * wingSpeed) * 8;
@@ -5771,7 +6025,30 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
     ctxM.font = '20px Arial';
     ctxM.textAlign = 'center';
     
-    if (mood === 'sleepy') {
+    if (mood === 'calm') {
+        // Símbolo de calma/relaxamento (opcional, pode ficar sem símbolo)
+        if (Math.sin(time * 0.5) > 0.7) {
+            ctxM.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctxM.fillText('😌', x + 45, y - 35);
+        }
+    } else if (mood === 'impatient') {
+        // Exclamação - ficando impaciente
+        ctxM.fillText('❗', x + 40, y - 40 + Math.abs(Math.sin(time * 5)) * 5);
+    } else if (mood === 'angry') {
+        // Símbolos de raiva
+        ctxM.fillText('💢', x + 45, y - 35 + Math.sin(time * 4) * 3);
+        if (Math.sin(time * 2) > 0) {
+            ctxM.fillText('🔥', x - 45, y - 30);
+        }
+    } else if (mood === 'calming') {
+        // Símbolos diminuindo gradualmente
+        const calmProgress = (cyclePosition - 0.75) / 0.25;
+        if (calmProgress < 0.5) {
+            ctxM.globalAlpha = 1 - calmProgress * 2;
+            ctxM.fillText('💢', x + 45, y - 35 + Math.sin(time * 4) * 3);
+            ctxM.globalAlpha = 1;
+        }
+    } else if (mood === 'sleepy') {
         // Zzz
         const zOffset = Math.sin(time * 2) * 5;
         ctxM.fillStyle = 'white';
@@ -5780,15 +6057,6 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
         // Nota musical ou ...
         if (Math.sin(time) > 0) {
             ctxM.fillText('🎵', x + 45, y - 35 + Math.sin(time * 3) * 5);
-        }
-    } else if (mood === 'impatient') {
-        // Exclamação
-        ctxM.fillText('❗', x + 40, y - 40 + Math.abs(Math.sin(time * 5)) * 5);
-    } else if (mood === 'angry') {
-        // Símbolos de raiva
-        ctxM.fillText('💢', x + 45, y - 35 + Math.sin(time * 4) * 3);
-        if (Math.sin(time * 2) > 0) {
-            ctxM.fillText('🔥', x - 45, y - 30);
         }
     } else if (mood === 'warmup') {
         // Gotas de suor
@@ -6174,6 +6442,79 @@ setInterval(() => {
 
 // Inicializar UI de dificuldade
 initDifficultyUI();
+
+// ========== FUNÇÕES DE CHUVA NA FLORESTA ==========
+
+// Criar gota de chuva
+function createRainDrop() {
+    rainDrops.push({
+        x: Math.random() * canvas.width,
+        y: -10 - Math.random() * 50,
+        speed: 3 + Math.random() * 4, // Velocidade variável
+        length: 8 + Math.random() * 12, // Comprimento da linha de chuva
+        opacity: 0.4 + Math.random() * 0.4 // Transparência variável
+    });
+}
+
+// Atualizar chuva
+function updateRain() {
+    // Só ativar na subfase 1-3 da floresta
+    if (currentArea !== 1 || currentSubstage !== 3) {
+        rainDrops = [];
+        return;
+    }
+    
+    // Criar novas gotas periodicamente
+    if (Math.random() < 0.3) {
+        createRainDrop();
+    }
+    
+    // Atualizar gotas existentes
+    for (let i = rainDrops.length - 1; i >= 0; i--) {
+        const drop = rainDrops[i];
+        
+        // Mover gota para baixo
+        drop.y += drop.speed;
+        
+        // Remover se saiu da tela
+        if (drop.y > canvas.height + 50) {
+            rainDrops.splice(i, 1);
+        }
+    }
+    
+    // Limitar número máximo de gotas (performance)
+    if (rainDrops.length > 150) {
+        rainDrops.splice(0, rainDrops.length - 150);
+    }
+}
+
+// Desenhar chuva
+function drawRain() {
+    ctx.save();
+    ctx.strokeStyle = '#87CEEB'; // Cor azul claro da chuva
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    
+    for (let drop of rainDrops) {
+        ctx.globalAlpha = drop.opacity;
+        
+        // Desenhar linha de chuva (inclinada)
+        ctx.beginPath();
+        ctx.moveTo(drop.x, drop.y);
+        ctx.lineTo(drop.x - 2, drop.y + drop.length);
+        ctx.stroke();
+        
+        // Brilho na ponta da gota
+        ctx.globalAlpha = drop.opacity * 0.5;
+        ctx.fillStyle = '#B0E0E6';
+        ctx.beginPath();
+        ctx.arc(drop.x - 2, drop.y + drop.length, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    ctx.globalAlpha = 1;
+    ctx.restore();
+}
 
 // ========== FUNÇÕES DE SUOR NO DESERTO ==========
 

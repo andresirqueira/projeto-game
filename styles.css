@@ -94,6 +94,7 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             max-width: 100%;
             height: auto;
+            touch-action: none; /* Prevenir zoom/scroll no mobile */
         }
 
         .instructions {
@@ -1371,6 +1372,101 @@
                 width: 35px;
                 height: 35px;
                 font-size: 16px;
+            }
+        }
+
+        /* Controles Mobile */
+        .mobile-controls {
+            display: none; /* Escondido por padrão (desktop) */
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            pointer-events: none;
+        }
+
+        .mobile-controls-row {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+        }
+
+        .mobile-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.8);
+            background: rgba(52, 152, 219, 0.7);
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            pointer-events: auto;
+            transition: all 0.1s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .mobile-btn:active {
+            background: rgba(52, 152, 219, 1);
+            transform: scale(0.95);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        .mobile-btn-up {
+            background: rgba(46, 204, 113, 0.7);
+        }
+
+        .mobile-btn-up:active {
+            background: rgba(46, 204, 113, 1);
+        }
+
+        .mobile-btn-down {
+            background: rgba(231, 76, 60, 0.7);
+        }
+
+        .mobile-btn-down:active {
+            background: rgba(231, 76, 60, 1);
+        }
+
+        .mobile-btn-left {
+            background: rgba(241, 196, 15, 0.7);
+        }
+
+        .mobile-btn-left:active {
+            background: rgba(241, 196, 15, 1);
+        }
+
+        .mobile-btn-right {
+            background: rgba(155, 89, 182, 0.7);
+        }
+
+        .mobile-btn-right:active {
+            background: rgba(155, 89, 182, 1);
+        }
+
+        /* Mostrar controles apenas em mobile */
+        @media (max-width: 768px) {
+            .mobile-controls {
+                display: flex;
+            }
+        }
+
+        /* Ajustes para telas muito pequenas */
+        @media (max-width: 480px) {
+            .mobile-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
             }
         }
     </style>
