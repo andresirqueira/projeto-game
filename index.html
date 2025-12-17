@@ -19,15 +19,37 @@
         </div>
         
         <div class="menu-title">🦅 Asas em Combate 🦅</div>
-        <div class="menu-subtitle">Quem come mais, vence!</div>
         
-        <canvas id="menuCanvas" width="200" height="150"></canvas>
+        <!-- Sistema de Vidas e Moedas -->
+        <div class="lives-coins-container">
+            <div class="lives-display">
+                <span class="lives-label">❤️ Vidas:</span>
+                <span class="lives-count" id="livesCount">5</span>
+                <span class="lives-timer" id="livesTimer"></span>
+            </div>
+            <div class="coins-display">
+                <span class="coins-label">🪙 Moedas:</span>
+                <span class="coins-count" id="coinsCount">0</span>
+            </div>
+            <button class="buy-life-btn" id="buyLifeBtn" onclick="buyLifeWithCoins()" style="display: none;">💚 Comprar Vida (50🪙)</button>
+        </div>
+        
+        <canvas id="menuCanvas" width="180" height="135"></canvas>
 
         <div class="menu-buttons">
             <button class="menu-btn start-btn" onclick="startGame()">🎮 JOGAR</button>
             <button class="menu-btn options-btn" onclick="toggleOptions()">⚙️ OPÇÕES</button>
             <button class="menu-btn rules-btn" onclick="toggleRules()">📋 REGRAS</button>
             <button class="menu-btn credits-btn" onclick="showCredits()">🙏 CRÉDITOS</button>
+        </div>
+        
+        <!-- Sistema de Backup -->
+        <div class="backup-section-menu">
+            <div class="backup-buttons-menu">
+                <button class="backup-btn-menu export" onclick="exportProgress()">💾 Exportar Save</button>
+                <button class="backup-btn-menu import" onclick="document.getElementById('importFileInput').click()">📂 Importar Save</button>
+                <input type="file" id="importFileInput" accept=".json" style="display: none;" onchange="importProgress(event)">
+            </div>
         </div>
         
         <div class="roadmap-overlay" id="roadmapOverlay">
@@ -89,6 +111,7 @@
                 
                 <div class="color-selection">
                     <h4>🎨 Escolha sua cor:</h4>
+                    <p class="color-cost-info">💰 Custo: <span id="colorCostDisplay">25</span> moedas</p>
                     
                     <canvas id="colorPreviewCanvas" width="120" height="90"></canvas>
                     
@@ -115,7 +138,7 @@
                 </div>
                 
                 <div class="reset-section">
-                    <h4>🗑️ Reiniciar Progresso:</h4>
+                    <h4>🗑️ Reiniciar:</h4>
                     <button class="reset-btn" onclick="confirmResetProgress()">🔄 Zerar Evolução</button>
                 </div>
                 
@@ -153,12 +176,16 @@
 
     <!-- Contagem Regressiva -->
     <div class="countdown-overlay" id="countdownOverlay">
-        <div class="countdown-vs">⚔️ PREPARE-SE PARA A BATALHA ⚔️</div>
+        <div class="countdown-header">
+            <div class="countdown-stage-info" id="countdownStageInfo"></div>
+            <div class="countdown-vs" id="countdownVs">⚔️ PREPARE-SE PARA A BATALHA ⚔️</div>
+        </div>
         <div class="countdown-scene">
             <canvas id="countdownCanvas" width="600" height="200"></canvas>
         </div>
         <div class="countdown-number" id="countdownNumber">3</div>
         <div class="countdown-effects" id="countdownEffects"></div>
+        <div class="countdown-particles" id="countdownParticles"></div>
     </div>
 
     <!-- Container do Jogo -->

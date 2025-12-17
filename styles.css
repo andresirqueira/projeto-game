@@ -132,6 +132,15 @@
         .game-over p {
             font-size: 1.3rem;
             margin-bottom: 25px;
+            line-height: 1.6;
+        }
+        
+        .game-over p span {
+            display: block;
+            margin-top: 10px;
+            padding: 8px 15px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
         }
 
         .result-buttons {
@@ -264,25 +273,152 @@
         }
 
         .menu-title {
-            font-size: 4rem;
-            margin-bottom: 10px;
+            font-size: 3rem;
+            margin-bottom: 8px;
             text-shadow: 4px 4px 8px rgba(0,0,0,0.5);
             animation: bounce 1s ease-in-out infinite;
         }
 
         @keyframes bounce {
             0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-15px); }
+            50% { transform: translateY(-12px); }
         }
 
         .menu-subtitle {
-            font-size: 1.5rem;
+            font-size: 1.2rem;
             color: #9b59b6;
-            margin-bottom: 40px;
+            margin-bottom: 15px;
+        }
+        
+        .backup-section-menu {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+        }
+        
+        .backup-buttons-menu {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .backup-btn-menu {
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            border: 2px solid #2980b9;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
+            font-weight: bold;
+        }
+        
+        .backup-btn-menu:hover {
+            transform: scale(1.05);
+            background: linear-gradient(135deg, #5dade2, #3498db);
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+        }
+        
+        .backup-btn-menu:active {
+            transform: scale(0.98);
+        }
+        
+        .backup-btn-menu.export {
+            background: linear-gradient(135deg, #27ae60, #229954);
+            border-color: #229954;
+        }
+        
+        .backup-btn-menu.export:hover {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            box-shadow: 0 4px 12px rgba(46, 204, 113, 0.4);
+        }
+        
+        .backup-btn-menu.import {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            border-color: #2980b9;
+        }
+        
+        .backup-btn-menu.import:hover {
+            background: linear-gradient(135deg, #5dade2, #3498db);
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+        }
+        
+        /* Sistema de Vidas e Moedas */
+        .lives-coins-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 18px;
+            padding: 12px 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            border: 2px solid rgba(155, 89, 182, 0.4);
+        }
+        
+        .lives-display, .coins-display {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.95rem;
+        }
+        
+        .lives-label, .coins-label {
+            font-weight: bold;
+            color: #ecf0f1;
+        }
+        
+        .lives-count {
+            color: #e74c3c;
+            font-weight: bold;
+            font-size: 1.05rem;
+            min-width: 18px;
+            text-align: center;
+        }
+        
+        .coins-count {
+            color: #f1c40f;
+            font-weight: bold;
+            font-size: 1.05rem;
+            min-width: 25px;
+            text-align: center;
+        }
+        
+        .lives-timer {
+            font-size: 0.75rem;
+            color: #95a5a6;
+            font-style: italic;
+            margin-left: 4px;
+        }
+        
+        .buy-life-btn {
+            padding: 6px 16px;
+            font-size: 0.85rem;
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            border: 2px solid #27ae60;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+        
+        .buy-life-btn:hover {
+            background: linear-gradient(135deg, #27ae60, #1e8449);
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(46, 204, 113, 0.4);
+        }
+        
+        .buy-life-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
         }
 
         #menuCanvas {
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             border-radius: 10px;
         }
 
@@ -290,17 +426,17 @@
         .menu-buttons {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 12px;
             align-items: center;
         }
 
         .menu-btn {
-            width: 220px;
-            padding: 18px 0;
-            font-size: 1.4rem;
+            width: 200px;
+            padding: 14px 0;
+            font-size: 1.2rem;
             border: none;
             color: white;
-            border-radius: 15px;
+            border-radius: 12px;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
             font-weight: bold;
@@ -506,12 +642,12 @@
 
         .options-box {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            padding: 20px 30px;
+            padding: 18px 25px;
             border-radius: 15px;
             border: 3px solid #9b59b6;
-            width: 400px;
-            max-width: 400px;
-            min-width: 400px;
+            width: 450px;
+            max-width: 450px;
+            min-width: 450px;
             animation: rulesPopIn 0.3s ease-out;
             text-align: center;
             box-sizing: border-box;
@@ -524,13 +660,25 @@
         }
 
         .color-selection {
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
 
         .color-selection h4 {
-            margin-bottom: 12px;
-            font-size: 1rem;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
             color: #ecf0f1;
+        }
+        
+        .color-cost-info {
+            margin: 5px 0 10px 0;
+            color: #f1c40f;
+            font-size: 0.85rem;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .color-cost-info span {
+            color: #ffd700;
         }
 
         #colorPreviewCanvas {
@@ -588,32 +736,41 @@
             transform: scale(1.05);
         }
 
-        .difficulty-selection {
-            margin-bottom: 15px;
-            padding-top: 15px;
+        .options-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 12px;
+            padding-top: 12px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        .difficulty-selection {
+            flex: 1;
+            margin-bottom: 0;
+            padding-top: 0;
+            border-top: none;
+        }
+
         .difficulty-selection h4 {
-            margin-bottom: 10px;
-            font-size: 1rem;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
             color: #ecf0f1;
         }
 
         .difficulty-options {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             justify-content: center;
             flex-wrap: wrap;
         }
 
         .difficulty-btn {
-            padding: 8px 16px;
-            font-size: 0.9rem;
+            padding: 6px 12px;
+            font-size: 0.85rem;
             border: 2px solid #555;
             background: rgba(0, 0, 0, 0.3);
             color: white;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s;
         }
@@ -642,35 +799,84 @@
         }
 
         .difficulty-desc {
-            margin-top: 10px;
-            font-size: 0.8rem;
+            margin-top: 8px;
+            font-size: 0.75rem;
             color: #bdc3c7;
             font-style: italic;
-            min-height: 2.5em;
-            line-height: 1.4;
+            min-height: 2em;
+            line-height: 1.3;
             text-align: center;
-            padding: 0 5px;
+            padding: 0 3px;
+        }
+
+        .backup-section {
+            flex: 1;
+            margin-bottom: 0;
+            padding-top: 0;
+            border-top: none;
+        }
+
+        .backup-section h4 {
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            color: #ecf0f1;
+        }
+
+        .backup-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .backup-btn {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            border: 2px solid #3498db;
+            background: rgba(52, 152, 219, 0.2);
+            color: #3498db;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .backup-btn:hover {
+            background: #3498db;
+            color: white;
+            transform: scale(1.05);
+        }
+
+        .backup-btn.import {
+            border-color: #2ecc71;
+            background: rgba(46, 204, 113, 0.2);
+            color: #2ecc71;
+        }
+
+        .backup-btn.import:hover {
+            background: #2ecc71;
+            color: white;
         }
 
         .reset-section {
-            margin-bottom: 15px;
-            padding-top: 15px;
+            margin-bottom: 12px;
+            padding-top: 12px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .reset-section h4 {
-            margin-bottom: 10px;
-            font-size: 1rem;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
             color: #ecf0f1;
         }
 
         .reset-btn {
-            padding: 10px 20px;
-            font-size: 0.9rem;
+            padding: 8px 16px;
+            font-size: 0.85rem;
             border: 2px solid #e74c3c;
             background: rgba(231, 76, 60, 0.2);
             color: #e74c3c;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s;
         }
@@ -834,15 +1040,16 @@
         .area-card {
             width: 120px;
             height: 140px;
-            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            background: transparent; /* Cor será definida via JavaScript */
             border-radius: 15px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: transform 0.3s, box-shadow 0.3s;
+            transition: transform 0.3s, box-shadow 0.3s, background-color 0.3s, border-color 0.3s;
             border: 3px solid #f1c40f;
+            position: relative;
         }
 
         .area-card.unlocked:hover {
@@ -858,7 +1065,35 @@
         }
 
         .area-card.completed {
-            background: linear-gradient(135deg, #f1c40f, #f39c12);
+            border-color: #f1c40f;
+            box-shadow: 0 0 20px rgba(241, 196, 15, 0.5);
+        }
+        
+        .area-card.current-area {
+            /* Sem animação de pulso - apenas brilho fixo */
+        }
+        
+        .area-completion {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            font-size: 1rem;
+            opacity: 0.7;
+            animation: bounceIn 0.5s ease-out;
+            filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+            z-index: 10;
+        }
+        
+        @keyframes bounceIn {
+            0% {
+                transform: scale(0);
+            }
+            50% {
+                transform: scale(1.2);
+            }
+            100% {
+                transform: scale(1);
+            }
         }
 
         .area-icon {
@@ -1114,6 +1349,35 @@
             align-items: center;
             justify-content: center;
             z-index: 150;
+            overflow: hidden;
+        }
+        
+        .countdown-header {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 151;
+        }
+        
+        .countdown-stage-info {
+            font-size: 1.1rem;
+            color: #ecf0f1;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            opacity: 0.9;
+        }
+        
+        .countdown-stage-info .stage-name {
+            font-weight: bold;
+            color: #3498db;
+        }
+        
+        .countdown-stage-info .difficulty {
+            font-size: 0.9rem;
+            color: #f1c40f;
+            margin-top: 5px;
         }
 
         .countdown-scene {
@@ -1132,9 +1396,11 @@
             font-weight: bold;
             color: #fff;
             text-shadow: 0 0 50px #e74c3c, 0 0 100px #e74c3c;
-            animation: countPulse 0.5s ease-out;
+            animation: countPulse 0.5s ease-out, countShake 0.1s ease-out 0.3s;
             min-width: 200px;
             text-align: center;
+            position: relative;
+            z-index: 152;
         }
 
         .countdown-go {
@@ -1147,6 +1413,43 @@
             0% { transform: scale(2); opacity: 0; }
             50% { transform: scale(1.2); opacity: 1; }
             100% { transform: scale(1); opacity: 1; }
+        }
+        
+        @keyframes countShake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px) rotate(-2deg); }
+            75% { transform: translateX(10px) rotate(2deg); }
+        }
+        
+        .countdown-particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 151;
+        }
+        
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #f1c40f;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #f1c40f;
+            animation: particleFloat 2s ease-out forwards;
+        }
+        
+        @keyframes particleFloat {
+            0% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-100px) scale(0);
+            }
         }
 
         .countdown-vs {
@@ -1175,6 +1478,28 @@
         @keyframes sparkFly {
             0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
             100% { transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(0); opacity: 0; }
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+        
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.9);
+            }
         }
 
         /* ========== RESPONSIVIDADE ========== */
@@ -1211,6 +1536,20 @@
                 padding: 12px 30px !important;
                 font-size: 1.1rem !important;
             }
+            
+            .lives-coins-container {
+                padding: 12px 20px !important;
+                margin-bottom: 20px !important;
+            }
+            
+            .lives-display, .coins-display {
+                font-size: 1rem !important;
+            }
+            
+            .buy-life-btn {
+                padding: 6px 15px !important;
+                font-size: 0.85rem !important;
+            }
         }
         
         /* Telas pequenas (celulares landscape) */
@@ -1236,6 +1575,26 @@
                 font-size: 1rem !important;
             }
             
+            .lives-coins-container {
+                padding: 10px 15px !important;
+                margin-bottom: 15px !important;
+            }
+            
+            .lives-display, .coins-display {
+                font-size: 0.9rem !important;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .lives-timer {
+                font-size: 0.75rem !important;
+            }
+            
+            .buy-life-btn {
+                padding: 6px 12px !important;
+                font-size: 0.8rem !important;
+            }
+            
             .roadmap-box, .substages-box, .rules-box {
                 padding: 15px 20px !important;
                 max-width: 90vw !important;
@@ -1249,9 +1608,14 @@
             }
             
             .options-box {
-                width: 350px !important;
-                max-width: 350px !important;
-                min-width: 350px !important;
+                width: 90vw !important;
+                max-width: 90vw !important;
+                min-width: 90vw !important;
+            }
+            
+            .options-row {
+                flex-direction: column !important;
+                gap: 12px !important;
             }
             
             .area-card {
@@ -1292,6 +1656,30 @@
                 padding: 8px 20px !important;
                 font-size: 0.9rem !important;
                 min-width: 150px !important;
+            }
+            
+            .lives-coins-container {
+                padding: 8px 12px !important;
+                margin-bottom: 12px !important;
+            }
+            
+            .lives-display, .coins-display {
+                font-size: 0.85rem !important;
+                gap: 5px !important;
+            }
+            
+            .lives-count, .coins-count {
+                font-size: 1rem !important;
+            }
+            
+            .lives-timer {
+                font-size: 0.7rem !important;
+                margin-left: 3px !important;
+            }
+            
+            .buy-life-btn {
+                padding: 6px 10px !important;
+                font-size: 0.75rem !important;
             }
             
             .roadmap-areas {

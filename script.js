@@ -11,6 +11,10 @@ let lastPlayerScore = 0;
 let lastCpuScore = 0;
 let playerScoreAnimation = 0; // 0 = sem animação, > 0 = animando
 let cpuScoreAnimation = 0; // 0 = sem animação, > 0 = animando
+let lastStarCount = 0; // Rastrear última quantidade de estrelas para animação
+let starAnimationFrame = 0; // Frame da animação de estrela
+let starAnimationIndex = -1; // Índice da estrela sendo animada
+let scoreTextEffects = []; // Partículas de texto para mostrar +1, +5, etc.
 
 // ========== SISTEMA DE ÁUDIO ==========
         const sounds = {
@@ -24,6 +28,7 @@ let cpuScoreAnimation = 0; // 0 = sem animação, > 0 = animando
             lose: new Audio('sounds/lose.mp3'),
             yummy: new Audio('sounds/yummy.mp3'),
             worm: new Audio('sounds/worm.mp3'),
+            bat: new Audio('sounds/bat.mp3'),
             hawk: new Audio('sounds/hawk.mp3'),
             powerup: new Audio('sounds/powerup.mp3'),
     introSound: new Audio('sounds/Intro-sound.mp3'),
@@ -249,13 +254,62 @@ let cpuScoreAnimation = 0; // 0 = sem animação, > 0 = animando
         };
 
 // Configurações de dificuldade por sub-fase
+        // Configuração das sub-fases com nomes temáticos por área
+        const substageNames = {
+            1: { // Floresta
+                1: 'Clareira Verde',
+                2: 'Trilha dos Pássaros',
+                3: 'Bosque Profundo',
+                4: 'Caça às Minhocas',
+                5: 'Caminho do Rio',
+                6: 'Perigo Noturno',
+                7: 'Ninho da Coruja'
+            },
+            2: { // Deserto
+                1: 'Oásis Dourado',
+                2: 'Dunas Quentes',
+                3: 'Cactos Gigantes',
+                4: 'Frutos do Deserto',
+                5: 'Tempestade de Areia',
+                6: 'Perigo no Céu',
+                7: 'Ninho do Falcão'
+            },
+            3: { // Gelo
+                1: 'Lago Congelado',
+                2: 'Vale dos Cristais',
+                3: 'Montanha de Gelo',
+                4: 'Frutas Congeladas',
+                5: 'Vento Gélido',
+                6: 'Caverna de Gelo',
+                7: 'Reino do Pinguim'
+            },
+            4: { // Vulcão
+                1: 'Encosta Fumegante',
+                2: 'Lava Escorrendo',
+                3: 'Cratera Ativa',
+                4: 'Frutas Ardentes',
+                5: 'Caminho de Fogo',
+                6: 'Abismo Vulcânico',
+                7: 'Ninho da Fênix'
+            },
+            5: { // Castelo
+                1: 'Torre Principal',
+                2: 'Pátio Real',
+                3: 'Salão dos Reis',
+                4: 'Tesouro Escondido',
+                5: 'Dungeon Sombria',
+                6: 'Torre do Relógio',
+                7: 'Trono da Águia'
+            }
+        };
+        
         const substageConfig = {
     1: { difficulty: 'Fácil', time: 60, cpuSpeed: 1.5, goalScore: 10 },
             2: { difficulty: 'Normal', time: 55, cpuSpeed: 1.8, goalScore: 12 },
             3: { difficulty: 'Normal', time: 55, cpuSpeed: 1.8, goalScore: 12 },
-    4: { difficulty: '🪱 BÔNUS', time: 30, cpuSpeed: 0, goalScore: 25, isBonus: true }, // Fase bônus - pegar minhocas!
+    4: { difficulty: '🪱 BÔNUS', time: 45, cpuSpeed: 0, goalScore: 15, isBonus: true }, // Fase bônus - pegar minhocas/frutos!
             5: { difficulty: 'Normal', time: 55, cpuSpeed: 1.8, goalScore: 12 },
-    6: { difficulty: 'Normal + 🦅', time: 55, cpuSpeed: 1.8, goalScore: 12 }, // Com gavião!
+    6: { difficulty: 'Normal + 🦇', time: 55, cpuSpeed: 1.8, goalScore: 12 }, // Com morcego!
     7: { difficulty: '🏆 CHEFE', time: 60, cpuSpeed: 2.8, goalScore: 25, isBoss: true }
         };
 
@@ -391,7 +445,20 @@ let cpuScoreAnimation = 0; // 0 = sem animação, > 0 = animando
 const foodEmojis = ['🍎', '🍊', '🍇', '🍒', '🥭', '🍓'];
 const groundY = canvas.height - 60; // Nível do chão
 
-// Gavião inimigo (aparece na fase 1-2)
+// Morcego inimigo (aparece apenas na fase 1-6 - floresta)
+        let bat = {
+            active: false,
+            x: -100,
+            y: 100,
+            speed: 8,
+            direction: 1, // 1 = direita, -1 = esquerda
+            warningTime: 0, // Tempo de aviso antes de atacar
+    cooldown: 0, // Tempo até próximo ataque
+            targetY: 100, // Altura do ataque
+            wingFlap: 0 // Animação das asas
+        };
+
+// Gavião inimigo (aparece apenas na fase 2-6 - deserto)
         let hawk = {
             active: false,
             x: -100,
@@ -400,8 +467,189 @@ const groundY = canvas.height - 60; // Nível do chão
             direction: 1, // 1 = direita, -1 = esquerda
             warningTime: 0, // Tempo de aviso antes de atacar
     cooldown: 0, // Tempo até próximo ataque
-            targetY: 100 // Altura do ataque
+            targetY: 100, // Altura do ataque
+            wingFlap: 0 // Animação das asas
         };
+
+// Iniciar ataque do morcego
+        function spawnBat() {
+            // Só funciona na área 1 (floresta)
+            if (currentArea !== 1 || currentSubstage !== 6) return;
+            if (bat.active || bat.cooldown > 0) return;
+            
+    // Escolhe direção aleatória
+            bat.direction = Math.random() > 0.5 ? 1 : -1;
+            bat.x = bat.direction === 1 ? -80 : canvas.width + 80;
+            
+    // Mira na altura do player (com variação)
+            bat.targetY = player.y + (Math.random() - 0.5) * 100;
+            bat.targetY = Math.max(80, Math.min(canvas.height - 100, bat.targetY));
+            bat.y = bat.targetY;
+            
+            bat.warningTime = 90; // 1.5 segundos de aviso
+            bat.active = true;
+            
+    // 🔊 Som do morcego aparecendo
+            playSound('bat');
+        }
+
+// Atualizar morcego
+        function updateBat() {
+    // Ativa apenas na fase 1-6 (floresta)
+    if (currentArea !== 1 || currentSubstage !== 6) {
+                bat.active = false;
+                return;
+            }
+            
+            // Cooldown entre ataques
+            if (bat.cooldown > 0) {
+                bat.cooldown--;
+            }
+            
+    // Spawn aleatório (a cada ~5-8 segundos)
+            if (!bat.active && bat.cooldown <= 0 && Math.random() < 0.003) {
+                spawnBat();
+            }
+            
+            if (!bat.active) return;
+            
+            // Animação das asas
+            bat.wingFlap += 0.3;
+            
+            // Fase de aviso (pisca na borda)
+            if (bat.warningTime > 0) {
+                bat.warningTime--;
+                return;
+            }
+            
+    // Movimento do morcego (movimento em zigue-zague)
+            bat.x += bat.speed * bat.direction;
+            bat.y = bat.targetY + Math.sin(bat.wingFlap * 0.5) * 15; // Movimento ondulante
+            
+    // Verificar colisão com player
+            if (!player.stunned) {
+                const dist = Math.sqrt(
+                    Math.pow(bat.x - player.x, 2) + 
+                    Math.pow(bat.y - player.y, 2)
+                );
+                
+                if (dist < 50) {
+                    // Player foi atingido!
+                    player.stunned = true;
+                    player.stunTime = 90; // 1.5 segundos de stun
+                    
+            // 🔊 Sons de ataque do morcego
+                    playSound('bat');
+                    playSound('stun');
+                }
+            }
+            
+            // Desativar quando sair da tela
+            if ((bat.direction === 1 && bat.x > canvas.width + 100) ||
+                (bat.direction === -1 && bat.x < -100)) {
+                bat.active = false;
+        bat.cooldown = 300; // 5 segundos até próximo ataque
+            }
+        }
+
+// Desenhar morcego
+        function drawBat() {
+    // Ativa apenas na fase 1-6 (floresta)
+    if (currentArea !== 1 || currentSubstage !== 6) return;
+            if (!bat.active) return;
+            
+            ctx.save();
+            
+            // Fase de aviso - pisca na borda da tela
+            if (bat.warningTime > 0) {
+                const blink = Math.floor(bat.warningTime / 10) % 2 === 0;
+                if (blink) {
+                    ctx.fillStyle = 'rgba(75, 0, 130, 0.8)';
+                    ctx.font = 'bold 24px Arial';
+                    ctx.textAlign = 'center';
+                    
+                    // Indicador de perigo na borda
+                    const warningX = bat.direction === 1 ? 50 : canvas.width - 50;
+            ctx.fillText('⚠️ MORCEGO!', warningX, bat.targetY);
+                    
+            // Seta indicando direção
+            ctx.fillText(bat.direction === 1 ? '➡️' : '⬅️', warningX, bat.targetY + 30);
+                }
+                ctx.restore();
+                return;
+            }
+            
+            ctx.translate(bat.x, bat.y);
+            
+            // Espelhar se voando para esquerda
+            if (bat.direction === -1) {
+                ctx.scale(-1, 1);
+            }
+            
+            // Sombra
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(0, 60, 30, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Animação das asas (batimento)
+            const wingAngle = Math.sin(bat.wingFlap) * 0.5;
+            
+    // Corpo do morcego (pequeno e escuro)
+            ctx.fillStyle = '#2C2C2C';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 20, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+    // Cabeça
+            ctx.fillStyle = '#1A1A1A';
+            ctx.beginPath();
+            ctx.arc(15, -3, 10, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Orelhas do morcego
+            ctx.fillStyle = '#1A1A1A';
+            ctx.beginPath();
+            ctx.moveTo(20, -10);
+            ctx.lineTo(25, -18);
+            ctx.lineTo(22, -12);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.moveTo(20, -8);
+            ctx.lineTo(25, -16);
+            ctx.lineTo(22, -10);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Olhos brilhantes
+            ctx.fillStyle = '#FF0000';
+            ctx.beginPath();
+            ctx.arc(18, -5, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -5, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Asas do morcego (animadas)
+            ctx.fillStyle = '#1A1A1A';
+            ctx.globalAlpha = 0.8;
+            
+            // Asa esquerda
+            ctx.beginPath();
+            ctx.ellipse(-15, 0, 25, 8, wingAngle, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Asa direita
+            ctx.beginPath();
+            ctx.ellipse(-15, 0, 25, 8, -wingAngle, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.globalAlpha = 1.0;
+            
+            ctx.restore();
+        }
 
 // Iniciar ataque do gavião
         function spawnHawk() {
@@ -425,9 +673,8 @@ const groundY = canvas.height - 60; // Nível do chão
 
 // Atualizar gavião
         function updateHawk() {
-    // Ativa na fase 1-6 (floresta) e 2-6 (deserto)
-    if ((currentArea !== 1 || currentSubstage !== 6) && 
-        (currentArea !== 2 || currentSubstage !== 6)) {
+    // Ativa apenas na fase 2-6 (deserto)
+    if (currentArea !== 2 || currentSubstage !== 6) {
                 hawk.active = false;
                 return;
             }
@@ -444,14 +691,18 @@ const groundY = canvas.height - 60; // Nível do chão
             
             if (!hawk.active) return;
             
+            // Animação das asas
+            hawk.wingFlap += 0.3;
+            
             // Fase de aviso (pisca na borda)
             if (hawk.warningTime > 0) {
                 hawk.warningTime--;
                 return;
             }
             
-    // Movimento do gavião
+    // Movimento do gavião (movimento reto e rápido)
             hawk.x += hawk.speed * hawk.direction;
+            hawk.y = hawk.targetY + Math.sin(hawk.wingFlap * 0.3) * 5; // Movimento suave
             
     // Verificar colisão com player
             if (!player.stunned) {
@@ -481,9 +732,8 @@ const groundY = canvas.height - 60; // Nível do chão
 
 // Desenhar gavião
         function drawHawk() {
-    // Ativa na fase 1-6 (floresta) e 2-6 (deserto)
-    if ((currentArea !== 1 || currentSubstage !== 6) && 
-        (currentArea !== 2 || currentSubstage !== 6)) return;
+    // Ativa apenas na fase 2-6 (deserto)
+    if (currentArea !== 2 || currentSubstage !== 6) return;
             if (!hawk.active) return;
             
             ctx.save();
@@ -520,14 +770,17 @@ const groundY = canvas.height - 60; // Nível do chão
             ctx.ellipse(0, 60, 30, 10, 0, 0, Math.PI * 2);
             ctx.fill();
             
-    // Corpo do gavião
-            ctx.fillStyle = '#8B4513';
+            // Animação das asas (batimento)
+            const wingAngle = Math.sin(hawk.wingFlap) * 0.4;
+            
+    // Corpo do gavião (marrom/amarelo do deserto)
+            ctx.fillStyle = '#DAA520';
             ctx.beginPath();
             ctx.ellipse(0, 0, 35, 20, 0, 0, Math.PI * 2);
             ctx.fill();
             
     // Cabeça
-            ctx.fillStyle = '#A0522D';
+            ctx.fillStyle = '#B8860B';
             ctx.beginPath();
             ctx.arc(30, -5, 15, 0, Math.PI * 2);
             ctx.fill();
@@ -553,21 +806,21 @@ const groundY = canvas.height - 60; // Nível do chão
             ctx.fill();
             
             // Sobrancelha brava
-            ctx.strokeStyle = '#5D3A1A';
+            ctx.strokeStyle = '#8B4513';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(30, -15);
             ctx.lineTo(40, -12);
             ctx.stroke();
             
-            // Asas (batendo)
-            const wingFlap = Math.sin(Date.now() / 50) * 15;
-            ctx.fillStyle = '#6B4423';
+            // Asas do gavião (animadas)
+            ctx.fillStyle = '#CD853F';
+            ctx.globalAlpha = 0.9;
             
             // Asa superior
             ctx.beginPath();
             ctx.moveTo(-10, -5);
-            ctx.quadraticCurveTo(-30, -30 + wingFlap, -50, -10 + wingFlap);
+            ctx.quadraticCurveTo(-30, -30 + Math.sin(hawk.wingFlap) * 15, -50, -10 + Math.sin(hawk.wingFlap) * 15);
             ctx.quadraticCurveTo(-30, 0, -10, 0);
             ctx.closePath();
             ctx.fill();
@@ -575,13 +828,15 @@ const groundY = canvas.height - 60; // Nível do chão
             // Asa inferior
             ctx.beginPath();
             ctx.moveTo(-10, 5);
-            ctx.quadraticCurveTo(-30, 30 - wingFlap, -50, 10 - wingFlap);
+            ctx.quadraticCurveTo(-30, 30 - Math.sin(hawk.wingFlap) * 15, -50, 10 - Math.sin(hawk.wingFlap) * 15);
             ctx.quadraticCurveTo(-30, 5, -10, 5);
             ctx.closePath();
             ctx.fill();
             
+            ctx.globalAlpha = 1.0;
+            
             // Cauda
-            ctx.fillStyle = '#5D3A1A';
+            ctx.fillStyle = '#8B4513';
             ctx.beginPath();
             ctx.moveTo(-30, 0);
             ctx.lineTo(-50, -8);
@@ -977,8 +1232,8 @@ function initCactusFruits() {
 function spawnCactusFruit() {
     if (!isBonusStage || currentArea !== 2) return;
     
-    // Limitar número de frutos na tela (máximo 1 para melhor performance)
-    if (cactusFruits.length >= 1) return;
+    // Limitar número de frutos na tela (máximo 2 para melhor gameplay)
+    if (cactusFruits.length >= 2) return;
     
     const fruitEmojis = ['🌵', '🍇', '🍊', '🍑'];
     
@@ -1004,8 +1259,8 @@ function spawnCactusFruit() {
 function updateCactusFruits() {
     if (!isBonusStage || currentArea !== 2) return;
     
-    // Spawnar novos frutos periodicamente (probabilidade muito reduzida)
-    if (Math.random() < 0.005 && cactusFruits.length < 1) {
+    // Spawnar novos frutos periodicamente (probabilidade aumentada)
+    if (Math.random() < 0.02 && cactusFruits.length < 2) {
         spawnCactusFruit();
     }
     
@@ -1019,7 +1274,7 @@ function updateCactusFruits() {
         }
         
         // Fruto seca progressivamente no calor do deserto
-        fruit.freshness -= 0.5; // Seca mais rápido que o gelo
+        fruit.freshness -= 0.2; // Seca mais devagar para dar mais tempo ao jogador
         
         // Reduzir tamanho conforme seca
         const freshnessRatio = fruit.freshness / fruit.maxFreshness;
@@ -2251,7 +2506,22 @@ function drawFrozenFruits() {
                     player.lastEatenEmoji = food.emoji;
                     foods.splice(i, 1);
             lastPlayerScore = playerScore;
-                    playerScore += food.points;
+                    const pointsGained = food.points;
+                    playerScore += pointsGained;
+                    
+                    // Criar efeito de texto flutuante (+1 ou +5)
+                    scoreTextEffects.push({
+                        x: player.x,
+                        y: player.y - player.size - 20,
+                        text: `+${pointsGained}`,
+                        life: 60, // Duração da animação
+                        maxLife: 60,
+                        vy: -2, // Velocidade vertical (sobe)
+                        alpha: 1,
+                        scale: 1.2
+                    });
+                    
+                    if (!isBonusStage) updateStarsHUD(); // Atualizar estrelas em fases normais
             if (playerScore !== lastPlayerScore) {
                 playerScoreAnimation = 30; // Inicia animação do placar
             }
@@ -2283,6 +2553,7 @@ function drawFrozenFruits() {
                     cpuScore += food.points;
             if (cpuScore !== lastCpuScore) {
                 cpuScoreAnimation = 30; // Inicia animação do placar
+                if (!isBonusStage) updateStarsHUD(); // Atualizar estrelas quando CPU marca
             }
             // Placar agora é desenhado no canvas
                     
@@ -2322,7 +2593,22 @@ function drawFrozenFruits() {
                     player.lastEatenEmoji = food.emoji;
                     specialFoods.splice(i, 1);
             lastPlayerScore = playerScore;
-                    playerScore += food.points;
+                    const pointsGained = food.points;
+                    playerScore += pointsGained;
+                    
+                    // Criar efeito de texto flutuante (+5 para comida especial)
+                    scoreTextEffects.push({
+                        x: player.x,
+                        y: player.y - player.size - 20,
+                        text: `+${pointsGained}`,
+                        life: 60,
+                        maxLife: 60,
+                        vy: -2.5, // Sobe mais rápido
+                        alpha: 1,
+                        scale: 1.5 // Maior para comida especial
+                    });
+                    
+                    if (!isBonusStage) updateStarsHUD(); // Atualizar estrelas em fases normais
             if (playerScore !== lastPlayerScore) {
                 playerScoreAnimation = 40; // Animação maior para comida especial
             }
@@ -5336,7 +5622,10 @@ function updateDesertDecorations() {
                 // Comidas
                 drawFood();
 
-        // Gavião (fase 1-6 e 2-6)
+        // Morcego (fase 1-6 - floresta)
+                drawBat();
+                
+        // Gavião (fase 2-6 - deserto)
                 drawHawk();
 
         // Pássaros
@@ -5346,6 +5635,9 @@ function updateDesertDecorations() {
             
             // Desenhar UI no canvas
             drawGameUI();
+            
+            // Desenhar partículas de texto (+1, +5)
+            drawScoreTextEffects();
         }
 
 // Desenhar ave pequena no placar
@@ -5416,6 +5708,35 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
 }
         
         // Desenhar UI do jogo no canvas
+        // Desenhar partículas de texto (+1, +5) quando come fruta
+        function drawScoreTextEffects() {
+            for (let i = scoreTextEffects.length - 1; i >= 0; i--) {
+                const effect = scoreTextEffects[i];
+                
+                effect.life--;
+                effect.y += effect.vy;
+                effect.alpha = effect.life / effect.maxLife;
+                effect.scale = 1 + (1 - effect.life / effect.maxLife) * 0.3; // Cresce um pouco
+                
+                if (effect.life <= 0) {
+                    scoreTextEffects.splice(i, 1);
+                    continue;
+                }
+                
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = `bold ${20 * effect.scale}px Arial`;
+                ctx.fillStyle = effect.text.includes('5') ? '#f1c40f' : '#2ecc71'; // Dourado para +5, verde para +1
+                ctx.globalAlpha = effect.alpha;
+                ctx.shadowColor = '#000';
+                ctx.shadowBlur = 4;
+                ctx.fillText(effect.text, effect.x, effect.y);
+                ctx.shadowBlur = 0;
+                ctx.restore();
+            }
+        }
+
         function drawGameUI() {
             const padding = 15;
     const fontSize = 32; // Aumentado para 32
@@ -5599,6 +5920,63 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 } else {
             ctx.fillText(`💥 ${player.stunCharge}/${player.stunChargeMax}`, stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight / 2);
             ctx.shadowBlur = 0;
+        }
+        
+        // Desenhar estrelas abaixo do contador de stun do player (apenas em fases normais)
+        if (!isBonusStage) {
+            const currentStars = calculateCurrentStars();
+            
+            // Detectar mudança de estrelas e iniciar animação
+            if (currentStars !== lastStarCount) {
+                if (currentStars > lastStarCount) {
+                    // Estrela aumentou - iniciar animação
+                    starAnimationFrame = 20; // Duração da animação (20 frames)
+                    starAnimationIndex = currentStars - 1; // Índice da nova estrela
+                }
+                lastStarCount = currentStars;
+            }
+            
+            const starSize = 14; // Tamanho maior
+            const starSpacing = 4;
+            const totalStarsWidth = (starSize + starSpacing) * 5 - starSpacing; // Largura total das 5 estrelas
+            const stunBarCenterX = stunBarX + stunBarWidth / 2;
+            const starsStartX = stunBarCenterX - totalStarsWidth / 2; // Centralizar abaixo da barra de stun
+            const starsY = stunBarY + stunBarHeight + 8; // Abaixo da barra de stun
+            
+            ctx.save();
+            ctx.textAlign = 'left';
+            
+            for (let i = 0; i < 5; i++) {
+                const starX = starsStartX + (starSize + starSpacing) * i;
+                let animScale = 1;
+                let animY = starsY;
+                
+                // Animação quando estrela é preenchida ou removida
+                if (starAnimationFrame > 0 && i === starAnimationIndex) {
+                    const progress = starAnimationFrame / 20; // 1.0 = início, 0.0 = fim
+                    animScale = 1 + (1 - progress) * 0.6; // Cresce de 1.6x para 1x
+                    animY = starsY - (1 - progress) * 8; // Sobe e desce
+                    starAnimationFrame--;
+                }
+                
+                ctx.font = `${starSize * animScale}px Arial`;
+                
+                if (i < currentStars) {
+                    // Estrela preenchida (dourada com brilho)
+                    ctx.fillStyle = '#f1c40f';
+                    ctx.shadowColor = '#f39c12';
+                    ctx.shadowBlur = 6;
+                    ctx.fillText('★', starX, animY);
+                } else {
+                    // Estrela vazia (cinza suave)
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+                    ctx.shadowBlur = 0;
+                    ctx.fillText('☆', starX, animY);
+                }
+            }
+            
+            ctx.shadowBlur = 0;
+            ctx.restore();
         }
         
         // Barra de Stun da CPU - Abaixo do placar da CPU
@@ -5838,7 +6216,7 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 ctxW.shadowColor = '#FFD700';
                 ctxW.shadowBlur = 20;
                 ctxW.fillStyle = '#FFD700';
-        ctxW.fillText('👑', 200, 35 + bounce);
+                ctxW.fillText('👑', 200, 35 + bounce);
                 ctxW.shadowBlur = 0;
                 
         // Múltiplas coroas pequenas ao redor (reduzido para melhor performance)
@@ -6160,6 +6538,9 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                     }
                     
             // Tela de vitória especial do boss
+                    // Calcular estrelas antes de desenhar
+                    const bossStars = calculateCurrentStars();
+                    window.victoryStars = bossStars; // Salvar para mostrar na tela
                     drawBossVictoryScene();
                 } else {
             resultTitle.textContent = isBonusStage ? 
@@ -6172,6 +6553,9 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
             // 🔊 Som de vitória normal
                     playSound('win');
                     
+                    // Calcular estrelas antes de desenhar
+                    const victoryStars = calculateCurrentStars();
+                    window.victoryStars = victoryStars; // Salvar para mostrar na tela
                     drawResultScene(true, false);
                 }
                 
@@ -6182,6 +6566,10 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 if (!gameProgress.unlockedStages[currentArea]) {
                     gameProgress.unlockedStages[currentArea] = [1];
                 }
+                
+                // Verificar se é primeira vitória nesta fase
+                const isFirstVictory = !gameProgress.completedStages[currentArea] || 
+                                      !gameProgress.completedStages[currentArea].includes(currentSubstage);
                 
                 // Marcar sub-fase como completada
                 if (!gameProgress.completedStages[currentArea].includes(currentSubstage)) {
@@ -6205,25 +6593,42 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                     }
                 }
                 
-                // Calcular estrelas
-                let stars = 1;
-                if (isBonusStage) {
-            // Fase bônus - baseado em quantas minhocas além da meta
-                    const extra = playerScore - config.goalScore;
-                    if (extra >= 5) stars = 2;
-                    if (extra >= 10) stars = 3;
-                } else {
-            // Fase normal - baseado na diferença de pontos
-                    const diff = playerScore - cpuScore;
-                    if (diff >= 5) stars = 2;
-                    if (diff >= 10) stars = 3;
-                }
+                // Calcular estrelas (sistema de 5 estrelas)
+                const stars = calculateCurrentStars();
                 
                 // Salvar melhor resultado de estrelas
                 const stageKey = `${currentArea}-${currentSubstage}`;
                 if (!gameProgress.stageStars[stageKey] || stars > gameProgress.stageStars[stageKey]) {
                     gameProgress.stageStars[stageKey] = stars;
                 }
+                
+                // Ganhar moedas na vitória (balanceado: primeira vitória dá mais + bônus de estrelas)
+                let coinsEarned;
+                const starBonus = stars * 3; // Bônus por estrela: 3 moedas por estrela
+                
+                if (isFirstVictory) {
+                    // Primeira vitória - recompensa maior
+                    if (currentSubstage === 7) {
+                        coinsEarned = 50 + starBonus; // Boss primeira vez + bônus estrelas
+                    } else if (isBonusStage) {
+                        coinsEarned = 25 + starBonus; // Fase bônus primeira vez + bônus estrelas
+                    } else {
+                        coinsEarned = 25 + starBonus; // Fase normal primeira vez: 25 base + bônus estrelas
+                    }
+                } else {
+                    // Refazendo fase - recompensa reduzida
+                    if (currentSubstage === 7) {
+                        coinsEarned = 15 + Math.floor(starBonus * 0.5); // Boss refazer + bônus reduzido
+                    } else if (isBonusStage) {
+                        coinsEarned = 10 + Math.floor(starBonus * 0.4); // Fase bônus refazer + bônus reduzido
+                    } else {
+                        coinsEarned = 5 + Math.floor(starBonus * 0.4); // Fase normal refazer: 5 base + bônus reduzido
+                    }
+                }
+                
+                // Salvar moedas ganhas antes de adicionar (para mostrar na tela)
+                window.lastCoinsEarned = coinsEarned;
+                addCoins(coinsEarned);
                 
                 saveProgress();
                 
@@ -6237,6 +6642,12 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
         // 🔊 Som de derrota
                 playSound('lose');
                 
+                // Perder uma vida e salvar quantidade restante
+                const livesBefore = gameProgress.lives;
+                loseLife();
+                window.livesRemaining = gameProgress.lives;
+                window.lifeLost = true;
+                
                 drawResultScene(false, false);
             } else if (cpuScore > playerScore) {
         resultTitle.textContent = '😔 VOCÊ PERDEU!';
@@ -6245,6 +6656,12 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
         // 🔊 Som de derrota
                 playSound('lose');
                 
+                // Perder uma vida e salvar quantidade restante
+                const livesBefore = gameProgress.lives;
+                loseLife();
+                window.livesRemaining = gameProgress.lives;
+                window.lifeLost = true;
+                
                 drawResultScene(false, false);
             } else {
         resultTitle.textContent = '🤝 EMPATE!';
@@ -6252,16 +6669,67 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 drawResultScene(false, true);
             }
 
-            if (isBonusStage) {
-                if (currentArea === 3) {
-                    resultText.textContent = `Frutas: ${playerScore} / ${config.goalScore} ❄️`;
-                } else if (currentArea === 2) {
-                    resultText.textContent = `Frutos: ${playerScore} / ${config.goalScore} 🌵`;
-                } else {
-                    resultText.textContent = `Minhocas: ${playerScore} / ${config.goalScore} 🪱`;
+            // Mostrar informações de vitória ou derrota
+            if (isVictory) {
+                // Vitória - mostrar moedas ganhas e estrelas
+                const coinsEarned = window.lastCoinsEarned || 0;
+                const stars = window.victoryStars || calculateCurrentStars();
+                
+                // Criar HTML das estrelas
+                let starsHTML = '<div style="display: flex; justify-content: center; gap: 8px; margin-top: 15px; font-size: 2em;">';
+                for (let i = 0; i < 5; i++) {
+                    if (i < stars) {
+                        starsHTML += '<span style="color: #f1c40f; text-shadow: 0 0 10px #f39c12;">★</span>';
+                    } else {
+                        starsHTML += '<span style="color: rgba(255, 255, 255, 0.3);">☆</span>';
+                    }
                 }
+                starsHTML += '</div>';
+                
+                if (currentSubstage === 7) {
+                    // Boss derrotado
+                    resultText.innerHTML = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
+                } else if (isBonusStage) {
+                    if (currentArea === 3) {
+                        resultText.innerHTML = `Frutas: ${playerScore} / ${config.goalScore} ❄️<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
+                    } else if (currentArea === 2) {
+                        resultText.innerHTML = `Frutos: ${playerScore} / ${config.goalScore} 🌵<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
+                    } else {
+                        resultText.innerHTML = `Minhocas: ${playerScore} / ${config.goalScore} 🪱<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
+                    }
+                } else {
+                    resultText.innerHTML = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
+                }
+                window.lastCoinsEarned = null; // Limpar
+                window.victoryStars = null; // Limpar
+            } else if (window.lifeLost) {
+                // Derrota - mostrar vidas perdidas e restantes
+                const livesRemaining = window.livesRemaining || 0;
+                if (isBonusStage) {
+                    if (currentArea === 3) {
+                        resultText.innerHTML = `Frutas: ${playerScore} / ${config.goalScore} ❄️<br><span style="color: #e74c3c; font-size: 1.1em; margin-top: 10px; display: block;">❤️ Perdeu 1 vida! Restam ${livesRemaining} vidas</span>`;
+                    } else if (currentArea === 2) {
+                        resultText.innerHTML = `Frutos: ${playerScore} / ${config.goalScore} 🌵<br><span style="color: #e74c3c; font-size: 1.1em; margin-top: 10px; display: block;">❤️ Perdeu 1 vida! Restam ${livesRemaining} vidas</span>`;
+                    } else {
+                        resultText.innerHTML = `Minhocas: ${playerScore} / ${config.goalScore} 🪱<br><span style="color: #e74c3c; font-size: 1.1em; margin-top: 10px; display: block;">❤️ Perdeu 1 vida! Restam ${livesRemaining} vidas</span>`;
+                    }
+                } else {
+                    resultText.innerHTML = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎<br><span style="color: #e74c3c; font-size: 1.1em; margin-top: 10px; display: block;">❤️ Perdeu 1 vida! Restam ${livesRemaining} vidas</span>`;
+                }
+                window.lifeLost = false; // Limpar
             } else {
-        resultText.textContent = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎`;
+                // Empate ou outros casos
+                if (isBonusStage) {
+                    if (currentArea === 3) {
+                        resultText.textContent = `Frutas: ${playerScore} / ${config.goalScore} ❄️`;
+                    } else if (currentArea === 2) {
+                        resultText.textContent = `Frutos: ${playerScore} / ${config.goalScore} 🌵`;
+                    } else {
+                        resultText.textContent = `Minhocas: ${playerScore} / ${config.goalScore} 🪱`;
+                    }
+                } else {
+                    resultText.textContent = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎`;
+                }
             }
             
     // Configurar botões baseado no resultado
@@ -6290,12 +6758,21 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                         `;
                     }
                 }
-            } else if (cpuScore > playerScore) {
+            } else if (cpuScore > playerScore || (isBonusStage && !isVictory)) {
                 // Derrota - Tentar novamente ou Roadmap (incluindo boss)
-                resultButtons.innerHTML = `
-            <button class="result-btn retry" onclick="restartGame()">🔄 Tentar Novamente</button>
-            <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
-                `;
+                const livesRemaining = window.livesRemaining || 0;
+                const canRetry = livesRemaining > 0;
+                
+                if (canRetry) {
+                    resultButtons.innerHTML = `
+                <button class="result-btn retry" onclick="restartGame()">🔄 Tentar Novamente</button>
+                <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
+                    `;
+                } else {
+                    resultButtons.innerHTML = `
+                <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
+                    `;
+                }
             } else {
                 // Empate - Jogar novamente ou Roadmap
                 resultButtons.innerHTML = `
@@ -6343,7 +6820,11 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
             if (winnerCanvas && winnerCanvas.animFrame) {
                 cancelAnimationFrame(winnerCanvas.animFrame);
             }
-            
+
+            // Atualizar vidas antes de voltar ao menu
+            updateLivesFromTime();
+            updateLivesUI();
+
             // Fechar tela de game over e jogo
             document.getElementById('gameOver').style.display = 'none';
             document.getElementById('gameContainer').classList.remove('active');
@@ -6367,6 +6848,14 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 debugPanel.classList.remove('active');
             }
             
+            // Reiniciar animação do menu se não estiver rodando
+            if (menuOverlay && menuOverlay.style.display !== 'none') {
+                if (!menuAnimFrame) {
+                    resetMenuWaitTime(); // Resetar tempo de espera
+                    animateMenu();
+                }
+            }
+            
             // Abrir roadmap usando apenas a classe CSS (sem estilo inline)
             const roadmapOverlay = document.getElementById('roadmapOverlay');
             if (roadmapOverlay) {
@@ -6384,6 +6873,13 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
 
         // Reiniciar jogo
         function restartGame() {
+            // Verificar se o jogador tem vidas disponíveis
+            updateLivesFromTime();
+            if (gameProgress.lives <= 0) {
+                alert('Você não tem vidas disponíveis! Aguarde a regeneração ou compre uma vida com moedas.');
+                return;
+            }
+            
             playerScore = 0;
             cpuScore = 0;
             const baseConfig = substageConfig[currentSubstage] || substageConfig[1];
@@ -6416,6 +6912,10 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
             player.stunned = false;
             
     // Reset gavião
+            bat.active = false;
+            bat.cooldown = 0;
+            bat.warningTime = 0;
+            
             hawk.active = false;
             hawk.cooldown = 0;
             hawk.warningTime = 0;
@@ -6567,6 +7067,7 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 // Fase normal - CPU e comidas
                 updateCPU();
                 updateFood();
+                updateBat();
                 updateHawk();
                 checkBirdCollision();
                 checkCollisions();
@@ -6643,6 +7144,170 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
             gameProgress.unlockedStages[1] = [1];
         }
         
+        // Sistema de Vidas e Moedas
+        const MAX_LIVES = 5;
+        const LIFE_REGENERATION_TIME = 5 * 60 * 1000; // 5 minutos em milissegundos
+        const LIFE_COST = 50; // Moedas necessárias para comprar uma vida
+        const COLOR_COST = 25; // Moedas necessárias para mudar a cor do personagem
+        
+        if (gameProgress.lives === undefined) {
+            gameProgress.lives = MAX_LIVES;
+        }
+        if (gameProgress.coins === undefined) {
+            gameProgress.coins = 0;
+        }
+        if (gameProgress.lastLifeLossTime === undefined) {
+            gameProgress.lastLifeLossTime = null;
+        }
+        
+        // Função para atualizar vidas baseado no tempo decorrido
+        function updateLivesFromTime() {
+            if (gameProgress.lives >= MAX_LIVES) {
+                gameProgress.lastLifeLossTime = null;
+                return;
+            }
+            
+            if (gameProgress.lastLifeLossTime === null) {
+                return;
+            }
+            
+            const now = Date.now();
+            const timeSinceLastLoss = now - gameProgress.lastLifeLossTime;
+            const livesToRegenerate = Math.floor(timeSinceLastLoss / LIFE_REGENERATION_TIME);
+            
+            if (livesToRegenerate > 0) {
+                gameProgress.lives = Math.min(MAX_LIVES, gameProgress.lives + livesToRegenerate);
+                
+                // Se chegou ao máximo, resetar o timer
+                if (gameProgress.lives >= MAX_LIVES) {
+                    gameProgress.lastLifeLossTime = null;
+                } else {
+                    // Ajustar o timestamp para o próximo ciclo
+                    gameProgress.lastLifeLossTime += livesToRegenerate * LIFE_REGENERATION_TIME;
+                }
+                
+                saveProgress();
+                updateLivesUI();
+            }
+        }
+        
+        // Função para obter tempo restante até próxima vida
+        function getTimeUntilNextLife() {
+            if (gameProgress.lives >= MAX_LIVES || gameProgress.lastLifeLossTime === null) {
+                return 0;
+            }
+            
+            const now = Date.now();
+            const timeSinceLastLoss = now - gameProgress.lastLifeLossTime;
+            const timeUntilNext = LIFE_REGENERATION_TIME - (timeSinceLastLoss % LIFE_REGENERATION_TIME);
+            
+            return Math.max(0, timeUntilNext);
+        }
+        
+        // Função para perder uma vida
+        function loseLife() {
+            if (gameProgress.lives > 0) {
+                gameProgress.lives--;
+                gameProgress.lastLifeLossTime = Date.now();
+                saveProgress();
+                updateLivesUI();
+            }
+        }
+        
+        // Função para comprar uma vida
+        function buyLife() {
+            if (gameProgress.lives >= MAX_LIVES) {
+                return false; // Já está no máximo
+            }
+            
+            if (gameProgress.coins >= LIFE_COST) {
+                gameProgress.coins -= LIFE_COST;
+                gameProgress.lives = Math.min(MAX_LIVES, gameProgress.lives + 1);
+                
+                // Se chegou ao máximo, resetar timer
+                if (gameProgress.lives >= MAX_LIVES) {
+                    gameProgress.lastLifeLossTime = null;
+                }
+                
+                saveProgress();
+                updateLivesUI();
+                return true;
+            }
+            
+            return false; // Moedas insuficientes
+        }
+        
+        // Função para ganhar moedas
+        function addCoins(amount) {
+            gameProgress.coins = (gameProgress.coins || 0) + amount;
+            saveProgress();
+            updateLivesUI();
+        }
+        
+        // Função para atualizar UI de vidas e moedas
+        function updateLivesUI() {
+            const livesCountEl = document.getElementById('livesCount');
+            const coinsCountEl = document.getElementById('coinsCount');
+            const livesTimerEl = document.getElementById('livesTimer');
+            const buyLifeBtn = document.getElementById('buyLifeBtn');
+            
+            if (livesCountEl) {
+                livesCountEl.textContent = gameProgress.lives;
+            }
+            
+            if (coinsCountEl) {
+                coinsCountEl.textContent = gameProgress.coins || 0;
+            }
+            
+            // Atualizar timer de regeneração
+            if (livesTimerEl) {
+                const timeUntilNext = getTimeUntilNextLife();
+                if (gameProgress.lives >= MAX_LIVES) {
+                    livesTimerEl.textContent = '';
+                } else if (timeUntilNext > 0) {
+                    const minutes = Math.floor(timeUntilNext / 60000);
+                    const seconds = Math.floor((timeUntilNext % 60000) / 1000);
+                    livesTimerEl.textContent = `(${minutes}:${seconds.toString().padStart(2, '0')})`;
+                } else {
+                    livesTimerEl.textContent = '';
+                }
+            }
+            
+            // Mostrar/ocultar botão de comprar vida
+            if (buyLifeBtn) {
+                if (gameProgress.lives < MAX_LIVES && gameProgress.coins >= LIFE_COST) {
+                    buyLifeBtn.style.display = 'block';
+                    buyLifeBtn.disabled = false;
+                } else {
+                    buyLifeBtn.style.display = 'none';
+                    buyLifeBtn.disabled = true;
+                }
+            }
+        }
+        
+        // Função para comprar vida (chamada pelo botão)
+        function buyLifeWithCoins() {
+            if (buyLife()) {
+                // Feedback visual/sonoro pode ser adicionado aqui
+                updateLivesUI();
+            } else {
+                // Mostrar mensagem de erro se necessário
+                alert('Moedas insuficientes! Ganhe mais moedas completando fases.');
+            }
+        }
+        
+        // Atualizar vidas ao carregar o jogo
+        updateLivesFromTime();
+        
+        // Atualizar vidas periodicamente (a cada segundo)
+        setInterval(() => {
+            updateLivesFromTime();
+            updateLivesUI();
+        }, 1000);
+        
+        // Atualizar UI inicialmente
+        updateLivesUI();
+        
         let currentArea = 1;
         let currentSubstage = 1;
         let currentLevel = 1; // Mantido para compatibilidade
@@ -6651,31 +7316,205 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
         function saveProgress() {
             localStorage.setItem('birdGameProgress', JSON.stringify(gameProgress));
         }
+        
+        // Exportar progresso para JSON
+        function exportProgress() {
+            try {
+                // Criar objeto completo com todas as informações do jogador
+                const exportData = {
+                    gameProgress: gameProgress,
+                    difficulty: gameDifficulty,
+                    playerColor: selectedPlayerColor,
+                    playerWingColor: selectedPlayerWing,
+                    exportDate: new Date().toISOString(),
+                    version: '1.0'
+                };
+                
+                // Converter para JSON formatado
+                const jsonString = JSON.stringify(exportData, null, 2);
+                
+                // Criar blob e fazer download
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `asas-em-combate-progresso-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                alert('✅ Progresso exportado com sucesso!');
+            } catch (error) {
+                console.error('Erro ao exportar progresso:', error);
+                alert('❌ Erro ao exportar progresso. Tente novamente.');
+            }
+        }
+        
+        // Importar progresso de JSON
+        function importProgress(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importData = JSON.parse(e.target.result);
+                    
+                    // Validar estrutura básica
+                    if (!importData.gameProgress) {
+                        throw new Error('Arquivo inválido: falta gameProgress');
+                    }
+                    
+                    // Confirmar importação
+                    const confirmMsg = `Deseja importar este progresso?\n\n` +
+                        `Vidas: ${importData.gameProgress.lives || 0}\n` +
+                        `Moedas: ${importData.gameProgress.coins || 0}\n` +
+                        `Áreas desbloqueadas: ${importData.gameProgress.unlockedAreas?.length || 0}\n` +
+                        `\n⚠️ Isso substituirá seu progresso atual!`;
+                    
+                    if (!confirm(confirmMsg)) {
+                        event.target.value = ''; // Reset input
+                        return;
+                    }
+                    
+                    // Importar dados
+                    gameProgress = importData.gameProgress;
+                    
+                    if (importData.difficulty) {
+                        gameDifficulty = importData.difficulty;
+                        localStorage.setItem('birdGameDifficulty', gameDifficulty);
+                        initDifficultyUI();
+                    }
+                    
+                    if (importData.playerColor) {
+                        selectedPlayerColor = importData.playerColor;
+                    }
+                    
+                    if (importData.playerWingColor) {
+                        selectedPlayerWing = importData.playerWingColor;
+                    }
+                    
+                    // Salvar no localStorage
+                    saveProgress();
+                    
+                    // Atualizar UI
+                    updateLivesUI();
+                    updateRoadmapVisual();
+                    
+                    // Reset input
+                    event.target.value = '';
+                    
+                    alert('✅ Progresso importado com sucesso!');
+                    
+                    // Recarregar página para aplicar mudanças
+                    location.reload();
+                } catch (error) {
+                    console.error('Erro ao importar progresso:', error);
+                    alert('❌ Erro ao importar progresso. Verifique se o arquivo é válido.');
+                    event.target.value = ''; // Reset input
+                }
+            };
+            
+            reader.onerror = function() {
+                alert('❌ Erro ao ler arquivo. Tente novamente.');
+                event.target.value = ''; // Reset input
+            };
+            
+            reader.readAsText(file);
+        }
 
 // Atualizar visual do roadmap de áreas
         function updateRoadmapVisual() {
             for (let i = 1; i <= 5; i++) {
                 const areaEl = document.getElementById('area' + i);
                 const progressEl = document.getElementById('areaProgress' + i);
-                
-                if (gameProgress.unlockedAreas.includes(i)) {
+                const config = areaConfig[i];
+                const isUnlocked = gameProgress.unlockedAreas.includes(i);
+                const completed = gameProgress.completedStages[i] ? gameProgress.completedStages[i].length : 0;
+                const isCompleted = completed >= 7;
+                const isCurrentArea = currentArea === i;
+
+                // Aplicar cor de fundo da área
+                if (isUnlocked) {
+                    // Área desbloqueada - usar cor da área com transparência
+                    areaEl.style.backgroundColor = config.color + '40'; // 40 = ~25% de opacidade
+                    areaEl.style.borderColor = config.color;
+                } else {
+                    // Área bloqueada - cinza escuro
+                    areaEl.style.backgroundColor = 'rgba(50, 50, 50, 0.5)';
+                    areaEl.style.borderColor = '#666';
+                }
+
+                if (isUnlocked) {
+                    // Área desbloqueada
                     areaEl.classList.remove('locked');
                     areaEl.classList.add('unlocked');
                     areaEl.onclick = () => openArea(i);
-                    
-            // Mostrar ícone
+
+                    // Mostrar ícone da área
                     const lockEl = areaEl.querySelector('.area-lock');
+                    const iconEl = areaEl.querySelector('.area-icon');
+                    const completionEl = areaEl.querySelector('.area-completion');
+                    
                     if (lockEl) {
-                        lockEl.outerHTML = `<div class="area-icon">${areaConfig[i].icon}</div>`;
+                        lockEl.outerHTML = `<div class="area-icon">${config.icon}</div>`;
+                    } else if (!iconEl) {
+                        const iconDiv = document.createElement('div');
+                        iconDiv.className = 'area-icon';
+                        iconDiv.textContent = config.icon;
+                        areaEl.insertBefore(iconDiv, areaEl.firstChild);
+                    } else {
+                        iconEl.textContent = config.icon;
                     }
-                    
-                    // Atualizar progresso
-                    const completed = gameProgress.completedStages[i] ? gameProgress.completedStages[i].length : 0;
-                    progressEl.textContent = `${completed}/7`;
-                    
-                    if (completed >= 7) {
+
+                    // Adicionar ou remover ícone de conclusão
+                    if (isCompleted) {
+                        if (!completionEl) {
+                            const completionDiv = document.createElement('div');
+                            completionDiv.className = 'area-completion';
+                            completionDiv.textContent = '✅';
+                            completionDiv.title = 'Área Concluída!';
+                            areaEl.appendChild(completionDiv);
+                        }
                         areaEl.classList.add('completed');
+                    } else {
+                        if (completionEl) {
+                            completionEl.remove();
+                        }
+                        areaEl.classList.remove('completed');
                     }
+
+                    // Destacar área atual (sem animação de pulso)
+                    if (isCurrentArea) {
+                        areaEl.classList.add('current-area');
+                        areaEl.style.boxShadow = `0 0 15px ${config.color}`;
+                    } else {
+                        areaEl.classList.remove('current-area');
+                        areaEl.style.boxShadow = '';
+                    }
+
+                    // Atualizar progresso
+                    progressEl.textContent = `${completed}/7`;
+                } else {
+                    // Área trancada
+                    areaEl.classList.remove('unlocked', 'completed', 'current-area');
+                    areaEl.classList.add('locked');
+                    areaEl.onclick = null;
+                    areaEl.style.boxShadow = '';
+                    
+                    // Mostrar cadeado
+                    const iconEl = areaEl.querySelector('.area-icon');
+                    const completionEl = areaEl.querySelector('.area-completion');
+                    if (iconEl) {
+                        iconEl.outerHTML = `<div class="area-lock">🔒</div>`;
+                    }
+                    if (completionEl) {
+                        completionEl.remove();
+                    }
+                    
+                    // Resetar progresso
+                    progressEl.textContent = '0/7';
                 }
             }
         }
@@ -6718,6 +7557,15 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
             if (menuOverlay) {
         // Remover estilo inline se houver, para que o CSS padrão funcione
                 menuOverlay.style.removeProperty('display');
+                
+                // Reiniciar animação do menu se não estiver rodando
+                // Usar setTimeout para garantir que o DOM foi atualizado
+                setTimeout(() => {
+                    if (!menuAnimFrame) {
+                        resetMenuWaitTime(); // Resetar tempo de espera
+                        animateMenu();
+                    }
+                }, 50);
             }
         }
 
@@ -6820,7 +7668,10 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                     card.onclick = () => selectSubstage(area, i);
                 }
                 
-                let displayName = `${area}-${i}`;
+                // Usar nome da fase se disponível, senão usar numeração
+                let displayName = substageNames[area] && substageNames[area][i] 
+                    ? substageNames[area][i] 
+                    : `${area}-${i}`;
         if (substage.isBoss) displayName = '👑 CHEFE';
         else if (substage.isBonus) {
                     // Personalizar texto do bônus baseado na área
@@ -6849,6 +7700,8 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 <span class="${stars >= 1 ? 'filled' : ''}">${stars >= 1 ? '★' : '☆'}</span>
                 <span class="${stars >= 2 ? 'filled' : ''}">${stars >= 2 ? '★' : '☆'}</span>
                 <span class="${stars >= 3 ? 'filled' : ''}">${stars >= 3 ? '★' : '☆'}</span>
+                <span class="${stars >= 4 ? 'filled' : ''}">${stars >= 4 ? '★' : '☆'}</span>
+                <span class="${stars >= 5 ? 'filled' : ''}">${stars >= 5 ? '★' : '☆'}</span>
                     </div>
             <div class="substage-difficulty">${isUnlocked ? difficultyText : '🔒'}</div>
                 `;
@@ -6865,9 +7718,11 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
         // Fechar sub-fases (volta para o roadmap)
         function closeSubstages() {
             const substagesOverlay = document.getElementById('substagesOverlay');
-            substagesOverlay.classList.remove('active');
+            if (substagesOverlay) {
+                substagesOverlay.classList.remove('active');
     // Não definir style.display = 'none' para permitir que CSS controle a exibição
     // O CSS já define display: none quando não tem a classe 'active'
+            }
         }
 
         // Configurar CPU para a sub-fase
@@ -6904,29 +7759,68 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
         }
 
         // Atualizar UI baseado no tipo de fase
+        // Calcular estrelas baseado na performance atual
+        function calculateCurrentStars() {
+            if (isBonusStage) {
+                const config = substageConfig[currentSubstage];
+                const extra = playerScore - config.goalScore;
+                if (extra >= 20) return 5;
+                if (extra >= 15) return 4;
+                if (extra >= 10) return 3;
+                if (extra >= 5) return 2;
+                if (playerScore >= config.goalScore) return 1;
+                return 0;
+            } else {
+                const diff = playerScore - cpuScore;
+                if (diff >= 20) return 5;
+                if (diff >= 15) return 4;
+                if (diff >= 10) return 3;
+                if (diff >= 5) return 2;
+                if (diff > 0) return 1;
+                return 0;
+            }
+        }
+        
+        // Função para atualizar estrelas (agora desenhadas no canvas, não precisa mais)
+        function updateStarsHUD() {
+            // Estrelas são desenhadas diretamente no canvas durante o draw()
+            // Esta função é mantida para compatibilidade mas não faz nada
+        }
+
         function updateStageUI() {
             const bonusUI = document.getElementById('bonusUI');
             const cooldownContainer = document.getElementById('cooldownContainer');
-            
+            const starsHud = document.getElementById('starsHud');
+
             if (isBonusStage) {
-        // Fase bônus - esconder stun (placar já está no canvas)
-                cooldownContainer.style.display = 'none';
-        bonusUI.style.display = 'none'; // UI bônus também está no canvas agora
-                
+        // Fase bônus - esconder stun e estrelas (placar já está no canvas)
+                if (cooldownContainer) cooldownContainer.style.display = 'none';
+                if (starsHud) starsHud.style.display = 'none';
+                if (bonusUI) bonusUI.style.display = 'none'; // UI bônus também está no canvas agora
+
         // Atualizar meta de minhocas (para referência interna)
                 const config = substageConfig[currentSubstage];
-                document.getElementById('wormGoal').textContent = config.goalScore;
-                document.getElementById('wormCount').textContent = '0';
+                const wormGoal = document.getElementById('wormGoal');
+                const wormCount = document.getElementById('wormCount');
+                if (wormGoal) wormGoal.textContent = config.goalScore;
+                if (wormCount) wormCount.textContent = '0';
             } else {
-        // Fase normal - esconder elementos HTML (tudo está no canvas)
-                cooldownContainer.style.display = 'none';
-                bonusUI.style.display = 'none';
+        // Fase normal - elementos HTML escondidos (tudo no canvas)
+                if (cooldownContainer) cooldownContainer.style.display = 'none';
+                if (bonusUI) bonusUI.style.display = 'none';
             }
         }
 
         // Selecionar sub-fase
         function selectSubstage(area, substage) {
             if (!gameProgress.unlockedStages[area] || !gameProgress.unlockedStages[area].includes(substage)) return;
+            
+            // Verificar se o jogador tem vidas disponíveis
+            updateLivesFromTime();
+            if (gameProgress.lives <= 0) {
+                alert('Você não tem vidas disponíveis! Aguarde a regeneração ou compre uma vida com moedas.');
+                return;
+            }
             
             currentArea = area;
             currentSubstage = substage;
@@ -6938,6 +7832,9 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
             // Zerar placar ao iniciar nova fase
             playerScore = 0;
             cpuScore = 0;
+            lastStarCount = 0; // Resetar contador de estrelas
+            starAnimationFrame = 0; // Resetar animação
+            scoreTextEffects = []; // Limpar partículas de texto
     // Placar agora é desenhado no canvas, não precisa atualizar HTML
             
             // Zerar stun ao iniciar nova fase
@@ -7268,15 +8165,50 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
             const overlay = document.getElementById('countdownOverlay');
             const numberEl = document.getElementById('countdownNumber');
             const effectsEl = document.getElementById('countdownEffects');
+            const particlesEl = document.getElementById('countdownParticles');
+            const stageInfoEl = document.getElementById('countdownStageInfo');
+            const vsEl = document.getElementById('countdownVs');
             const countdownCanvas = document.getElementById('countdownCanvas');
             const ctxC = countdownCanvas.getContext('2d');
             
             overlay.style.display = 'flex';
             effectsEl.innerHTML = '';
+            particlesEl.innerHTML = '';
+            
+            // Atualizar informações da fase
+            const config = substageConfig[currentSubstage];
+            const areaConfigData = areaConfig[currentArea];
+            const stageName = substageNames[currentArea] && substageNames[currentArea][currentSubstage] 
+                ? substageNames[currentArea][currentSubstage] 
+                : `${currentArea}-${currentSubstage}`;
+            const difficultyNames = {
+                easy: 'Fácil',
+                normal: 'Normal',
+                hard: 'Difícil'
+            };
+            
+            if (config.isBoss) {
+                vsEl.textContent = '⚔️ BOSS FIGHT! ⚔️';
+                stageInfoEl.innerHTML = `
+                    <div class="stage-name">${areaConfigData.icon} ${areaConfigData.name} - ${stageName}</div>
+                    <div class="difficulty">Dificuldade: ${difficultyNames[gameDifficulty]}</div>
+                `;
+            } else if (isBonusStage) {
+                vsEl.textContent = '🌟 FASE BÔNUS! 🌟';
+                stageInfoEl.innerHTML = `
+                    <div class="stage-name">${areaConfigData.icon} ${areaConfigData.name} - ${stageName}</div>
+                    <div class="difficulty">Meta: ${config.goalScore} em ${config.time}s</div>
+                `;
+            } else {
+                vsEl.textContent = '⚔️ PREPARE-SE PARA A BATALHA ⚔️';
+                stageInfoEl.innerHTML = `
+                    <div class="stage-name">${areaConfigData.icon} ${areaConfigData.name} - ${stageName}</div>
+                    <div class="difficulty">Dificuldade: ${difficultyNames[gameDifficulty]} | Tempo: 60s</div>
+                `;
+            }
     
     // Tocar som especial do boss coruja se for a fase do boss coruja
-    const config = substageConfig[currentSubstage];
-    if (config && config.isBoss && currentArea === 1) {
+    if (config.isBoss && currentArea === 1) {
         const bossType = bossCpuTypes[currentArea];
         if (bossType && bossType.type === 'owl' && sounds.owl && !sfxMuted) {
             sounds.owl.currentTime = 0;
@@ -7307,16 +8239,25 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 ctxC.fillStyle = gradient;
                 ctxC.fillRect(0, 0, countdownCanvas.width, countdownCanvas.height);
                 
-                // Raios de energia no centro
-                ctxC.strokeStyle = `rgba(241, 196, 15, ${0.3 + Math.sin(time / 100) * 0.2})`;
-                ctxC.lineWidth = 2;
-                for (let i = 0; i < 8; i++) {
-                    const angle = (i / 8) * Math.PI * 2 + time / 500;
+                // Raios de energia no centro (melhorados)
+                ctxC.strokeStyle = `rgba(241, 196, 15, ${0.4 + Math.sin(time / 100) * 0.3})`;
+                ctxC.lineWidth = 3;
+                for (let i = 0; i < 12; i++) {
+                    const angle = (i / 12) * Math.PI * 2 + time / 500;
+                    const length = 50 + Math.sin(time / 200 + i) * 15;
                     ctxC.beginPath();
                     ctxC.moveTo(300, 100);
-                    ctxC.lineTo(300 + Math.cos(angle) * 50, 100 + Math.sin(angle) * 50);
+                    ctxC.lineTo(300 + Math.cos(angle) * length, 100 + Math.sin(angle) * length);
                     ctxC.stroke();
                 }
+                
+                // Círculo de energia pulsante no centro
+                ctxC.strokeStyle = `rgba(241, 196, 15, ${0.2 + Math.sin(time / 150) * 0.2})`;
+                ctxC.lineWidth = 2;
+                const pulseRadius = 30 + Math.sin(time / 200) * 10;
+                ctxC.beginPath();
+                ctxC.arc(300, 100, pulseRadius, 0, Math.PI * 2);
+                ctxC.stroke();
                 
                 // VS no centro
                 ctxC.font = 'bold 30px Arial';
@@ -7507,19 +8448,37 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
             
     // Adicionar faíscas entre os pássaros
             function addSparks() {
-                for (let i = 0; i < 5; i++) {
+                for (let i = 0; i < 8; i++) {
                     const spark = document.createElement('div');
                     spark.className = 'spark';
-            spark.textContent = ['⚡', '✨', '💥', '🔥'][Math.floor(Math.random() * 4)];
-                    spark.style.setProperty('--x', (Math.random() - 0.5) * 200 + 'px');
-                    spark.style.setProperty('--y', (Math.random() - 0.5) * 150 + 'px');
+            spark.textContent = ['⚡', '✨', '💥', '🔥', '⭐', '🌟'][Math.floor(Math.random() * 6)];
+                    spark.style.setProperty('--x', (Math.random() - 0.5) * 300 + 'px');
+                    spark.style.setProperty('--y', (Math.random() - 0.5) * 200 + 'px');
                     effectsEl.appendChild(spark);
                     
-                    setTimeout(() => spark.remove(), 500);
+                    setTimeout(() => spark.remove(), 600);
+                }
+            }
+            
+            // Adicionar partículas flutuantes
+            function addParticles() {
+                for (let i = 0; i < 20; i++) {
+                    const particle = document.createElement('div');
+                    particle.className = 'particle';
+                    const colors = ['#f1c40f', '#e74c3c', '#3498db', '#2ecc71', '#9b59b6'];
+                    particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    particle.style.boxShadow = `0 0 10px ${particle.style.background}`;
+                    particle.style.left = Math.random() * 100 + '%';
+                    particle.style.top = Math.random() * 100 + '%';
+                    particle.style.animationDelay = Math.random() * 2 + 's';
+                    particlesEl.appendChild(particle);
+                    
+                    setTimeout(() => particle.remove(), 2000);
                 }
             }
             
             addSparks();
+            addParticles();
             
     // Desenhar o cenário parado durante a contagem
             draw();
@@ -7530,22 +8489,28 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
             const countInterval = setInterval(() => {
                 count--;
                 addSparks();
+                addParticles();
                 
                 if (count > 0) {
                     numberEl.textContent = count;
-            // Reiniciar animação
+            // Reiniciar animação com shake
                     numberEl.style.animation = 'none';
-                    setTimeout(() => numberEl.style.animation = 'countPulse 0.5s ease-out', 10);
+                    setTimeout(() => {
+                        numberEl.style.animation = 'countPulse 0.5s ease-out, countShake 0.1s ease-out 0.3s';
+                    }, 10);
                 } else if (count === 0) {
                     numberEl.textContent = 'VAI!';
                     numberEl.className = 'countdown-number countdown-go';
                     numberEl.style.animation = 'none';
-                    setTimeout(() => numberEl.style.animation = 'countPulse 0.5s ease-out', 10);
+                    setTimeout(() => {
+                        numberEl.style.animation = 'countPulse 0.6s ease-out, countShake 0.15s ease-out 0.4s';
+                    }, 10);
                     
-            // Mais faíscas no VAI!
-                    for (let i = 0; i < 3; i++) {
+            // Mais faíscas e partículas no VAI!
+                    for (let i = 0; i < 5; i++) {
                         setTimeout(() => addSparks(), i * 100);
                     }
+                    addParticles();
                 } else {
                     clearInterval(countInterval);
                     cancelAnimationFrame(animFrame);
@@ -7966,7 +8931,17 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
         
         function animateMenu() {
             const menuCanvas = document.getElementById('menuCanvas');
-            if (!menuCanvas) return;
+            if (!menuCanvas) {
+                menuAnimFrame = null;
+                return;
+            }
+            
+            // Verificar se o menu está visível antes de animar
+            const menuOverlay = document.getElementById('menuOverlay');
+            if (menuOverlay && menuOverlay.style.display === 'none') {
+                menuAnimFrame = null;
+                return;
+            }
             
             const ctxM = menuCanvas.getContext('2d');
             const time = Date.now() / 1000;
@@ -8166,8 +9141,8 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
         ];
 
         // Cor selecionada pelo jogador
-        let selectedPlayerColor = '#2ecc71';
-        let selectedPlayerWing = '#27ae60';
+        let selectedPlayerColor = localStorage.getItem('birdGameSelectedColor') || '#2ecc71';
+        let selectedPlayerWing = localStorage.getItem('birdGameSelectedWing') || '#27ae60';
 
         // Sistema de dificuldade
         let gameDifficulty = localStorage.getItem('birdGameDifficulty') || 'normal';
@@ -8236,13 +9211,24 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 unlockedAreas: [1],
                 unlockedStages: { 1: [1] },
                 completedStages: {},
-                stageStars: {}
+                stageStars: {},
+                lives: MAX_LIVES,
+                coins: 0,
+                lastLifeLossTime: null
             };
-            
+
             localStorage.setItem('birdGameProgress', JSON.stringify(gameProgress));
-            
-    alert('✅ Progresso resetado com sucesso!\n\nVocê voltou ao início do jogo.');
-            
+
+            // Fechar roadmap e sub-fases se estiverem abertas
+            closeRoadmap();
+            closeSubstages();
+
+            // Atualizar UI
+            updateLivesUI();
+            updateRoadmapVisual();
+
+    alert('✅ Progresso resetado com sucesso!\n\nVocê voltou ao início do jogo.\n\nTodas as áreas foram trancadas, exceto a primeira.');
+
     // Fechar opções
             toggleOptions();
         }
@@ -8273,17 +9259,87 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
         // Inicializar cor da CPU
         updateCpuColor();
 
+        // Função para mostrar mensagens temporárias
+        function showColorMessage(message, type = 'info') {
+            // Remover mensagem anterior se existir
+            const existingMsg = document.getElementById('colorChangeMessage');
+            if (existingMsg) {
+                existingMsg.remove();
+            }
+            
+            const msgDiv = document.createElement('div');
+            msgDiv.id = 'colorChangeMessage';
+            msgDiv.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: ${type === 'warning' ? '#e74c3c' : '#2ecc71'};
+                color: white;
+                padding: 15px 25px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                text-align: center;
+                max-width: 300px;
+                animation: fadeIn 0.3s ease;
+            `;
+            msgDiv.textContent = message;
+            document.body.appendChild(msgDiv);
+            
+            setTimeout(() => {
+                if (msgDiv.parentNode) {
+                    msgDiv.style.animation = 'fadeOut 0.3s ease';
+                    setTimeout(() => msgDiv.remove(), 300);
+                }
+            }, 2000);
+        }
+        
         // Selecionar cor
         function selectColor(element) {
-    // Remover seleção anterior
+            const newColor = element.dataset.color;
+            const newWing = element.dataset.wing;
+            
+            // Se já está selecionada, não fazer nada
+            if (selectedPlayerColor === newColor && selectedPlayerWing === newWing) {
+                return;
+            }
+            
+            // Verificar se tem moedas suficientes
+            if (gameProgress.coins < COLOR_COST) {
+                // Mostrar mensagem de moedas insuficientes
+                showColorMessage(`💰 Você precisa de ${COLOR_COST} moedas!\nVocê tem ${gameProgress.coins} moedas.`, 'warning');
+                return;
+            }
+            
+            // Mostrar confirmação antes de comprar
+            const confirmMessage = `💰 Deseja comprar esta cor por ${COLOR_COST} moedas?\n\nVocê tem ${gameProgress.coins} moedas.\nApós a compra: ${gameProgress.coins - COLOR_COST} moedas.`;
+            
+            if (!confirm(confirmMessage)) {
+                // Usuário cancelou
+                return;
+            }
+            
+            // Debitar moedas
+            gameProgress.coins -= COLOR_COST;
+            localStorage.setItem('birdGameProgress', JSON.stringify(gameProgress));
+            updateLivesUI();
+            
+            // Remover seleção anterior
             document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
             
-    // Adicionar seleção
+            // Adicionar seleção
             element.classList.add('selected');
             
             // Guardar cor
-            selectedPlayerColor = element.dataset.color;
-            selectedPlayerWing = element.dataset.wing;
+            selectedPlayerColor = newColor;
+            selectedPlayerWing = newWing;
+            
+            // Salvar no localStorage
+            localStorage.setItem('birdGameSelectedColor', selectedPlayerColor);
+            localStorage.setItem('birdGameSelectedWing', selectedPlayerWing);
             
             // Atualizar cor do jogador
             player.color = selectedPlayerColor;
@@ -8293,7 +9349,26 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
             
             // Atualizar canvas do menu
             animateMenu();
+            
+            // Mostrar mensagem de sucesso
+            showColorMessage(`✅ Cor alterada! (-${COLOR_COST} moedas)`, 'success');
         }
+
+        // Atualizar seleção visual da cor ao carregar
+        function updateColorSelection() {
+            document.querySelectorAll('.color-option').forEach(el => {
+                if (el.dataset.color === selectedPlayerColor && el.dataset.wing === selectedPlayerWing) {
+                    el.classList.add('selected');
+                } else {
+                    el.classList.remove('selected');
+                }
+            });
+        }
+        
+        // Atualizar seleção quando a página carregar
+        setTimeout(() => {
+            updateColorSelection();
+        }, 100);
 
 // Iniciar animação do menu
         animateMenu();
@@ -8416,11 +9491,10 @@ function drawRain() {
 
 // Criar gota de suor
 function createSweatDrop(bird, isPlayer) {
-    // Posição aleatória ao redor do pássaro (principalmente na parte superior)
-    const angle = Math.random() * Math.PI * 0.6 - Math.PI * 0.3; // -30° a +30°
-    const distance = bird.size * 0.7 + Math.random() * bird.size * 0.3;
-    const startX = bird.x + Math.cos(angle) * distance;
-    const startY = bird.y - bird.size * 0.5 + Math.sin(angle) * distance;
+    // Posição na parte superior da cabeça do pássaro
+    const offsetX = (Math.random() - 0.5) * bird.size * 0.3; // Pequena variação horizontal
+    const startX = bird.x + offsetX;
+    const startY = bird.y - bird.size * 0.8; // Acima da cabeça do pássaro
     
     sweatDrops.push({
         x: startX,
