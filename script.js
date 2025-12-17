@@ -1,42 +1,47 @@
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
 
-// Estado do jogo
-let gameRunning = false;
-let gameStarted = false;
-let timeLeft = 60;
-let playerScore = 0;
-let cpuScore = 0;
+        // Estado do jogo
+        let gameRunning = false;
+        let gameStarted = false;
+        let timeLeft = 60;
+        let playerScore = 0;
+        let cpuScore = 0;
+let lastPlayerScore = 0;
+let lastCpuScore = 0;
+let playerScoreAnimation = 0; // 0 = sem animação, > 0 = animando
+let cpuScoreAnimation = 0; // 0 = sem animação, > 0 = animando
 
 // ========== SISTEMA DE ÁUDIO ==========
-const sounds = {
-    countdown: new Audio('sounds/countdown.mp3'),
-    // Adicione mais sons aqui conforme baixar:
-    eat: new Audio('sounds/eat.mp3'),
-    stunLoaded: new Audio('sounds/stun-carregado.mp3'),
-    stun: new Audio('sounds/stun.mp3'),
-    win: new Audio('sounds/win.mp3'),
+        const sounds = {
+            countdown: new Audio('sounds/countdown.mp3'),
+            // Adicione mais sons aqui conforme baixar:
+            eat: new Audio('sounds/eat.mp3'),
+            stunLoaded: new Audio('sounds/stun-carregado.mp3'),
+            stun: new Audio('sounds/stun.mp3'),
+            win: new Audio('sounds/win.mp3'),
     bossWin: new Audio('sounds/boss-win.mp3'), // Música de vitória do boss
-    lose: new Audio('sounds/lose.mp3'),
-    yummy: new Audio('sounds/yummy.mp3'),
-    worm: new Audio('sounds/worm.mp3'),
-    hawk: new Audio('sounds/hawk.mp3'),
-    powerup: new Audio('sounds/powerup.mp3'),
+            lose: new Audio('sounds/lose.mp3'),
+            yummy: new Audio('sounds/yummy.mp3'),
+            worm: new Audio('sounds/worm.mp3'),
+            hawk: new Audio('sounds/hawk.mp3'),
+            powerup: new Audio('sounds/powerup.mp3'),
     introSound: new Audio('sounds/Intro-sound.mp3'),
     owl: new Audio('sounds/owl-sound.mp3'), // Som da coruja boss
-};
+    iceBreak: new Audio('sounds/ice-break.mp3'), // Som de vidro/gelo quebrando
+        };
 
-// Volume geral (0 a 1)
-let masterVolume = 0.5;
+        // Volume geral (0 a 1)
+        let masterVolume = 0.5;
 
-// Configurar volumes
-Object.values(sounds).forEach(sound => {
-    if (sound) sound.volume = masterVolume;
-});
-
+        // Configurar volumes
+        Object.values(sounds).forEach(sound => {
+            if (sound) sound.volume = masterVolume;
+        });
+        
 // Configurar música de introdução para loop e preload
-if (sounds.introSound) {
-    sounds.introSound.loop = true;
+        if (sounds.introSound) {
+            sounds.introSound.loop = true;
     sounds.introSound.volume = masterVolume * 0.6; // Música de fundo um pouco mais baixa
     sounds.introSound.preload = 'auto'; // Garantir pré-carregamento
     
@@ -48,577 +53,600 @@ if (sounds.introSound) {
     
     // Tentar carregar o arquivo explicitamente
     sounds.introSound.load();
-}
-
-// Configurar som de vitória do boss (efeito sonoro, não música)
-if (sounds.bossWin) {
-    // NÃO configurar loop - é efeito sonoro, não música
-    sounds.bossWin.volume = masterVolume; // Volume normal de efeito sonoro
-    sounds.bossWin.preload = 'auto';
-    
-    // Adicionar listeners para debug
-    sounds.bossWin.addEventListener('loadeddata', () => {
-        console.log('✅ boss-win.mp3 carregado com sucesso');
-    });
-    sounds.bossWin.addEventListener('canplaythrough', () => {
-        console.log('✅ boss-win.mp3 pronto para tocar');
-    });
-    sounds.bossWin.addEventListener('error', (e) => {
-        console.error('❌ Erro ao carregar boss-win.mp3');
-        console.error('Verifique se o arquivo existe em: sounds/boss-win.mp3');
-    });
-}
-
-// Controles de áudio
-let musicMuted = false;
-let sfxMuted = false;
-
-// Carregar preferências salvas
-const savedMusicMuted = localStorage.getItem('musicMuted');
-const savedSfxMuted = localStorage.getItem('sfxMuted');
-if (savedMusicMuted !== null) musicMuted = savedMusicMuted === 'true';
-if (savedSfxMuted !== null) sfxMuted = savedSfxMuted === 'true';
-
-// Aplicar estado inicial dos botões
-function updateAudioButtons() {
-    const musicBtn = document.getElementById('musicBtn');
-    const musicBtnGame = document.getElementById('musicBtnGame');
-    const sfxBtn = document.getElementById('sfxBtn');
-    const sfxBtnGame = document.getElementById('sfxBtnGame');
-    
-    if (musicBtn) {
-        musicBtn.textContent = musicMuted ? '🔇' : '🎵';
-        musicBtn.classList.toggle('muted', musicMuted);
-    }
-    if (musicBtnGame) {
-        musicBtnGame.textContent = musicMuted ? '🔇' : '🎵';
-        musicBtnGame.classList.toggle('muted', musicMuted);
-    }
-    if (sfxBtn) {
-        sfxBtn.textContent = sfxMuted ? '🔇' : '🔊';
-        sfxBtn.classList.toggle('muted', sfxMuted);
-    }
-    if (sfxBtnGame) {
-        sfxBtnGame.textContent = sfxMuted ? '🔇' : '🔊';
-        sfxBtnGame.classList.toggle('muted', sfxMuted);
-    }
-    
-    // Aplicar mute na música
-    if (sounds.introSound) {
-        if (musicMuted) {
-            sounds.introSound.pause();
-        } else {
-            playIntroMusic();
         }
-    }
-}
-
-// Função para mutar/desmutar música
-function toggleMusic() {
-    musicMuted = !musicMuted;
-    localStorage.setItem('musicMuted', musicMuted);
-    updateAudioButtons();
-    
-    // Controlar som de vitória do boss se estiver tocando (efeito sonoro)
-    if (sounds.bossWin) {
-        if (sfxMuted) {
-            // Se efeitos sonoros estão mutados, pausar
-            sounds.bossWin.pause();
-        } else if (sounds.bossWin.paused && document.getElementById('gameOver').style.display === 'block' && currentSubstage === 7) {
-            // Se estiver na tela de vitória do boss e efeitos não estiverem mutados, tocar
-            sounds.bossWin.play().catch(e => {
-                console.log('Erro ao tocar boss-win:', e);
+        
+// Configurar som de vitória do boss (efeito sonoro, não música)
+        if (sounds.bossWin) {
+    // NÃO configurar loop - é efeito sonoro, não música
+            sounds.bossWin.volume = masterVolume; // Volume normal de efeito sonoro
+            sounds.bossWin.preload = 'auto';
+            
+            // Adicionar listeners para debug
+            sounds.bossWin.addEventListener('loadeddata', () => {
+        console.log('✅ boss-win.mp3 carregado com sucesso');
+            });
+            sounds.bossWin.addEventListener('canplaythrough', () => {
+        console.log('✅ boss-win.mp3 pronto para tocar');
+            });
+            sounds.bossWin.addEventListener('error', (e) => {
+        console.error('❌ Erro ao carregar boss-win.mp3');
+                console.error('Verifique se o arquivo existe em: sounds/boss-win.mp3');
             });
         }
-    }
-}
-
+        
+// Configurar som de gelo quebrando
+        if (sounds.iceBreak) {
+            sounds.iceBreak.volume = masterVolume * 0.8; // Volume um pouco mais baixo
+            sounds.iceBreak.preload = 'auto';
+            
+            // Adicionar listeners para debug
+            sounds.iceBreak.addEventListener('loadeddata', () => {
+                console.log('✅ ice-break.mp3 carregado com sucesso');
+            });
+            sounds.iceBreak.addEventListener('error', (e) => {
+                console.log('⚠️ Arquivo ice-break.mp3 não encontrado - usando som alternativo');
+            });
+        }
+        
+// Controles de áudio
+        let musicMuted = false;
+        let sfxMuted = false;
+        
+// Carregar preferências salvas
+        const savedMusicMuted = localStorage.getItem('musicMuted');
+        const savedSfxMuted = localStorage.getItem('sfxMuted');
+        if (savedMusicMuted !== null) musicMuted = savedMusicMuted === 'true';
+        if (savedSfxMuted !== null) sfxMuted = savedSfxMuted === 'true';
+        
+// Aplicar estado inicial dos botões
+        function updateAudioButtons() {
+            const musicBtn = document.getElementById('musicBtn');
+            const musicBtnGame = document.getElementById('musicBtnGame');
+            const sfxBtn = document.getElementById('sfxBtn');
+            const sfxBtnGame = document.getElementById('sfxBtnGame');
+            
+            if (musicBtn) {
+        musicBtn.textContent = musicMuted ? '🔇' : '🎵';
+                musicBtn.classList.toggle('muted', musicMuted);
+            }
+            if (musicBtnGame) {
+        musicBtnGame.textContent = musicMuted ? '🔇' : '🎵';
+                musicBtnGame.classList.toggle('muted', musicMuted);
+            }
+            if (sfxBtn) {
+        sfxBtn.textContent = sfxMuted ? '🔇' : '🔊';
+                sfxBtn.classList.toggle('muted', sfxMuted);
+            }
+            if (sfxBtnGame) {
+        sfxBtnGame.textContent = sfxMuted ? '🔇' : '🔊';
+                sfxBtnGame.classList.toggle('muted', sfxMuted);
+            }
+            
+    // Aplicar mute na música
+            if (sounds.introSound) {
+                if (musicMuted) {
+                    sounds.introSound.pause();
+                } else {
+                    playIntroMusic();
+                }
+            }
+        }
+        
+// Função para mutar/desmutar música
+        function toggleMusic() {
+            musicMuted = !musicMuted;
+            localStorage.setItem('musicMuted', musicMuted);
+            updateAudioButtons();
+            
+    // Controlar som de vitória do boss se estiver tocando (efeito sonoro)
+            if (sounds.bossWin) {
+                if (sfxMuted) {
+            // Se efeitos sonoros estão mutados, pausar
+                    sounds.bossWin.pause();
+                } else if (sounds.bossWin.paused && document.getElementById('gameOver').style.display === 'block' && currentSubstage === 7) {
+            // Se estiver na tela de vitória do boss e efeitos não estiverem mutados, tocar
+                    sounds.bossWin.play().catch(e => {
+                        console.log('Erro ao tocar boss-win:', e);
+                    });
+                }
+            }
+        }
+        
 // Função para mutar/desmutar efeitos sonoros
-function toggleSFX() {
-    sfxMuted = !sfxMuted;
-    localStorage.setItem('sfxMuted', sfxMuted);
-    updateAudioButtons();
-}
-
+        function toggleSFX() {
+            sfxMuted = !sfxMuted;
+            localStorage.setItem('sfxMuted', sfxMuted);
+            updateAudioButtons();
+        }
+        
 // Função para tocar música de introdução
-function playIntroMusic() {
-    if (sounds.introSound && !musicMuted) {
+        function playIntroMusic() {
+            if (sounds.introSound && !musicMuted) {
         // Verificar se o menu está visível
-        const menuOverlay = document.getElementById('menuOverlay');
-        if (menuOverlay && menuOverlay.style.display !== 'none') {
+                const menuOverlay = document.getElementById('menuOverlay');
+                if (menuOverlay && menuOverlay.style.display !== 'none') {
             // Se a música já está tocando, não fazer nada
-            if (!sounds.introSound.paused) {
+                    if (!sounds.introSound.paused) {
+                        return;
+                    }
+                    
+                    sounds.introSound.currentTime = 0;
+                    sounds.introSound.play().catch(e => {
+                // Se falhar, tentar novamente após interação do usuário
+                console.log('Erro ao tocar música de introdução:', e);
+                        const tryPlayAgain = function() {
+                            if (sounds.introSound && sounds.introSound.paused) {
+                                sounds.introSound.play().catch(() => {});
+                            }
+                            document.removeEventListener('click', tryPlayAgain);
+                            document.removeEventListener('keydown', tryPlayAgain);
+                            document.removeEventListener('touchstart', tryPlayAgain);
+                        };
+                        document.addEventListener('click', tryPlayAgain, { once: true });
+                        document.addEventListener('keydown', tryPlayAgain, { once: true });
+                        document.addEventListener('touchstart', tryPlayAgain, { once: true });
+                    });
+                }
+            }
+        }
+
+// Função para tocar som
+        function playSound(soundName, volumeMultiplier = 1) {
+    // Não tocar se efeitos sonoros estiverem mutados (exceto música de introdução)
+            if (sfxMuted && soundName !== 'introSound') {
                 return;
             }
             
-            sounds.introSound.currentTime = 0;
-            sounds.introSound.play().catch(e => {
-                // Se falhar, tentar novamente após interação do usuário
-                console.log('Erro ao tocar música de introdução:', e);
-                const tryPlayAgain = function() {
-                    if (sounds.introSound && sounds.introSound.paused) {
-                        sounds.introSound.play().catch(() => {});
-                    }
-                    document.removeEventListener('click', tryPlayAgain);
-                    document.removeEventListener('keydown', tryPlayAgain);
-                    document.removeEventListener('touchstart', tryPlayAgain);
-                };
-                document.addEventListener('click', tryPlayAgain, { once: true });
-                document.addEventListener('keydown', tryPlayAgain, { once: true });
-                document.addEventListener('touchstart', tryPlayAgain, { once: true });
-            });
-        }
-    }
-}
-
-// Função para tocar som
-function playSound(soundName, volumeMultiplier = 1) {
-    // Não tocar se efeitos sonoros estiverem mutados (exceto música de introdução)
-    if (sfxMuted && soundName !== 'introSound') {
-        return;
-    }
-    
-    const sound = sounds[soundName];
-    if (sound) {
-        sound.currentTime = 0; // Reinicia o som
-        sound.volume = masterVolume * volumeMultiplier;
-        sound.play().catch(e => {
-            // Ignora erros de autoplay (navegadores bloqueiam)
+            const sound = sounds[soundName];
+            if (sound) {
+                sound.currentTime = 0; // Reinicia o som
+                sound.volume = masterVolume * volumeMultiplier;
+                sound.play().catch(e => {
+                    // Ignora erros de autoplay (navegadores bloqueiam)
             console.log('Áudio bloqueado pelo navegador');
-        });
-    }
-}
+                });
+            }
+        }
 
 // Função para parar som
-function stopSound(soundName) {
-    const sound = sounds[soundName];
-    if (sound) {
-        sound.pause();
-        sound.currentTime = 0;
-    }
-}
+        function stopSound(soundName) {
+            const sound = sounds[soundName];
+            if (sound) {
+                sound.pause();
+                sound.currentTime = 0;
+            }
+        }
 
-// Jogador
-const player = {
-    x: 100,
-    y: canvas.height / 2,
-    size: 35,
-    speed: 3, // Velocidade base
-    baseSpeed: 3,
-    boostedSpeed: 5,
-    color: '#2ecc71',
-    dx: 0,
-    dy: 0,
-    stunCharge: 0, // Comidas coletadas para o stun
-    stunChargeMax: 20, // Precisa comer 20 para stunnar
-    stunChargeTimer: 0, // Tempo restante para usar o stun (5 segundos = 300 frames)
-    speedBoost: 0, // Tempo restante do boost de velocidade
+        // Jogador
+        const player = {
+            x: 100,
+            y: canvas.height / 2,
+            size: 35,
+            speed: 3, // Velocidade base
+            baseSpeed: 3,
+            boostedSpeed: 5,
+            color: '#2ecc71',
+            dx: 0,
+            dy: 0,
+            stunCharge: 0, // Comidas coletadas para o stun
+            stunChargeMax: 20, // Precisa comer 20 para stunnar
+            stunChargeTimer: 0, // Tempo restante para usar o stun (5 segundos = 300 frames)
+            speedBoost: 0, // Tempo restante do boost de velocidade
     eatAnimation: 0, // Animação de comer
     lastEatenEmoji: '', // Último emoji comido
     facingRight: true, // Direção que está olhando
     wingTime: 0 // Tempo para animação das asas
-};
+        };
 
-// CPU
+        // CPU
 // Configurações das áreas
-const areaConfig = {
+        const areaConfig = {
     1: { name: 'Floresta', icon: '🌳', color: '#27ae60' },
     2: { name: 'Deserto', icon: '🏜️', color: '#f39c12' },
     3: { name: 'Gelo', icon: '❄️', color: '#3498db' },
     4: { name: 'Vulcão', icon: '🌋', color: '#e74c3c' },
     5: { name: 'Castelo', icon: '🏰', color: '#9b59b6' }
-};
+        };
 
 // Configurações de dificuldade por sub-fase
-const substageConfig = {
+        const substageConfig = {
     1: { difficulty: 'Fácil', time: 60, cpuSpeed: 1.5, goalScore: 10 },
-    2: { difficulty: 'Normal', time: 55, cpuSpeed: 1.8, goalScore: 12 },
-    3: { difficulty: 'Normal', time: 55, cpuSpeed: 1.8, goalScore: 12 },
+            2: { difficulty: 'Normal', time: 55, cpuSpeed: 1.8, goalScore: 12 },
+            3: { difficulty: 'Normal', time: 55, cpuSpeed: 1.8, goalScore: 12 },
     4: { difficulty: '🪱 BÔNUS', time: 30, cpuSpeed: 0, goalScore: 25, isBonus: true }, // Fase bônus - pegar minhocas!
-    5: { difficulty: 'Normal', time: 55, cpuSpeed: 1.8, goalScore: 12 },
+            5: { difficulty: 'Normal', time: 55, cpuSpeed: 1.8, goalScore: 12 },
     6: { difficulty: 'Normal + 🦅', time: 55, cpuSpeed: 1.8, goalScore: 12 }, // Com gavião!
     7: { difficulty: '🏆 CHEFE', time: 60, cpuSpeed: 2.8, goalScore: 25, isBoss: true }
-};
+        };
 
 // CPUs das sub-fases (pássaros genéricos da área)
 // Índices: 0=1-1, 1=1-2, 2=1-3, 3=1-4(bônus), 4=1-5, 5=1-6
-const areaCpuColors = {
+        const areaCpuColors = {
     1: [ // Floresta - pássaros verdes/marrons
-        { color: '#228B22', wingColor: '#006400', name: 'Pardal' },
+                { color: '#228B22', wingColor: '#006400', name: 'Pardal' },
         { color: '#6B8E23', wingColor: '#556B2F', name: 'Canário' },
-        { color: '#8FBC8F', wingColor: '#2E8B57', name: 'Periquito' },
+                { color: '#8FBC8F', wingColor: '#2E8B57', name: 'Periquito' },
         { color: '#9ACD32', wingColor: '#6B8E23', name: 'Sabiá' }, // Bônus (não usado)
-        { color: '#556B2F', wingColor: '#3D5A2E', name: 'Tucano' },
-        { color: '#3D5E1A', wingColor: '#2B4513', name: 'Beija-flor' }
-    ],
+                { color: '#556B2F', wingColor: '#3D5A2E', name: 'Tucano' },
+                { color: '#3D5E1A', wingColor: '#2B4513', name: 'Beija-flor' }
+            ],
     2: [ // Deserto - pássaros amarelos/laranjas
         { color: '#DAA520', wingColor: '#B8860B', name: 'Canário' },
-        { color: '#CD853F', wingColor: '#8B4513', name: 'Pomba' },
+                { color: '#CD853F', wingColor: '#8B4513', name: 'Pomba' },
         { color: '#D2691E', wingColor: '#A0522D', name: 'Gavião' },
         { color: '#F4A460', wingColor: '#CD853F', name: 'Arara' }, // Bônus (não usado)
-        { color: '#DEB887', wingColor: '#D2B48C', name: 'Condor' },
+                { color: '#DEB887', wingColor: '#D2B48C', name: 'Condor' },
         { color: '#E6A83C', wingColor: '#C49232', name: 'Carcará' }
-    ],
+            ],
     3: [ // Gelo - pássaros azuis/brancos
-        { color: '#87CEEB', wingColor: '#4682B4', name: 'Gaivota' },
-        { color: '#B0E0E6', wingColor: '#5F9EA0', name: 'Albatroz' },
-        { color: '#ADD8E6', wingColor: '#4169E1', name: 'Petrel' },
+                { color: '#87CEEB', wingColor: '#4682B4', name: 'Gaivota' },
+                { color: '#B0E0E6', wingColor: '#5F9EA0', name: 'Albatroz' },
+                { color: '#ADD8E6', wingColor: '#4169E1', name: 'Petrel' },
         { color: '#E0FFFF', wingColor: '#00CED1', name: 'Cisne' }, // Bônus (não usado)
-        { color: '#AFEEEE', wingColor: '#48D1CC', name: 'Harpia' },
-        { color: '#6CACE4', wingColor: '#3A8BC2', name: 'Andorinha' }
-    ],
+                { color: '#AFEEEE', wingColor: '#48D1CC', name: 'Harpia' },
+                { color: '#6CACE4', wingColor: '#3A8BC2', name: 'Andorinha' }
+            ],
     4: [ // Vulcão - pássaros vermelhos/laranjas
-        { color: '#FF6347', wingColor: '#DC143C', name: 'Cardeal' },
-        { color: '#FF4500', wingColor: '#B22222', name: 'Flamingo' },
-        { color: '#FF8C00', wingColor: '#FF4500', name: 'Papagaio' },
+                { color: '#FF6347', wingColor: '#DC143C', name: 'Cardeal' },
+                { color: '#FF4500', wingColor: '#B22222', name: 'Flamingo' },
+                { color: '#FF8C00', wingColor: '#FF4500', name: 'Papagaio' },
         { color: '#CD5C5C', wingColor: '#8B0000', name: 'Arara' }, // Bônus (não usado)
-        { color: '#FA8072', wingColor: '#E9967A', name: 'Quetzal' },
-        { color: '#E55039', wingColor: '#B33829', name: 'Colibri' }
-    ],
+                { color: '#FA8072', wingColor: '#E9967A', name: 'Quetzal' },
+                { color: '#E55039', wingColor: '#B33829', name: 'Colibri' }
+            ],
     5: [ // Castelo - pássaros roxos/cinzas
-        { color: '#778899', wingColor: '#696969', name: 'Corvo' },
+                { color: '#778899', wingColor: '#696969', name: 'Corvo' },
         { color: '#708090', wingColor: '#2F4F4F', name: 'Falcão' },
-        { color: '#A9A9A9', wingColor: '#808080', name: 'Pombo' },
+                { color: '#A9A9A9', wingColor: '#808080', name: 'Pombo' },
         { color: '#8A2BE2', wingColor: '#4B0082', name: 'Pavão' }, // Bônus (não usado)
-        { color: '#9370DB', wingColor: '#663399', name: 'Gralha' },
-        { color: '#5D5D5D', wingColor: '#3D3D3D', name: 'Abutre' }
-    ]
-};
+                { color: '#9370DB', wingColor: '#663399', name: 'Gralha' },
+                { color: '#5D5D5D', wingColor: '#3D3D3D', name: 'Abutre' }
+            ]
+        };
 
 // Tipos de CPU CHEFE para cada área
-const bossCpuTypes = {
-    1: { // Floresta - Coruja
-        name: 'Coruja',
-        color: '#8B4513',
-        wingColor: '#654321',
-        type: 'owl',
-        eyeColor: '#FFD700',
-        beakColor: '#D2691E'
-    },
+        const bossCpuTypes = {
+            1: { // Floresta - Coruja
+                name: 'Coruja',
+                color: '#8B4513',
+                wingColor: '#654321',
+                type: 'owl',
+                eyeColor: '#FFD700',
+                beakColor: '#D2691E'
+            },
     2: { // Deserto - Falcão
         name: 'Falcão',
-        color: '#DAA520',
-        wingColor: '#B8860B',
-        type: 'hawk',
-        eyeColor: '#000000',
-        beakColor: '#4a4a4a'
-    },
-    3: { // Gelo - Pinguim
-        name: 'Pinguim',
-        color: '#2c3e50',
-        wingColor: '#1a252f',
-        type: 'penguin',
-        eyeColor: '#000000',
-        beakColor: '#f39c12'
-    },
+                color: '#DAA520',
+                wingColor: '#B8860B',
+                type: 'hawk',
+                eyeColor: '#000000',
+                beakColor: '#4a4a4a'
+            },
+            3: { // Gelo - Pinguim
+                name: 'Pinguim',
+                color: '#2c3e50',
+                wingColor: '#1a252f',
+                type: 'penguin',
+                eyeColor: '#000000',
+                beakColor: '#f39c12'
+            },
     4: { // Vulcão - Fênix
         name: 'Fênix',
-        color: '#e74c3c',
-        wingColor: '#c0392b',
-        type: 'phoenix',
-        eyeColor: '#f1c40f',
-        beakColor: '#f39c12'
-    },
+                color: '#e74c3c',
+                wingColor: '#c0392b',
+                type: 'phoenix',
+                eyeColor: '#f1c40f',
+                beakColor: '#f39c12'
+            },
     5: { // Castelo - Águia Real
         name: 'Águia Real',
-        color: '#34495e',
-        wingColor: '#2c3e50',
-        type: 'eagle',
-        eyeColor: '#f1c40f',
-        beakColor: '#f39c12'
-    }
-};
+                color: '#34495e',
+                wingColor: '#2c3e50',
+                type: 'eagle',
+                eyeColor: '#f1c40f',
+                beakColor: '#f39c12'
+            }
+        };
 
-// Manter compatibilidade
-const cpuTypes = bossCpuTypes;
+        // Manter compatibilidade
+        const cpuTypes = bossCpuTypes;
 
-const cpu = {
-    x: canvas.width - 100,
-    y: canvas.height / 2,
-    size: 35,
-    speed: 2, // Velocidade base
-    baseSpeed: 2,
-    boostedSpeed: 5,
-    color: '#8B4513',
-    wingColor: '#654321',
-    type: 'owl',
-    eyeColor: '#FFD700',
-    beakColor: '#D2691E',
-    stunned: false,
-    stunTime: 0,
-    reactionDelay: 0, // Delay para reagir
-    targetFood: null,
+        const cpu = {
+            x: canvas.width - 100,
+            y: canvas.height / 2,
+            size: 35,
+            speed: 2, // Velocidade base
+            baseSpeed: 2,
+            boostedSpeed: 5,
+            color: '#8B4513',
+            wingColor: '#654321',
+            type: 'owl',
+            eyeColor: '#FFD700',
+            beakColor: '#D2691E',
+            stunned: false,
+            stunTime: 0,
+            reactionDelay: 0, // Delay para reagir
+            targetFood: null,
     stunCharge: 0, // CPU também carrega stun
-    stunChargeMax: 20, // Precisa comer 20 para stunnar
-    stunChargeTimer: 0, // Tempo restante para usar o stun
-    specialFoodDelay: 0,
-    goingForSpecial: false,
+            stunChargeMax: 20, // Precisa comer 20 para stunnar
+            stunChargeTimer: 0, // Tempo restante para usar o stun
+            specialFoodDelay: 0,
+            goingForSpecial: false,
     goingForSpeed: false, // Se está indo atrás do item de velocidade
-    speedBoost: 0, // Tempo restante do boost de velocidade
+            speedBoost: 0, // Tempo restante do boost de velocidade
     eatAnimation: 0, // Animação de comer
     lastEatenEmoji: '', // Último emoji comido
     facingRight: false, // CPU começa olhando para esquerda
     wingTime: 0 // Tempo para animação das asas
-};
+        };
 
 // Jogador também pode ser stunnado
-player.stunned = false;
-player.stunTime = 0;
+        player.stunned = false;
+        player.stunTime = 0;
 
-// Comidas
-let foods = [];
-let specialFoods = []; // Comidas especiais ficam separadas
-let speedItems = []; // Itens de velocidade
+        // Comidas
+        let foods = [];
+        let specialFoods = []; // Comidas especiais ficam separadas
+        let speedItems = []; // Itens de velocidade
 const foodEmojis = ['🍎', '🍊', '🍇', '🍒', '🥭', '🍓'];
 const groundY = canvas.height - 60; // Nível do chão
 
 // Gavião inimigo (aparece na fase 1-2)
-let hawk = {
-    active: false,
-    x: -100,
-    y: 100,
-    speed: 8,
-    direction: 1, // 1 = direita, -1 = esquerda
-    warningTime: 0, // Tempo de aviso antes de atacar
+        let hawk = {
+            active: false,
+            x: -100,
+            y: 100,
+            speed: 8,
+            direction: 1, // 1 = direita, -1 = esquerda
+            warningTime: 0, // Tempo de aviso antes de atacar
     cooldown: 0, // Tempo até próximo ataque
-    targetY: 100 // Altura do ataque
-};
+            targetY: 100 // Altura do ataque
+        };
 
 // Iniciar ataque do gavião
-function spawnHawk() {
-    if (hawk.active || hawk.cooldown > 0) return;
-    
+        function spawnHawk() {
+            if (hawk.active || hawk.cooldown > 0) return;
+            
     // Escolhe direção aleatória
-    hawk.direction = Math.random() > 0.5 ? 1 : -1;
-    hawk.x = hawk.direction === 1 ? -80 : canvas.width + 80;
-    
+            hawk.direction = Math.random() > 0.5 ? 1 : -1;
+            hawk.x = hawk.direction === 1 ? -80 : canvas.width + 80;
+            
     // Mira na altura do player (com variação)
-    hawk.targetY = player.y + (Math.random() - 0.5) * 100;
-    hawk.targetY = Math.max(80, Math.min(canvas.height - 100, hawk.targetY));
-    hawk.y = hawk.targetY;
-    
-    hawk.warningTime = 90; // 1.5 segundos de aviso
-    hawk.active = true;
-    
+            hawk.targetY = player.y + (Math.random() - 0.5) * 100;
+            hawk.targetY = Math.max(80, Math.min(canvas.height - 100, hawk.targetY));
+            hawk.y = hawk.targetY;
+            
+            hawk.warningTime = 90; // 1.5 segundos de aviso
+            hawk.active = true;
+            
     // 🔊 Som do gavião aparecendo
-    playSound('hawk');
-}
+            playSound('hawk');
+        }
 
 // Atualizar gavião
-function updateHawk() {
+        function updateHawk() {
     // Ativa na fase 1-6 (floresta) e 2-6 (deserto)
     if ((currentArea !== 1 || currentSubstage !== 6) && 
         (currentArea !== 2 || currentSubstage !== 6)) {
-        hawk.active = false;
-        return;
-    }
-    
-    // Cooldown entre ataques
-    if (hawk.cooldown > 0) {
-        hawk.cooldown--;
-    }
-    
-    // Spawn aleatório (a cada ~5-8 segundos)
-    if (!hawk.active && hawk.cooldown <= 0 && Math.random() < 0.003) {
-        spawnHawk();
-    }
-    
-    if (!hawk.active) return;
-    
-    // Fase de aviso (pisca na borda)
-    if (hawk.warningTime > 0) {
-        hawk.warningTime--;
-        return;
-    }
-    
-    // Movimento do gavião
-    hawk.x += hawk.speed * hawk.direction;
-    
-    // Verificar colisão com player
-    if (!player.stunned) {
-        const dist = Math.sqrt(
-            Math.pow(hawk.x - player.x, 2) + 
-            Math.pow(hawk.y - player.y, 2)
-        );
-        
-        if (dist < 50) {
-            // Player foi atingido!
-            player.stunned = true;
-            player.stunTime = 90; // 1.5 segundos de stun
+                hawk.active = false;
+                return;
+            }
             
+            // Cooldown entre ataques
+            if (hawk.cooldown > 0) {
+                hawk.cooldown--;
+            }
+            
+    // Spawn aleatório (a cada ~5-8 segundos)
+            if (!hawk.active && hawk.cooldown <= 0 && Math.random() < 0.003) {
+                spawnHawk();
+            }
+            
+            if (!hawk.active) return;
+            
+            // Fase de aviso (pisca na borda)
+            if (hawk.warningTime > 0) {
+                hawk.warningTime--;
+                return;
+            }
+            
+    // Movimento do gavião
+            hawk.x += hawk.speed * hawk.direction;
+            
+    // Verificar colisão com player
+            if (!player.stunned) {
+                const dist = Math.sqrt(
+                    Math.pow(hawk.x - player.x, 2) + 
+                    Math.pow(hawk.y - player.y, 2)
+                );
+                
+                if (dist < 50) {
+                    // Player foi atingido!
+                    player.stunned = true;
+                    player.stunTime = 90; // 1.5 segundos de stun
+                    
             // 🔊 Sons de ataque do gavião
-            playSound('hawk');
-            playSound('stun');
-        }
-    }
-    
-    // Desativar quando sair da tela
-    if ((hawk.direction === 1 && hawk.x > canvas.width + 100) ||
-        (hawk.direction === -1 && hawk.x < -100)) {
-        hawk.active = false;
+                    playSound('hawk');
+                    playSound('stun');
+                }
+            }
+            
+            // Desativar quando sair da tela
+            if ((hawk.direction === 1 && hawk.x > canvas.width + 100) ||
+                (hawk.direction === -1 && hawk.x < -100)) {
+                hawk.active = false;
         hawk.cooldown = 300; // 5 segundos até próximo ataque
-    }
-}
+            }
+        }
 
 // Desenhar gavião
-function drawHawk() {
+        function drawHawk() {
     // Ativa na fase 1-6 (floresta) e 2-6 (deserto)
     if ((currentArea !== 1 || currentSubstage !== 6) && 
         (currentArea !== 2 || currentSubstage !== 6)) return;
-    if (!hawk.active) return;
-    
-    ctx.save();
-    
-    // Fase de aviso - pisca na borda da tela
-    if (hawk.warningTime > 0) {
-        const blink = Math.floor(hawk.warningTime / 10) % 2 === 0;
-        if (blink) {
-            ctx.fillStyle = 'rgba(231, 76, 60, 0.8)';
-            ctx.font = 'bold 24px Arial';
-            ctx.textAlign = 'center';
+            if (!hawk.active) return;
             
-            // Indicador de perigo na borda
-            const warningX = hawk.direction === 1 ? 50 : canvas.width - 50;
+            ctx.save();
+            
+            // Fase de aviso - pisca na borda da tela
+            if (hawk.warningTime > 0) {
+                const blink = Math.floor(hawk.warningTime / 10) % 2 === 0;
+                if (blink) {
+                    ctx.fillStyle = 'rgba(231, 76, 60, 0.8)';
+                    ctx.font = 'bold 24px Arial';
+                    ctx.textAlign = 'center';
+                    
+                    // Indicador de perigo na borda
+                    const warningX = hawk.direction === 1 ? 50 : canvas.width - 50;
             ctx.fillText('⚠️ GAVIÃO!', warningX, hawk.targetY);
-            
+                    
             // Seta indicando direção
             ctx.fillText(hawk.direction === 1 ? '➡️' : '⬅️', warningX, hawk.targetY + 30);
-        }
-        ctx.restore();
-        return;
-    }
-    
-    ctx.translate(hawk.x, hawk.y);
-    
-    // Espelhar se voando para esquerda
-    if (hawk.direction === -1) {
-        ctx.scale(-1, 1);
-    }
-    
-    // Sombra
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.beginPath();
-    ctx.ellipse(0, 60, 30, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-    
+                }
+                ctx.restore();
+                return;
+            }
+            
+            ctx.translate(hawk.x, hawk.y);
+            
+            // Espelhar se voando para esquerda
+            if (hawk.direction === -1) {
+                ctx.scale(-1, 1);
+            }
+            
+            // Sombra
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(0, 60, 30, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
     // Corpo do gavião
-    ctx.fillStyle = '#8B4513';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 35, 20, 0, 0, Math.PI * 2);
-    ctx.fill();
-    
+            ctx.fillStyle = '#8B4513';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 35, 20, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
     // Cabeça
-    ctx.fillStyle = '#A0522D';
-    ctx.beginPath();
-    ctx.arc(30, -5, 15, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Bico
-    ctx.fillStyle = '#FFD700';
-    ctx.beginPath();
-    ctx.moveTo(42, -5);
-    ctx.lineTo(55, -3);
-    ctx.lineTo(42, 0);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Olho (bravo)
-    ctx.fillStyle = 'white';
-    ctx.beginPath();
-    ctx.arc(35, -8, 5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.fillStyle = 'black';
-    ctx.beginPath();
-    ctx.arc(36, -8, 3, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Sobrancelha brava
-    ctx.strokeStyle = '#5D3A1A';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(30, -15);
-    ctx.lineTo(40, -12);
-    ctx.stroke();
-    
-    // Asas (batendo)
-    const wingFlap = Math.sin(Date.now() / 50) * 15;
-    ctx.fillStyle = '#6B4423';
-    
-    // Asa superior
-    ctx.beginPath();
-    ctx.moveTo(-10, -5);
-    ctx.quadraticCurveTo(-30, -30 + wingFlap, -50, -10 + wingFlap);
-    ctx.quadraticCurveTo(-30, 0, -10, 0);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Asa inferior
-    ctx.beginPath();
-    ctx.moveTo(-10, 5);
-    ctx.quadraticCurveTo(-30, 30 - wingFlap, -50, 10 - wingFlap);
-    ctx.quadraticCurveTo(-30, 5, -10, 5);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Cauda
-    ctx.fillStyle = '#5D3A1A';
-    ctx.beginPath();
-    ctx.moveTo(-30, 0);
-    ctx.lineTo(-50, -8);
-    ctx.lineTo(-55, 0);
-    ctx.lineTo(-50, 8);
-    ctx.closePath();
-    ctx.fill();
-    
-    ctx.restore();
-}
+            ctx.fillStyle = '#A0522D';
+            ctx.beginPath();
+            ctx.arc(30, -5, 15, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Bico
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.moveTo(42, -5);
+            ctx.lineTo(55, -3);
+            ctx.lineTo(42, 0);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Olho (bravo)
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(35, -8, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(36, -8, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Sobrancelha brava
+            ctx.strokeStyle = '#5D3A1A';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(30, -15);
+            ctx.lineTo(40, -12);
+            ctx.stroke();
+            
+            // Asas (batendo)
+            const wingFlap = Math.sin(Date.now() / 50) * 15;
+            ctx.fillStyle = '#6B4423';
+            
+            // Asa superior
+            ctx.beginPath();
+            ctx.moveTo(-10, -5);
+            ctx.quadraticCurveTo(-30, -30 + wingFlap, -50, -10 + wingFlap);
+            ctx.quadraticCurveTo(-30, 0, -10, 0);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Asa inferior
+            ctx.beginPath();
+            ctx.moveTo(-10, 5);
+            ctx.quadraticCurveTo(-30, 30 - wingFlap, -50, 10 - wingFlap);
+            ctx.quadraticCurveTo(-30, 5, -10, 5);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Cauda
+            ctx.fillStyle = '#5D3A1A';
+            ctx.beginPath();
+            ctx.moveTo(-30, 0);
+            ctx.lineTo(-50, -8);
+            ctx.lineTo(-55, 0);
+            ctx.lineTo(-50, 8);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+        }
 
 // ========== FASE BÔNUS - MINHOCAS E COBRAS ==========
 let wormHoles = []; // Buracos no chão
 let worms = []; // Minhocas e cobras ativas (worms têm propriedade isSnake)
 let wormEatEffects = []; // Efeitos visuais ao comer minhoca ou ser stunnado
-let isBonusStage = false;
+        let isBonusStage = false;
 let snakeSpawnCounter = 0; // Contador para spawnar cobras ocasionalmente
+
+// ========== FASE BÔNUS DO GELO - FRUTAS CONGELADAS ==========
+let frozenFruits = []; // Frutas congeladas que precisam ser bicadas
+let iceShards = []; // Estilhaços de gelo quando quebra
+
+// ========== FASE BÔNUS DO DESERTO - FRUTOS DE CACTOS ==========
+let cactusFruits = []; // Frutas que aparecem nos cactos e secam rapidamente
+let cactusFruitParticles = []; // Partículas quando a fruta seca ou é coletada
 
 // ========== SISTEMA DE SUOR NO DESERTO ==========
 let sweatDrops = []; // Gotas de suor dos pássaros no deserto
+let coldEffects = []; // Efeitos de frio dos pássaros no gelo
 
 // ========== SISTEMA DE CHUVA NA FLORESTA ==========
 let rainDrops = []; // Gotas de chuva na floresta
-
+        
 // Inicializar buracos para fase bônus
-function initWormHoles() {
-    wormHoles = [];
-    worms = [];
-    wormEatEffects = [];
+        function initWormHoles() {
+            wormHoles = [];
+            worms = [];
+            wormEatEffects = [];
     snakeSpawnCounter = 0; // Reset contador de cobras
-    
+            
     // Criar 5 buracos distribuídos no chão
-    const spacing = canvas.width / 6;
-    for (let i = 1; i <= 5; i++) {
-        wormHoles.push({
-            x: spacing * i,
-            y: groundY + 15,
-            width: 50,
-            height: 20,
-            cooldown: 0,
-            hasWorm: false
-        });
-    }
-}
-
+            const spacing = canvas.width / 6;
+            for (let i = 1; i <= 5; i++) {
+                wormHoles.push({
+                    x: spacing * i,
+                    y: groundY + 15,
+                    width: 50,
+                    height: 20,
+                    cooldown: 0,
+                    hasWorm: false
+                });
+            }
+        }
+        
 // Spawn de minhoca ou cobra em um buraco aleatório
-function spawnWorm() {
-    if (!isBonusStage) return;
-    
+        function spawnWorm() {
+            if (!isBonusStage) return;
+            
     // Encontrar buracos disponíveis
-    const availableHoles = wormHoles.filter(h => !h.hasWorm && h.cooldown <= 0);
-    if (availableHoles.length === 0) return;
-    
+            const availableHoles = wormHoles.filter(h => !h.hasWorm && h.cooldown <= 0);
+            if (availableHoles.length === 0) return;
+            
     // Escolher buraco aleatório
-    const hole = availableHoles[Math.floor(Math.random() * availableHoles.length)];
-    hole.hasWorm = true;
+            const hole = availableHoles[Math.floor(Math.random() * availableHoles.length)];
+            hole.hasWorm = true;
     
     // Incrementar contador de cobras
     snakeSpawnCounter++;
@@ -631,74 +659,74 @@ function spawnWorm() {
     if (isSnake) {
         snakeSpawnCounter = Math.max(0, snakeSpawnCounter - 5);
     }
-    
-    worms.push({
-        x: hole.x,
-        y: hole.y - 10,
-        hole: hole,
-        emergeProgress: 0, // 0 = enterrado, 1 = totalmente exposto
-        timeVisible: 0,
+            
+            worms.push({
+                x: hole.x,
+                y: hole.y - 10,
+                hole: hole,
+                emergeProgress: 0, // 0 = enterrado, 1 = totalmente exposto
+                timeVisible: 0,
         maxTimeVisible: isSnake ? 90 + Math.random() * 60 : 60 + Math.random() * 60, // Cobras ficam mais tempo
-        retreating: false,
+                retreating: false,
         eaten: false,
         isSnake: isSnake // Marca se é cobra ou minhoca
-    });
-}
-
-// Atualizar minhocas
-function updateWorms() {
-    if (!isBonusStage) return;
-    
-    // Atualizar cooldown dos buracos
-    wormHoles.forEach(hole => {
-        if (hole.cooldown > 0) hole.cooldown--;
-    });
-    
-    // Atualizar minhocas
-    for (let i = worms.length - 1; i >= 0; i--) {
-        const worm = worms[i];
-        
-        if (worm.eaten) {
-            worms.splice(i, 1);
-            continue;
+            });
         }
         
-        if (!worm.retreating) {
-            // Emergindo
-            if (worm.emergeProgress < 1) {
-                worm.emergeProgress += 0.05;
-            } else {
-                // Totalmente visível
-                worm.timeVisible++;
+        // Atualizar minhocas
+        function updateWorms() {
+            if (!isBonusStage) return;
+            
+            // Atualizar cooldown dos buracos
+            wormHoles.forEach(hole => {
+                if (hole.cooldown > 0) hole.cooldown--;
+            });
+            
+            // Atualizar minhocas
+            for (let i = worms.length - 1; i >= 0; i--) {
+                const worm = worms[i];
                 
-                if (worm.timeVisible >= worm.maxTimeVisible) {
-                    worm.retreating = true;
+                if (worm.eaten) {
+                    worms.splice(i, 1);
+                    continue;
+                }
+                
+                if (!worm.retreating) {
+                    // Emergindo
+                    if (worm.emergeProgress < 1) {
+                        worm.emergeProgress += 0.05;
+                    } else {
+                // Totalmente visível
+                        worm.timeVisible++;
+                        
+                        if (worm.timeVisible >= worm.maxTimeVisible) {
+                            worm.retreating = true;
+                        }
+                    }
+                } else {
+                    // Voltando para o buraco
+                    worm.emergeProgress -= 0.08;
+                    
+                    if (worm.emergeProgress <= 0) {
+                        worm.hole.hasWorm = false;
+                        worm.hole.cooldown = 30 + Math.random() * 30; // 0.5-1s de cooldown
+                        worms.splice(i, 1);
+                    }
                 }
             }
-        } else {
-            // Voltando para o buraco
-            worm.emergeProgress -= 0.08;
-            
-            if (worm.emergeProgress <= 0) {
-                worm.hole.hasWorm = false;
-                worm.hole.cooldown = 30 + Math.random() * 30; // 0.5-1s de cooldown
-                worms.splice(i, 1);
-            }
         }
-    }
-}
-
-// Verificar colisão com minhocas e cobras
-function checkWormCollisions() {
-    if (!isBonusStage) return;
-    
-    for (let i = worms.length - 1; i >= 0; i--) {
-        const worm = worms[i];
-        if (worm.eaten || worm.emergeProgress < 0.5) continue;
         
-        const wormY = worm.y - 20 * worm.emergeProgress;
-        const dist = Math.hypot(player.x - worm.x, player.y - wormY);
-        if (dist < player.size + 20) {
+// Verificar colisão com minhocas e cobras
+        function checkWormCollisions() {
+            if (!isBonusStage) return;
+            
+            for (let i = worms.length - 1; i >= 0; i--) {
+                const worm = worms[i];
+                if (worm.eaten || worm.emergeProgress < 0.5) continue;
+                
+                const wormY = worm.y - 20 * worm.emergeProgress;
+                const dist = Math.hypot(player.x - worm.x, player.y - wormY);
+                if (dist < player.size + 20) {
             if (worm.isSnake) {
                 // Player tocou na COBRA - stunnar!
                 if (!player.stunned) {
@@ -718,29 +746,33 @@ function checkWormCollisions() {
                 worm.hole.cooldown = 60 + Math.random() * 60; // Cooldown maior após atacar
             } else {
                 // Player tocou na MINHOCA - dar pontos!
-                worm.eaten = true;
-                worm.hole.hasWorm = false;
-                worm.hole.cooldown = 20 + Math.random() * 20;
-                
-                playerScore++;
-                
+                    worm.eaten = true;
+                    worm.hole.hasWorm = false;
+                    worm.hole.cooldown = 20 + Math.random() * 20;
+                    
+                lastPlayerScore = playerScore;
+                    playerScore++;
+                if (playerScore !== lastPlayerScore) {
+                    playerScoreAnimation = 30; // Inicia animação do placar
+                }
+                    
                 // Atualizar contador de minhocas (fase bônus)
-                document.getElementById('wormCount').textContent = playerScore;
-                
+                    document.getElementById('wormCount').textContent = playerScore;
+                    
                 // 🔊 Som de pegar minhoca
-                playSound('worm');
-                
+                    playSound('worm');
+                    
                 // Animação de comer
-                player.eatAnimation = 15;
+                    player.eatAnimation = 15;
                 player.eatEmoji = '🪱';
-                
-                // Criar efeito visual de captura
-                createWormEatEffect(worm.x, wormY);
+                    
+                    // Criar efeito visual de captura
+                    createWormEatEffect(worm.x, wormY);
+                }
+        }
             }
         }
-    }
-}
-
+        
 // Criar efeito visual ao ser stunnado por cobra
 function createSnakeStunEffect(x, y) {
     // Partículas vermelhas (perigo)
@@ -783,154 +815,698 @@ function createSnakeStunEffect(x, y) {
 }
 
 // Criar efeito visual ao comer minhoca (mantido para compatibilidade, mas não usado mais)
-function createWormEatEffect(x, y) {
+        function createWormEatEffect(x, y) {
     // Partículas explodindo
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                wormEatEffects.push({
+                    type: 'particle',
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * (3 + Math.random() * 2),
+                    vy: Math.sin(angle) * (3 + Math.random() * 2),
+                    life: 30,
+                    maxLife: 30,
+                    color: '#E8B4B8' // Cor rosa da minhoca
+                });
+            }
+            
+            // Texto +1 subindo
+            wormEatEffects.push({
+                type: 'text',
+                x: x,
+                y: y,
+                vy: -2,
+                life: 45,
+                maxLife: 45,
+        text: '+1 🪱'
+            });
+            
+    // Anel de expansão
+            wormEatEffects.push({
+                type: 'ring',
+                x: x,
+                y: y,
+                radius: 10,
+                maxRadius: 50,
+                life: 20,
+                maxLife: 20
+            });
+        }
+        
+        // Atualizar efeitos visuais
+        function updateWormEatEffects() {
+            for (let i = wormEatEffects.length - 1; i >= 0; i--) {
+                const effect = wormEatEffects[i];
+                effect.life--;
+                
+                if (effect.type === 'particle') {
+                    effect.x += effect.vx;
+                    effect.y += effect.vy;
+                    effect.vy += 0.2; // Gravidade
+                }
+                
+                if (effect.type === 'text') {
+                    effect.y += effect.vy;
+                }
+                
+                if (effect.type === 'ring') {
+                    effect.radius += (effect.maxRadius - 10) / effect.maxLife;
+                }
+                
+                if (effect.life <= 0) {
+                    wormEatEffects.splice(i, 1);
+                }
+            }
+        }
+        
+        // Desenhar efeitos visuais
+        function drawWormEatEffects() {
+            wormEatEffects.forEach(effect => {
+                const alpha = effect.life / effect.maxLife;
+                
+                if (effect.type === 'particle') {
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = effect.color;
+                    ctx.beginPath();
+                    ctx.arc(effect.x, effect.y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+                
+                if (effect.type === 'text') {
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    ctx.font = 'bold 20px Arial';
+            // Cor vermelha para stun, verde para captura antiga
+            const textColor = effect.text && effect.text.includes('STUNNED') ? '#e74c3c' : '#2ecc71';
+            ctx.fillStyle = textColor;
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 3;
+                    ctx.textAlign = 'center';
+                    ctx.strokeText(effect.text, effect.x, effect.y);
+                    ctx.fillText(effect.text, effect.x, effect.y);
+                    ctx.restore();
+                }
+                
+                if (effect.type === 'ring') {
+                    ctx.save();
+                    ctx.globalAlpha = alpha * 0.5;
+            // Cor vermelha para stun, roxa para captura antiga
+            const ringColor = effect.text && effect.text.includes('STUNNED') ? '#e74c3c' : '#9b59b6';
+            ctx.strokeStyle = ringColor;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            });
+        }
+
+// ========== SISTEMA DE FRUTAS CONGELADAS (BÔNUS DO GELO) ==========
+
+// Inicializar frutas congeladas
+function initFrozenFruits() {
+    frozenFruits = [];
+    iceShards = [];
+    
+    // Spawnar apenas 1 fruta no início para melhor performance
+    spawnFrozenFruit();
+}
+
+// Spawnar fruta congelada
+function spawnFrozenFruit() {
+    if (!isBonusStage || currentArea !== 3) return;
+    
+    // Limitar número de frutas na tela (máximo 2 para melhor performance)
+    if (frozenFruits.length >= 2) return;
+    
+    const foodEmojis = ['🍎', '🍌', '🍇', '🍊', '🍓', '🍉', '🍑', '🥝'];
+    
+    frozenFruits.push({
+        x: Math.random() * (canvas.width - 100) + 50,
+        y: Math.random() * (canvas.height - 200) + 100,
+        emoji: foodEmojis[Math.floor(Math.random() * foodEmojis.length)],
+        size: 30 + Math.random() * 15,
+        iceLayer: 3, // Camadas de gelo (precisa bicar 3 vezes)
+        maxIceLayer: 3,
+        points: 1, // Vale 1 ponto quando coletada
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.02,
+        floatOffset: Math.random() * Math.PI * 2,
+        collected: false,
+        lastHitTime: 0, // Timestamp da última vez que foi bicada
+        wasInRange: false // Flag para detectar quando saiu da área
+    });
+}
+
+// ========== SISTEMA DE FRUTOS DE CACTOS (BÔNUS DO DESERTO) ==========
+
+// Inicializar frutos de cactos
+function initCactusFruits() {
+    cactusFruits = [];
+    cactusFruitParticles = [];
+    
+    // Spawnar apenas 1 fruto no início para melhor performance
+    spawnCactusFruit();
+}
+
+// Spawnar fruto de cacto
+function spawnCactusFruit() {
+    if (!isBonusStage || currentArea !== 2) return;
+    
+    // Limitar número de frutos na tela (máximo 1 para melhor performance)
+    if (cactusFruits.length >= 1) return;
+    
+    const fruitEmojis = ['🌵', '🍇', '🍊', '🍑'];
+    
+    // Posição aleatória no topo de um cacto (simulado)
+    cactusFruits.push({
+        x: Math.random() * (canvas.width - 100) + 50,
+        y: groundY - 80 - Math.random() * 40, // Acima do chão, variando altura
+        emoji: fruitEmojis[Math.floor(Math.random() * fruitEmojis.length)],
+        size: 25 + Math.random() * 10,
+        maxSize: 25 + Math.random() * 10,
+        freshness: 100, // 100 = fresco, 0 = seco
+        maxFreshness: 100,
+        points: 1, // Vale 1 ponto quando coletada
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.01,
+        floatOffset: Math.random() * Math.PI * 2,
+        collected: false,
+        dried: false
+    });
+}
+
+// Atualizar frutos de cactos
+function updateCactusFruits() {
+    if (!isBonusStage || currentArea !== 2) return;
+    
+    // Spawnar novos frutos periodicamente (probabilidade muito reduzida)
+    if (Math.random() < 0.005 && cactusFruits.length < 1) {
+        spawnCactusFruit();
+    }
+    
+    // Atualizar frutos existentes
+    for (let i = cactusFruits.length - 1; i >= 0; i--) {
+        const fruit = cactusFruits[i];
+        
+        if (fruit.collected || fruit.dried) {
+            cactusFruits.splice(i, 1);
+            continue;
+        }
+        
+        // Fruto seca progressivamente no calor do deserto
+        fruit.freshness -= 0.5; // Seca mais rápido que o gelo
+        
+        // Reduzir tamanho conforme seca
+        const freshnessRatio = fruit.freshness / fruit.maxFreshness;
+        fruit.size = fruit.maxSize * (0.5 + freshnessRatio * 0.5); // Reduz até 50% do tamanho
+        
+        // Rotação suave
+        fruit.rotation += fruit.rotationSpeed;
+        
+        // Flutuação suave
+        fruit.floatOffset += 0.05;
+        
+        // Se secou completamente, remover
+        if (fruit.freshness <= 0) {
+            fruit.dried = true;
+            createDriedFruitEffect(fruit.x, fruit.y);
+        }
+    }
+    
+    // Atualizar partículas
+    for (let i = cactusFruitParticles.length - 1; i >= 0; i--) {
+        const particle = cactusFruitParticles[i];
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+        particle.vy += 0.15; // Gravidade
+        particle.rotation += particle.rotationSpeed;
+        particle.life--;
+        particle.alpha = particle.life / particle.maxLife;
+        
+        if (particle.life <= 0 || particle.y > canvas.height + 20) {
+            cactusFruitParticles.splice(i, 1);
+        }
+    }
+}
+
+// Verificar colisão com frutos de cactos
+function checkCactusFruitCollisions() {
+    if (!isBonusStage || currentArea !== 2) return;
+    
+    for (let i = cactusFruits.length - 1; i >= 0; i--) {
+        const fruit = cactusFruits[i];
+        if (fruit.collected || fruit.dried) continue;
+        
+        const dist = Math.hypot(player.x - fruit.x, player.y - fruit.y);
+        const hitRadius = fruit.size / 2 + player.size;
+        const isInRange = dist < hitRadius;
+        
+        // Detectar quando o jogador entrou/saiu da área de colisão
+        const wasInRangeBefore = fruit.wasInRange || false;
+        const justEntered = !wasInRangeBefore && isInRange;
+        
+        if (fruit.wasInRange && !isInRange) {
+            fruit.wasInRange = false;
+        }
+        
+        if (isInRange) {
+            fruit.wasInRange = true;
+            
+            // Coletar fruto (mesmo se estiver secando)
+            if (justEntered && !fruit.collected) {
+                fruit.collected = true;
+                
+                lastPlayerScore = playerScore;
+                playerScore += fruit.points;
+                if (playerScore !== lastPlayerScore) {
+                    playerScoreAnimation = 30;
+                }
+                
+                // Atualizar contador
+                document.getElementById('wormCount').textContent = playerScore;
+                
+                // Som de coletar
+                playSound('yummy');
+                
+                // Animação de comer
+                player.eatAnimation = 20;
+                player.lastEatenEmoji = fruit.emoji;
+                
+                // Criar efeito visual
+                createCactusFruitCollectEffect(fruit.x, fruit.y, fruit.emoji, fruit.points);
+            }
+        }
+    }
+}
+
+// Criar efeito visual quando fruto seca
+function createDriedFruitEffect(x, y) {
+    // Partículas marrons (poeira)
     for (let i = 0; i < 8; i++) {
-        const angle = (i / 8) * Math.PI * 2;
+        const angle = (Math.PI * 2 / 8) * i;
+        cactusFruitParticles.push({
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * (1 + Math.random() * 2),
+            vy: Math.sin(angle) * (1 + Math.random() * 2),
+            size: 2 + Math.random() * 3,
+            rotation: Math.random() * Math.PI * 2,
+            rotationSpeed: (Math.random() - 0.5) * 0.1,
+            life: 30 + Math.random() * 20,
+            maxLife: 30 + Math.random() * 20,
+            alpha: 1,
+            color: '#8B4513' // Marrom (poeira)
+        });
+    }
+}
+
+// Criar efeito visual ao coletar fruto
+function createCactusFruitCollectEffect(x, y, emoji, points) {
+    // Partículas douradas
+    for (let i = 0; i < 15; i++) {
+        const angle = (Math.PI * 2 / 15) * i;
         wormEatEffects.push({
             type: 'particle',
             x: x,
             y: y,
             vx: Math.cos(angle) * (3 + Math.random() * 2),
             vy: Math.sin(angle) * (3 + Math.random() * 2),
-            life: 30,
-            maxLife: 30,
-            color: '#E8B4B8' // Cor rosa da minhoca
+            life: 40,
+            maxLife: 40,
+            color: '#f39c12' // Dourado/laranja do deserto
         });
     }
     
-    // Texto +1 subindo
+    // Texto com emoji da fruta
     wormEatEffects.push({
         type: 'text',
         x: x,
         y: y,
         vy: -2,
-        life: 45,
-        maxLife: 45,
-        text: '+1 🪱'
+        life: 50,
+        maxLife: 50,
+        text: `${emoji} +${points}`
     });
+}
+
+// Desenhar frutos de cactos
+function drawCactusFruits() {
+    if (!isBonusStage || currentArea !== 2) return;
     
-    // Anel de expansão
-    wormEatEffects.push({
-        type: 'ring',
-        x: x,
-        y: y,
-        radius: 10,
-        maxRadius: 50,
-        life: 20,
-        maxLife: 20
-    });
-}
-
-// Atualizar efeitos visuais
-function updateWormEatEffects() {
-    for (let i = wormEatEffects.length - 1; i >= 0; i--) {
-        const effect = wormEatEffects[i];
-        effect.life--;
+    cactusFruits.forEach(fruit => {
+        if (fruit.collected || fruit.dried) return;
         
-        if (effect.type === 'particle') {
-            effect.x += effect.vx;
-            effect.y += effect.vy;
-            effect.vy += 0.2; // Gravidade
-        }
-        
-        if (effect.type === 'text') {
-            effect.y += effect.vy;
-        }
-        
-        if (effect.type === 'ring') {
-            effect.radius += (effect.maxRadius - 10) / effect.maxLife;
-        }
-        
-        if (effect.life <= 0) {
-            wormEatEffects.splice(i, 1);
-        }
-    }
-}
-
-// Desenhar efeitos visuais
-function drawWormEatEffects() {
-    wormEatEffects.forEach(effect => {
-        const alpha = effect.life / effect.maxLife;
-        
-        if (effect.type === 'particle') {
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            ctx.fillStyle = effect.color;
-            ctx.beginPath();
-            ctx.arc(effect.x, effect.y, 4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        }
-        
-        if (effect.type === 'text') {
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            ctx.font = 'bold 20px Arial';
-            // Cor vermelha para stun, verde para captura antiga
-            const textColor = effect.text && effect.text.includes('STUNNED') ? '#e74c3c' : '#2ecc71';
-            ctx.fillStyle = textColor;
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 3;
-            ctx.textAlign = 'center';
-            ctx.strokeText(effect.text, effect.x, effect.y);
-            ctx.fillText(effect.text, effect.x, effect.y);
-            ctx.restore();
-        }
-        
-        if (effect.type === 'ring') {
-            ctx.save();
-            ctx.globalAlpha = alpha * 0.5;
-            // Cor vermelha para stun, roxa para captura antiga
-            const ringColor = effect.text && effect.text.includes('STUNNED') ? '#e74c3c' : '#9b59b6';
-            ctx.strokeStyle = ringColor;
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.restore();
-        }
-    });
-}
-
-// Desenhar buracos e minhocas
-function drawWormHoles() {
-    if (!isBonusStage) return;
-    
-    // Desenhar buracos
-    wormHoles.forEach(hole => {
         ctx.save();
+        ctx.translate(fruit.x, fruit.y + Math.sin(fruit.floatOffset) * 3);
+        ctx.rotate(fruit.rotation);
         
-        // Sombra do buraco
-        ctx.fillStyle = '#2C1810';
-        ctx.beginPath();
-        ctx.ellipse(hole.x, hole.y, hole.width / 2, hole.height / 2, 0, 0, Math.PI * 2);
-        ctx.fill();
+        // Calcular frescor (0 = seco, 1 = fresco)
+        const freshnessRatio = fruit.freshness / fruit.maxFreshness;
         
-        // Borda do buraco
-        ctx.strokeStyle = '#5D3A1A';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+        // Cor muda conforme seca (verde -> marrom)
+        const freshColor = '#2ecc71'; // Verde fresco
+        const dryColor = '#8B4513'; // Marrom seco
+        const currentColor = interpolateColor(freshColor, dryColor, 1 - freshnessRatio);
         
-        // Terra ao redor
-        ctx.fillStyle = '#8B5A2B';
-        ctx.beginPath();
-        ctx.ellipse(hole.x, hole.y, hole.width / 2 + 5, hole.height / 2 + 3, 0, 0, Math.PI);
-        ctx.fill();
+        // Opacidade reduz conforme seca
+        ctx.globalAlpha = 0.6 + freshnessRatio * 0.4;
+        
+        // Desenhar fruto
+        ctx.font = `${fruit.size}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(fruit.emoji, 0, 0);
+        
+        // Mostrar frescor restante
+        if (freshnessRatio < 0.5) {
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#f39c12';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText(`🔥${Math.ceil(freshnessRatio * 100)}%`, 0, -fruit.size / 2 - 12);
+        }
         
         ctx.restore();
     });
     
-    // Desenhar minhocas e cobras
-    worms.forEach(worm => {
-        if (worm.eaten) return;
+    // Desenhar partículas
+    cactusFruitParticles.forEach(particle => {
+        ctx.save();
+        ctx.globalAlpha = particle.alpha;
+        ctx.translate(particle.x, particle.y);
+        ctx.rotate(particle.rotation);
+        
+        ctx.fillStyle = particle.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, particle.size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+    });
+}
+
+// Atualizar frutas congeladas
+function updateFrozenFruits() {
+    if (!isBonusStage || currentArea !== 3) return;
+    
+    // Spawnar novas frutas periodicamente (probabilidade muito reduzida)
+    if (Math.random() < 0.008 && frozenFruits.length < 2) {
+        spawnFrozenFruit();
+    }
+    
+    // Atualizar frutas existentes
+    for (let i = frozenFruits.length - 1; i >= 0; i--) {
+        const fruit = frozenFruits[i];
+        
+        if (fruit.collected) {
+            frozenFruits.splice(i, 1);
+            continue;
+        }
+        
+        // Rotação suave
+        fruit.rotation += fruit.rotationSpeed;
+        
+        // Flutuação suave
+        fruit.floatOffset += 0.05;
+    }
+    
+    // Atualizar estilhaços de gelo
+    for (let i = iceShards.length - 1; i >= 0; i--) {
+        const shard = iceShards[i];
+        shard.x += shard.vx;
+        shard.y += shard.vy;
+        shard.vy += 0.2; // Gravidade
+        shard.rotation += shard.rotationSpeed;
+        shard.life--;
+        shard.alpha = shard.life / shard.maxLife;
+        
+        if (shard.life <= 0 || shard.y > canvas.height + 20) {
+            iceShards.splice(i, 1);
+        }
+    }
+}
+
+// Verificar colisão com frutas congeladas
+function checkFrozenFruitCollisions() {
+    if (!isBonusStage || currentArea !== 3) return;
+    
+    for (let i = frozenFruits.length - 1; i >= 0; i--) {
+        const fruit = frozenFruits[i];
+        if (fruit.collected) continue;
+        
+        const dist = Math.hypot(player.x - fruit.x, player.y - fruit.y);
+        const hitRadius = fruit.size / 2 + player.size;
+        const isInRange = dist < hitRadius;
+        
+        // Detectar quando o jogador entrou/saiu da área de colisão
+        const wasInRangeBefore = fruit.wasInRange;
+        const justEntered = !wasInRangeBefore && isInRange;
+        
+        if (fruit.wasInRange && !isInRange) {
+            // Jogador saiu - resetar flag
+            fruit.wasInRange = false;
+        }
+        
+        if (isInRange) {
+            // Player está na área de colisão
+            fruit.wasInRange = true;
+            
+            // Verificar se já passou tempo suficiente desde a última interação
+            const timeSinceLastHit = Date.now() - fruit.lastHitTime;
+            const minTimeBetweenHits = 300; // 300ms entre cada bicada
+            
+            if (fruit.iceLayer > 0) {
+                // Ainda tem gelo - precisa bicar para quebrar
+                if (timeSinceLastHit > minTimeBetweenHits) {
+                    // Reduzir camada de gelo
+                    fruit.iceLayer--;
+                    fruit.lastHitTime = Date.now();
+                    
+                    // Criar estilhaços de gelo
+                    createIceShards(fruit.x, fruit.y);
+                    
+                    // Som de vidro/gelo quebrando
+                    if (sounds.iceBreak && !sfxMuted) {
+                        try {
+                            sounds.iceBreak.currentTime = 0;
+                            sounds.iceBreak.volume = masterVolume * 0.8; // Volume um pouco mais baixo
+                            sounds.iceBreak.play().catch(e => {
+                                // Se falhar, usar som alternativo
+                                console.log('Som de gelo não disponível, usando som alternativo');
+                                playSound('eat');
+                            });
+                        } catch (e) {
+                            // Fallback para som de comer se não tiver o som de gelo
+                            playSound('eat');
+                        }
+                    } else if (!sfxMuted) {
+                        // Fallback para som de comer se não tiver o som de gelo ou SFX estiver mutado
+                        playSound('eat');
+                    }
+                    
+                    // Animação de impacto
+                    player.eatAnimation = 10;
+                    
+                    // NÃO coletar - ainda tem gelo
+                }
+            } else if (fruit.iceLayer === 0 && !fruit.collected) {
+                // Não tem mais gelo - pode coletar, mas só se acabou de entrar na área
+                // (justEntered = true significa que não estava em range antes)
+                if (justEntered) {
+                    // Jogador acabou de entrar na área (não estava em range antes)
+                    fruit.collected = true;
+                    
+                    lastPlayerScore = playerScore;
+                    playerScore += fruit.points;
+                    if (playerScore !== lastPlayerScore) {
+                        playerScoreAnimation = 30;
+                    }
+                    
+                    // Atualizar contador
+                    document.getElementById('wormCount').textContent = playerScore;
+                    
+                    // Som de coletar
+                    playSound('yummy');
+                    
+                    // Animação de comer
+                    player.eatAnimation = 20;
+                    player.lastEatenEmoji = fruit.emoji;
+                    
+                    // Criar efeito visual
+                    createFruitCollectEffect(fruit.x, fruit.y, fruit.emoji, fruit.points);
+                }
+            }
+        }
+    }
+}
+
+// Criar estilhaços de gelo ao quebrar
+function createIceShards(x, y) {
+    for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 / 8) * i + Math.random() * 0.5;
+        iceShards.push({
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * (2 + Math.random() * 3),
+            vy: Math.sin(angle) * (2 + Math.random() * 3),
+            size: 3 + Math.random() * 4,
+            rotation: Math.random() * Math.PI * 2,
+            rotationSpeed: (Math.random() - 0.5) * 0.1,
+            life: 30 + Math.random() * 20,
+            maxLife: 30 + Math.random() * 20,
+            alpha: 1
+        });
+    }
+}
+
+// Criar efeito visual ao coletar fruta
+function createFruitCollectEffect(x, y, emoji, points) {
+    // Partículas douradas
+    for (let i = 0; i < 15; i++) {
+        const angle = (Math.PI * 2 / 15) * i;
+        wormEatEffects.push({
+            type: 'particle',
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * (3 + Math.random() * 2),
+            vy: Math.sin(angle) * (3 + Math.random() * 2),
+            life: 40,
+            maxLife: 40,
+            color: '#f39c12' // Dourado
+        });
+    }
+    
+    // Texto com emoji da fruta
+    wormEatEffects.push({
+        type: 'text',
+        x: x,
+        y: y,
+        vy: -2,
+        life: 50,
+        maxLife: 50,
+        text: `${emoji} +${points}`
+    });
+}
+
+// Desenhar frutas congeladas
+function drawFrozenFruits() {
+    if (!isBonusStage || currentArea !== 3) return;
+    
+    frozenFruits.forEach(fruit => {
+        if (fruit.collected) return;
         
         ctx.save();
-        ctx.translate(worm.x, worm.y);
+        ctx.translate(fruit.x, fruit.y + Math.sin(fruit.floatOffset) * 3);
+        ctx.rotate(fruit.rotation);
         
+        // Camada de gelo externa (mais espessa quando tem mais camadas)
+        const iceThickness = (fruit.iceLayer / fruit.maxIceLayer) * 8;
+        const iceAlpha = 0.6 + (fruit.iceLayer / fruit.maxIceLayer) * 0.3;
+        
+        // Gelo brilhante ao redor da fruta
+        const iceGradient = ctx.createRadialGradient(0, 0, fruit.size / 2, 0, 0, fruit.size / 2 + iceThickness);
+        iceGradient.addColorStop(0, `rgba(200, 230, 255, ${iceAlpha})`);
+        iceGradient.addColorStop(0.5, `rgba(150, 200, 255, ${iceAlpha * 0.8})`);
+        iceGradient.addColorStop(1, `rgba(100, 180, 255, 0)`);
+        
+        ctx.fillStyle = iceGradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, fruit.size / 2 + iceThickness, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Borda de gelo
+        ctx.strokeStyle = `rgba(255, 255, 255, ${iceAlpha})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Fruta dentro do gelo (mais opaca quando tem gelo)
+        ctx.globalAlpha = 0.4 + (1 - fruit.iceLayer / fruit.maxIceLayer) * 0.6;
+        ctx.font = `${fruit.size}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(fruit.emoji, 0, 0);
+        
+        // Mostrar camadas de gelo restantes
+        if (fruit.iceLayer > 0) {
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText(`❄️${fruit.iceLayer}`, 0, -fruit.size / 2 - 15);
+        }
+        
+        ctx.restore();
+    });
+    
+    // Desenhar estilhaços de gelo
+    iceShards.forEach(shard => {
+        ctx.save();
+        ctx.globalAlpha = shard.alpha;
+        ctx.translate(shard.x, shard.y);
+        ctx.rotate(shard.rotation);
+        
+        // Desenhar pequeno cristal de gelo
+        ctx.strokeStyle = 'rgba(200, 220, 255, 0.8)';
+        ctx.fillStyle = 'rgba(200, 220, 255, 0.4)';
+        ctx.lineWidth = 1;
+        
+        ctx.beginPath();
+        for (let j = 0; j < 6; j++) {
+            const angle = (Math.PI / 3) * j;
+            const x = Math.cos(angle) * shard.size;
+            const y = Math.sin(angle) * shard.size;
+            if (j === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.restore();
+    });
+}
+        
+        // Desenhar buracos e minhocas
+        function drawWormHoles() {
+            if (!isBonusStage) return;
+            
+            // Desenhar buracos
+            wormHoles.forEach(hole => {
+                ctx.save();
+                
+                // Sombra do buraco
+                ctx.fillStyle = '#2C1810';
+                ctx.beginPath();
+                ctx.ellipse(hole.x, hole.y, hole.width / 2, hole.height / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Borda do buraco
+                ctx.strokeStyle = '#5D3A1A';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                // Terra ao redor
+                ctx.fillStyle = '#8B5A2B';
+                ctx.beginPath();
+                ctx.ellipse(hole.x, hole.y, hole.width / 2 + 5, hole.height / 2 + 3, 0, 0, Math.PI);
+                ctx.fill();
+                
+                ctx.restore();
+            });
+            
+    // Desenhar minhocas e cobras
+            worms.forEach(worm => {
+                if (worm.eaten) return;
+                
+                ctx.save();
+                ctx.translate(worm.x, worm.y);
+                
         const emergeY = worm.isSnake ? -35 * worm.emergeProgress : -30 * worm.emergeProgress;
         const wiggle = Math.sin(Date.now() / (worm.isSnake ? 80 : 100)) * (worm.isSnake ? 4 : 3) * worm.emergeProgress;
-        
+                
         if (worm.isSnake) {
             // DESENHAR COBRA
             const bodyWiggle = Math.sin(Date.now() / 100 + 1) * 2 * worm.emergeProgress;
@@ -1009,1365 +1585,1479 @@ function drawWormHoles() {
             }
         } else {
             // DESENHAR MINHOCA NORMAL
-            // Corpo da minhoca (segmentos)
-            ctx.fillStyle = '#E8B4B8';
-            for (let j = 0; j < 4; j++) {
-                const segY = emergeY + j * 8;
+                // Corpo da minhoca (segmentos)
+                ctx.fillStyle = '#E8B4B8';
+                for (let j = 0; j < 4; j++) {
+                    const segY = emergeY + j * 8;
                 if (segY < 0) { // Só desenha acima do buraco
-                    const segWiggle = wiggle * (1 - j * 0.2);
+                        const segWiggle = wiggle * (1 - j * 0.2);
+                        ctx.beginPath();
+                        ctx.ellipse(segWiggle, segY, 8, 5, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+                
+            // Cabeça da minhoca
+                if (emergeY + 8 < 0) {
+                    ctx.fillStyle = '#D4A5A5';
                     ctx.beginPath();
-                    ctx.ellipse(segWiggle, segY, 8, 5, 0, 0, Math.PI * 2);
+                    ctx.arc(wiggle, emergeY - 5, 10, 0, Math.PI * 2);
                     ctx.fill();
+                    
+                    // Olhinhos
+                    ctx.fillStyle = 'black';
+                    ctx.beginPath();
+                    ctx.arc(wiggle - 4, emergeY - 7, 2, 0, Math.PI * 2);
+                    ctx.arc(wiggle + 4, emergeY - 7, 2, 0, Math.PI * 2);
+                    ctx.fill();
+            }
+                }
+                
+                ctx.restore();
+            });
+        }
+
+        // Controles
+        const keys = {};
+
+        // Modo Debug (ativar no console: window.debugMode = true)
+        let debugMode = false;
+        window.debugMode = false; // Pode ser ativado no console do navegador
+        
+        // Atalho para ativar/desativar debug: Ctrl+Shift+D
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
+                debugMode = !debugMode;
+                window.debugMode = debugMode;
+        console.log('🔧 Modo Debug:', debugMode ? 'ATIVADO' : 'DESATIVADO');
+                
+                // Mostrar/esconder indicador de debug
+                const debugIndicator = document.getElementById('debugIndicator');
+                if (debugIndicator) {
+                    if (debugMode) {
+                        debugIndicator.classList.add('active');
+                    } else {
+                        debugIndicator.classList.remove('active');
+                    }
+                }
+                
+                // Mostrar/esconder painel de debug
+                const debugPanel = document.getElementById('debugPanel');
+                if (debugPanel) {
+                    if (debugMode && gameRunning) {
+                        debugPanel.classList.add('active');
+                    } else {
+                        debugPanel.classList.remove('active');
+                    }
+                }
+                
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            keys[e.code] = true;
+            
+    // Atalhos de debug (só funcionam se debugMode estiver ativo)
+            if (debugMode && gameRunning) {
+        // Pressionar 'D' + 'B' para simular vitória do boss
+                if (e.key.toLowerCase() === 'b' && keys['d']) {
+                    simulateBossVictory();
+                    e.preventDefault();
+                }
+        // Pressionar 'D' + 'V' para simular vitória normal
+                else if (e.key.toLowerCase() === 'v' && keys['d']) {
+                    simulateVictory();
+                    e.preventDefault();
+                }
+                // Pressionar 'D' + 'L' para simular derrota
+                else if (e.key.toLowerCase() === 'l' && keys['d']) {
+                    simulateDefeat();
+                    e.preventDefault();
                 }
             }
-            
-            // Cabeça da minhoca
-            if (emergeY + 8 < 0) {
-                ctx.fillStyle = '#D4A5A5';
-                ctx.beginPath();
-                ctx.arc(wiggle, emergeY - 5, 10, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Olhinhos
-                ctx.fillStyle = 'black';
-                ctx.beginPath();
-                ctx.arc(wiggle - 4, emergeY - 7, 2, 0, Math.PI * 2);
-                ctx.arc(wiggle + 4, emergeY - 7, 2, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-        
-        ctx.restore();
-    });
-}
+        });
 
-// Controles
-const keys = {};
-
-// Modo Debug (ativar no console: window.debugMode = true)
-let debugMode = false;
-window.debugMode = false; // Pode ser ativado no console do navegador
-
-// Atalho para ativar/desativar debug: Ctrl+Shift+D
-document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
-        debugMode = !debugMode;
-        window.debugMode = debugMode;
-        console.log('🔧 Modo Debug:', debugMode ? 'ATIVADO' : 'DESATIVADO');
-        
-        // Mostrar/esconder indicador de debug
-        const debugIndicator = document.getElementById('debugIndicator');
-        if (debugIndicator) {
-            if (debugMode) {
-                debugIndicator.classList.add('active');
-            } else {
-                debugIndicator.classList.remove('active');
-            }
-        }
-        
-        // Mostrar/esconder painel de debug
-        const debugPanel = document.getElementById('debugPanel');
-        if (debugPanel) {
-            if (debugMode && gameRunning) {
-                debugPanel.classList.add('active');
-            } else {
-                debugPanel.classList.remove('active');
-            }
-        }
-        
-        e.preventDefault();
-    }
-});
-
-document.addEventListener('keydown', (e) => {
-    keys[e.key.toLowerCase()] = true;
-    keys[e.code] = true;
-    
-    // Atalhos de debug (só funcionam se debugMode estiver ativo)
-    if (debugMode && gameRunning) {
-        // Pressionar 'D' + 'B' para simular vitória do boss
-        if (e.key.toLowerCase() === 'b' && keys['d']) {
-            simulateBossVictory();
-            e.preventDefault();
-        }
-        // Pressionar 'D' + 'V' para simular vitória normal
-        else if (e.key.toLowerCase() === 'v' && keys['d']) {
-            simulateVictory();
-            e.preventDefault();
-        }
-        // Pressionar 'D' + 'L' para simular derrota
-        else if (e.key.toLowerCase() === 'l' && keys['d']) {
-            simulateDefeat();
-            e.preventDefault();
-        }
-    }
-});
-
-document.addEventListener('keyup', (e) => {
-    keys[e.key.toLowerCase()] = false;
-    keys[e.code] = false;
-});
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+            keys[e.code] = false;
+        });
 
 // Criar comida normal (cai do céu)
-function spawnFood() {
+        function spawnFood() {
     if (foods.length < 10) { // Máximo de 10 comidas na tela
-        foods.push({
-            x: Math.random() * (canvas.width - 100) + 50,
+                foods.push({
+                    x: Math.random() * (canvas.width - 100) + 50,
             y: -30, // Começa acima da tela
-            size: 25,
-            emoji: foodEmojis[Math.floor(Math.random() * foodEmojis.length)],
-            vy: 2 + Math.random() * 2, // Velocidade vertical
-            vx: 0, // Velocidade horizontal
+                    size: 25,
+                    emoji: foodEmojis[Math.floor(Math.random() * foodEmojis.length)],
+                    vy: 2 + Math.random() * 2, // Velocidade vertical
+                    vx: 0, // Velocidade horizontal
             grounded: false, // Só pode comer quando parou
-            bounces: 0, // Contagem de quiques
-            maxBounces: 2 + Math.floor(Math.random() * 2), // 2-3 quiques
-            isSpecial: false,
-            points: 1
-        });
-    }
-}
+                    bounces: 0, // Contagem de quiques
+                    maxBounces: 2 + Math.floor(Math.random() * 2), // 2-3 quiques
+                    isSpecial: false,
+                    points: 1
+                });
+            }
+        }
 
 // Criar comida especial (fica fixa no céu)
-function spawnSpecialFood() {
+        function spawnSpecialFood() {
     if (specialFoods.length < 1) { // Só 1 especial por vez
-        specialFoods.push({
-            x: Math.random() * (canvas.width - 150) + 75,
+                specialFoods.push({
+                    x: Math.random() * (canvas.width - 150) + 75,
             y: 80 + Math.random() * 100, // Fica no céu
-            size: 45, // Maior
-            emoji: foodEmojis[Math.floor(Math.random() * foodEmojis.length)],
-            isSpecial: true,
-            points: 5,
-            timeLeft: 300, // 5 segundos (60fps * 5)
-            pulseTime: 0
-        });
-        
-        cpu.goingForSpecial = false;
-    }
-}
-
-// Criar item de velocidade
-function spawnSpeedItem() {
-    if (speedItems.length < 1) { // Só 1 por vez
-        speedItems.push({
-            x: Math.random() * (canvas.width - 150) + 75,
-            y: 100 + Math.random() * 80,
-            size: 40,
-            timeLeft: 240, // 4 segundos
-            pulseTime: 0
-        });
-    }
-}
-
-// Atualizar comidas (fazer cair e quicar)
-function updateFood() {
-    for (let food of foods) {
-        if (!food.grounded) {
-            // Gravidade
-            food.vy += 0.15;
-            
-            // Movimento
-            food.y += food.vy;
-            food.x += food.vx;
-            
-            // Fricção horizontal
-            food.vx *= 0.98;
-            
-            // Quicar no chão
-            if (food.y >= groundY) {
-                food.y = groundY;
-                food.bounces++;
+                    size: 45, // Maior
+                    emoji: foodEmojis[Math.floor(Math.random() * foodEmojis.length)],
+                    isSpecial: true,
+                    points: 5,
+                    timeLeft: 300, // 5 segundos (60fps * 5)
+                    pulseTime: 0
+                });
                 
-                if (food.bounces >= food.maxBounces) {
-                    // Parou de quicar
-                    food.grounded = true;
-                    food.vx = 0;
-                    food.vy = 0;
-                } else {
+                cpu.goingForSpecial = false;
+            }
+        }
+
+        // Criar item de velocidade
+        function spawnSpeedItem() {
+    if (speedItems.length < 1) { // Só 1 por vez
+                speedItems.push({
+                    x: Math.random() * (canvas.width - 150) + 75,
+                    y: 100 + Math.random() * 80,
+                    size: 40,
+                    timeLeft: 240, // 4 segundos
+                    pulseTime: 0
+                });
+            }
+        }
+
+        // Atualizar comidas (fazer cair e quicar)
+        function updateFood() {
+            for (let food of foods) {
+                if (!food.grounded) {
+                    // Gravidade
+                    food.vy += 0.15;
+                    
+                    // Movimento
+                    food.y += food.vy;
+                    food.x += food.vx;
+                    
+            // Fricção horizontal
+                    food.vx *= 0.98;
+                    
+            // Quicar no chão
+                    if (food.y >= groundY) {
+                        food.y = groundY;
+                        food.bounces++;
+                        
+                        if (food.bounces >= food.maxBounces) {
+                            // Parou de quicar
+                            food.grounded = true;
+                            food.vx = 0;
+                            food.vy = 0;
+                        } else {
                     // Quica! Direção aleatória
-                    food.vy = -(food.vy * 0.6); // Perde energia
+                            food.vy = -(food.vy * 0.6); // Perde energia
                     food.vx = (Math.random() - 0.5) * 8; // Direção aleatória
+                        }
+                    }
+                    
+                    // Quicar nas paredes
+                    if (food.x <= 30) {
+                        food.x = 30;
+                        food.vx = Math.abs(food.vx) * 0.7;
+                    } else if (food.x >= canvas.width - 30) {
+                        food.x = canvas.width - 30;
+                        food.vx = -Math.abs(food.vx) * 0.7;
+                    }
                 }
             }
             
-            // Quicar nas paredes
-            if (food.x <= 30) {
-                food.x = 30;
-                food.vx = Math.abs(food.vx) * 0.7;
-            } else if (food.x >= canvas.width - 30) {
-                food.x = canvas.width - 30;
-                food.vx = -Math.abs(food.vx) * 0.7;
+            // Atualizar comidas especiais (contagem regressiva)
+            for (let i = specialFoods.length - 1; i >= 0; i--) {
+                specialFoods[i].timeLeft--;
+                specialFoods[i].pulseTime++;
+                
+                // Desaparece se o tempo acabou
+                if (specialFoods[i].timeLeft <= 0) {
+                    specialFoods.splice(i, 1);
+                }
+            }
+
+            // Atualizar itens de velocidade
+            for (let i = speedItems.length - 1; i >= 0; i--) {
+                speedItems[i].timeLeft--;
+                speedItems[i].pulseTime++;
+                
+                if (speedItems[i].timeLeft <= 0) {
+                    speedItems.splice(i, 1);
+                }
+            }
+
+            // Atualizar boost de velocidade do jogador
+            if (player.speedBoost > 0) {
+                player.speedBoost--;
+                player.speed = player.boostedSpeed;
+                if (player.speedBoost <= 0) {
+                    player.speed = player.baseSpeed;
+                }
+            }
+
+            // Atualizar boost de velocidade da CPU
+            if (cpu.speedBoost > 0) {
+                cpu.speedBoost--;
+                cpu.speed = cpu.boostedSpeed;
+                if (cpu.speedBoost <= 0) {
+                    cpu.speed = cpu.baseSpeed;
+                }
             }
         }
-    }
-    
-    // Atualizar comidas especiais (contagem regressiva)
-    for (let i = specialFoods.length - 1; i >= 0; i--) {
-        specialFoods[i].timeLeft--;
-        specialFoods[i].pulseTime++;
-        
-        // Desaparece se o tempo acabou
-        if (specialFoods[i].timeLeft <= 0) {
-            specialFoods.splice(i, 1);
-        }
-    }
-
-    // Atualizar itens de velocidade
-    for (let i = speedItems.length - 1; i >= 0; i--) {
-        speedItems[i].timeLeft--;
-        speedItems[i].pulseTime++;
-        
-        if (speedItems[i].timeLeft <= 0) {
-            speedItems.splice(i, 1);
-        }
-    }
-
-    // Atualizar boost de velocidade do jogador
-    if (player.speedBoost > 0) {
-        player.speedBoost--;
-        player.speed = player.boostedSpeed;
-        if (player.speedBoost <= 0) {
-            player.speed = player.baseSpeed;
-        }
-    }
-
-    // Atualizar boost de velocidade da CPU
-    if (cpu.speedBoost > 0) {
-        cpu.speedBoost--;
-        cpu.speed = cpu.boostedSpeed;
-        if (cpu.speedBoost <= 0) {
-            cpu.speed = cpu.baseSpeed;
-        }
-    }
-}
 
 // Distância entre dois pontos
-function distance(a, b) {
-    return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
-}
+        function distance(a, b) {
+            return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+        }
 
-// Escurecer cor
-function darkenColor(hex) {
-    let r = parseInt(hex.slice(1, 3), 16);
-    let g = parseInt(hex.slice(3, 5), 16);
-    let b = parseInt(hex.slice(5, 7), 16);
-    r = Math.floor(r * 0.6);
-    g = Math.floor(g * 0.6);
-    b = Math.floor(b * 0.6);
-    return `rgb(${r}, ${g}, ${b})`;
-}
+        // Escurecer cor
+        function darkenColor(hex) {
+            let r = parseInt(hex.slice(1, 3), 16);
+            let g = parseInt(hex.slice(3, 5), 16);
+            let b = parseInt(hex.slice(5, 7), 16);
+            r = Math.floor(r * 0.6);
+            g = Math.floor(g * 0.6);
+            b = Math.floor(b * 0.6);
+            return `rgb(${r}, ${g}, ${b})`;
+        }
 
 // Desenhar detalhes específicos de cada tipo de CPU
-function drawCpuTypeDetails(bird, hasStunReady) {
-    const time = Date.now() / 1000;
-    
-    switch(bird.type) {
-        case 'owl': // Coruja
+        function drawCpuTypeDetails(bird, hasStunReady) {
+            const time = Date.now() / 1000;
+            
+            switch(bird.type) {
+                case 'owl': // Coruja
             // Orelhas/Tufos - posicionadas no topo da cabeça
-            const owlSize = bird.size;
-            const earHeight = owlSize * 0.6; // Altura das orelhas
-            const earWidth = owlSize * 0.25; // Largura da base das orelhas
+                    const owlSize = bird.size;
+                    const earHeight = owlSize * 0.6; // Altura das orelhas
+                    const earWidth = owlSize * 0.25; // Largura da base das orelhas
             const topOfHead = bird.y - owlSize * 0.85; // Topo da cabeça (dentro do círculo)
-            
-            // Orelha esquerda (mais escura)
-            ctx.fillStyle = bird.wingColor || darkenColor(bird.color);
-            ctx.beginPath();
-            ctx.moveTo(bird.x - owlSize * 0.5, topOfHead + earHeight * 0.3); // Base esquerda
-            ctx.lineTo(bird.x - owlSize * 0.35, topOfHead - earHeight * 0.5); // Ponta
-            ctx.lineTo(bird.x - owlSize * 0.15, topOfHead + earHeight * 0.3); // Base direita
-            ctx.closePath();
-            ctx.fill();
-            
-            // Orelha direita (mais escura)
-            ctx.beginPath();
-            ctx.moveTo(bird.x + owlSize * 0.15, topOfHead + earHeight * 0.3);
-            ctx.lineTo(bird.x + owlSize * 0.35, topOfHead - earHeight * 0.5);
-            ctx.lineTo(bird.x + owlSize * 0.55, topOfHead + earHeight * 0.3);
-            ctx.closePath();
-            ctx.fill();
-            
-            // Interior das orelhas (mais claro)
-            ctx.fillStyle = bird.color;
-            ctx.beginPath();
-            ctx.moveTo(bird.x - owlSize * 0.45, topOfHead + earHeight * 0.35);
-            ctx.lineTo(bird.x - owlSize * 0.35, topOfHead - earHeight * 0.3);
-            ctx.lineTo(bird.x - owlSize * 0.22, topOfHead + earHeight * 0.35);
-            ctx.closePath();
-            ctx.fill();
-            
-            ctx.beginPath();
-            ctx.moveTo(bird.x + owlSize * 0.22, topOfHead + earHeight * 0.35);
-            ctx.lineTo(bird.x + owlSize * 0.35, topOfHead - earHeight * 0.3);
-            ctx.lineTo(bird.x + owlSize * 0.48, topOfHead + earHeight * 0.35);
-            ctx.closePath();
-            ctx.fill();
-            
-            // Disco facial (círculos ao redor dos olhos - característica da coruja)
-            ctx.strokeStyle = darkenColor(bird.color);
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(bird.x + owlSize * 0.15, bird.y - owlSize * 0.1, owlSize * 0.35, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(bird.x + owlSize * 0.5, bird.y - owlSize * 0.1, owlSize * 0.28, 0, Math.PI * 2);
-            ctx.stroke();
-            
-            // Padrão de penas manchadas no peito
-            ctx.fillStyle = 'rgba(0,0,0,0.12)';
-            for (let row = 0; row < 2; row++) {
-                for (let i = 0; i < 4; i++) {
+                    
+                    // Orelha esquerda (mais escura)
+                    ctx.fillStyle = bird.wingColor || darkenColor(bird.color);
                     ctx.beginPath();
-                    ctx.arc(
-                        bird.x - owlSize * 0.3 + i * owlSize * 0.22, 
-                        bird.y + owlSize * 0.2 + row * owlSize * 0.2, 
-                        owlSize * 0.08, 
-                        0, Math.PI * 2
-                    );
+                    ctx.moveTo(bird.x - owlSize * 0.5, topOfHead + earHeight * 0.3); // Base esquerda
+                    ctx.lineTo(bird.x - owlSize * 0.35, topOfHead - earHeight * 0.5); // Ponta
+                    ctx.lineTo(bird.x - owlSize * 0.15, topOfHead + earHeight * 0.3); // Base direita
+                    ctx.closePath();
                     ctx.fill();
-                }
-            }
-            break;
-            
+                    
+                    // Orelha direita (mais escura)
+                    ctx.beginPath();
+                    ctx.moveTo(bird.x + owlSize * 0.15, topOfHead + earHeight * 0.3);
+                    ctx.lineTo(bird.x + owlSize * 0.35, topOfHead - earHeight * 0.5);
+                    ctx.lineTo(bird.x + owlSize * 0.55, topOfHead + earHeight * 0.3);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    // Interior das orelhas (mais claro)
+                    ctx.fillStyle = bird.color;
+                    ctx.beginPath();
+                    ctx.moveTo(bird.x - owlSize * 0.45, topOfHead + earHeight * 0.35);
+                    ctx.lineTo(bird.x - owlSize * 0.35, topOfHead - earHeight * 0.3);
+                    ctx.lineTo(bird.x - owlSize * 0.22, topOfHead + earHeight * 0.35);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(bird.x + owlSize * 0.22, topOfHead + earHeight * 0.35);
+                    ctx.lineTo(bird.x + owlSize * 0.35, topOfHead - earHeight * 0.3);
+                    ctx.lineTo(bird.x + owlSize * 0.48, topOfHead + earHeight * 0.35);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+            // Disco facial (círculos ao redor dos olhos - característica da coruja)
+                    ctx.strokeStyle = darkenColor(bird.color);
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(bird.x + owlSize * 0.15, bird.y - owlSize * 0.1, owlSize * 0.35, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(bird.x + owlSize * 0.5, bird.y - owlSize * 0.1, owlSize * 0.28, 0, Math.PI * 2);
+                    ctx.stroke();
+                    
+            // Padrão de penas manchadas no peito
+                    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+                    for (let row = 0; row < 2; row++) {
+                        for (let i = 0; i < 4; i++) {
+                            ctx.beginPath();
+                            ctx.arc(
+                                bird.x - owlSize * 0.3 + i * owlSize * 0.22, 
+                                bird.y + owlSize * 0.2 + row * owlSize * 0.2, 
+                                owlSize * 0.08, 
+                                0, Math.PI * 2
+                            );
+                            ctx.fill();
+                        }
+                    }
+                    break;
+                    
         case 'hawk': // Falcão
-            // Marcas no rosto
-            ctx.fillStyle = '#000';
-            ctx.beginPath();
-            ctx.moveTo(bird.x + 5, bird.y + 5);
-            ctx.lineTo(bird.x - 5, bird.y + 20);
-            ctx.lineTo(bird.x + 2, bird.y + 20);
-            ctx.lineTo(bird.x + 10, bird.y + 8);
-            ctx.closePath();
-            ctx.fill();
-            break;
-            
-        case 'penguin': // Pinguim
-            // Barriga branca
-            ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.ellipse(bird.x, bird.y + 5, 20, 25, 0, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Bochechas rosadas
-            ctx.fillStyle = 'rgba(255, 182, 193, 0.5)';
-            ctx.beginPath();
-            ctx.arc(bird.x - 20, bird.y + 5, 8, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(bird.x + 30, bird.y + 5, 8, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-            
+                    // Marcas no rosto
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.moveTo(bird.x + 5, bird.y + 5);
+                    ctx.lineTo(bird.x - 5, bird.y + 20);
+                    ctx.lineTo(bird.x + 2, bird.y + 20);
+                    ctx.lineTo(bird.x + 10, bird.y + 8);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                    
+                case 'penguin': // Pinguim
+                    // Barriga branca
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.ellipse(bird.x, bird.y + 5, 20, 25, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Bochechas rosadas
+                    ctx.fillStyle = 'rgba(255, 182, 193, 0.5)';
+                    ctx.beginPath();
+                    ctx.arc(bird.x - 20, bird.y + 5, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(bird.x + 30, bird.y + 5, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                    
         case 'phoenix': // Fênix (simplificado para performance)
-            if (!bird.stunned) {
-                // Chama simples na cauda (sem shadow)
-                ctx.fillStyle = '#e74c3c';
-                ctx.beginPath();
-                ctx.moveTo(bird.x - 25, bird.y);
-                ctx.lineTo(bird.x - 45, bird.y + 20);
-                ctx.lineTo(bird.x - 25, bird.y + 5);
-                ctx.closePath();
-                ctx.fill();
-                
-                ctx.fillStyle = '#f39c12';
-                ctx.beginPath();
-                ctx.moveTo(bird.x - 25, bird.y);
-                ctx.lineTo(bird.x - 40, bird.y + 15);
-                ctx.lineTo(bird.x - 25, bird.y + 5);
-                ctx.closePath();
-                ctx.fill();
-                
-                // Crista simples
-                ctx.fillStyle = '#f39c12';
-                ctx.beginPath();
-                ctx.moveTo(bird.x, bird.y - 30);
-                ctx.lineTo(bird.x + 5, bird.y - 42);
-                ctx.lineTo(bird.x + 10, bird.y - 30);
-                ctx.closePath();
-                ctx.fill();
-            }
-            break;
-            
+                    if (!bird.stunned) {
+                        // Chama simples na cauda (sem shadow)
+                        ctx.fillStyle = '#e74c3c';
+                        ctx.beginPath();
+                        ctx.moveTo(bird.x - 25, bird.y);
+                        ctx.lineTo(bird.x - 45, bird.y + 20);
+                        ctx.lineTo(bird.x - 25, bird.y + 5);
+                        ctx.closePath();
+                        ctx.fill();
+                        
+                        ctx.fillStyle = '#f39c12';
+                        ctx.beginPath();
+                        ctx.moveTo(bird.x - 25, bird.y);
+                        ctx.lineTo(bird.x - 40, bird.y + 15);
+                        ctx.lineTo(bird.x - 25, bird.y + 5);
+                        ctx.closePath();
+                        ctx.fill();
+                        
+                        // Crista simples
+                        ctx.fillStyle = '#f39c12';
+                        ctx.beginPath();
+                        ctx.moveTo(bird.x, bird.y - 30);
+                        ctx.lineTo(bird.x + 5, bird.y - 42);
+                        ctx.lineTo(bird.x + 10, bird.y - 30);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                    break;
+                    
         case 'eagle': // Águia Real
             // Crista/penas douradas na cabeça
-            ctx.fillStyle = '#f1c40f';
-            ctx.beginPath();
-            ctx.moveTo(bird.x + 5, bird.y - 30);
-            ctx.lineTo(bird.x + 10, bird.y - 45);
-            ctx.lineTo(bird.x + 15, bird.y - 30);
-            ctx.closePath();
-            ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(bird.x + 15, bird.y - 28);
-            ctx.lineTo(bird.x + 20, bird.y - 40);
-            ctx.lineTo(bird.x + 25, bird.y - 28);
-            ctx.closePath();
-            ctx.fill();
-            
+                    ctx.fillStyle = '#f1c40f';
+                    ctx.beginPath();
+                    ctx.moveTo(bird.x + 5, bird.y - 30);
+                    ctx.lineTo(bird.x + 10, bird.y - 45);
+                    ctx.lineTo(bird.x + 15, bird.y - 30);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(bird.x + 15, bird.y - 28);
+                    ctx.lineTo(bird.x + 20, bird.y - 40);
+                    ctx.lineTo(bird.x + 25, bird.y - 28);
+                    ctx.closePath();
+                    ctx.fill();
+                    
             // Marca branca na cabeça
-            ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.arc(bird.x + 15, bird.y - 20, 8, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-    }
-}
-
-// Atualizar jogador
-function updatePlayer() {
-    // Se estiver atordoado, não se move
-    if (player.stunned) {
-        player.stunTime--;
-        if (player.stunTime <= 0) {
-            player.stunned = false;
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(bird.x + 15, bird.y - 20, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+            }
         }
-        return;
-    }
-    
-    // WASD e Setas
-    if (keys['w'] || keys['arrowup'] || keys['ArrowUp']) player.dy = -player.speed;
-    else if (keys['s'] || keys['arrowdown'] || keys['ArrowDown']) player.dy = player.speed;
-    else player.dy = 0;
 
-    if (keys['a'] || keys['arrowleft'] || keys['ArrowLeft']) {
-        player.dx = -player.speed;
-        player.facingRight = false;
-    } else if (keys['d'] || keys['arrowright'] || keys['ArrowRight']) {
-        player.dx = player.speed;
-        player.facingRight = true;
-    } else {
-        player.dx = 0;
-    }
+        // Atualizar jogador
+        function updatePlayer() {
+    // Se estiver atordoado, não se move
+            if (player.stunned) {
+                player.stunTime--;
+                if (player.stunTime <= 0) {
+                    player.stunned = false;
+                }
+                return;
+            }
+            
+            // WASD e Setas
+            if (keys['w'] || keys['arrowup'] || keys['ArrowUp']) player.dy = -player.speed;
+            else if (keys['s'] || keys['arrowdown'] || keys['ArrowDown']) player.dy = player.speed;
+            else player.dy = 0;
 
-    player.x += player.dx;
-    player.y += player.dy;
+            if (keys['a'] || keys['arrowleft'] || keys['ArrowLeft']) {
+                player.dx = -player.speed;
+                player.facingRight = false;
+            } else if (keys['d'] || keys['arrowright'] || keys['ArrowRight']) {
+                player.dx = player.speed;
+                player.facingRight = true;
+            } else {
+                player.dx = 0;
+            }
 
-    // Limites da tela
-    player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
-    player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
-}
+            player.x += player.dx;
+            player.y += player.dy;
+
+            // Limites da tela
+            player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+            player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+        }
 
 // Atualizar CPU (IA com reação mais lenta)
-function updateCPU() {
+        function updateCPU() {
     // Se estiver atordoado, não se move
-    if (cpu.stunned) {
-        cpu.stunTime--;
-        if (cpu.stunTime <= 0) {
-            cpu.stunned = false;
+            if (cpu.stunned) {
+                cpu.stunTime--;
+                if (cpu.stunTime <= 0) {
+                    cpu.stunned = false;
             cpu.reactionDelay = 30; // Demora para reagir após stun
-        }
-        return;
-    }
+                }
+                return;
+            }
 
     // Delay de reação (CPU demora para processar)
-    if (cpu.reactionDelay > 0) {
-        cpu.reactionDelay--;
-        return;
-    }
+            if (cpu.reactionDelay > 0) {
+                cpu.reactionDelay--;
+                return;
+            }
 
     // Considera comida que já quicou (bounces > 0) ou está no chão
-    const availableFoods = foods.filter(f => f.bounces > 0 || f.grounded);
-    
+            const availableFoods = foods.filter(f => f.bounces > 0 || f.grounded);
+            
     // Verifica se tem comida especial disponível
-    const specialAvailable = specialFoods.length > 0;
-    
+            const specialAvailable = specialFoods.length > 0;
+            
     // Verifica se tem item de velocidade disponível
-    const speedAvailable = speedItems.length > 0 && cpu.speedBoost === 0;
-    
+            const speedAvailable = speedItems.length > 0 && cpu.speedBoost === 0;
+            
     // Se não tem nada disponível
-    if (availableFoods.length === 0 && !specialAvailable && !speedAvailable) {
-        cpu.targetFood = null;
-        cpu.goingForSpecial = false;
-        cpu.goingForSpeed = false;
-        return;
-    }
+            if (availableFoods.length === 0 && !specialAvailable && !speedAvailable) {
+                cpu.targetFood = null;
+                cpu.goingForSpecial = false;
+                cpu.goingForSpeed = false;
+                return;
+            }
 
-    // Prioridade: velocidade > especial > normal
+            // Prioridade: velocidade > especial > normal
     // Decide se vai atrás do item de velocidade (50% de chance)
-    const shouldGoSpeed = speedAvailable && 
-        (speedItems[0].timeLeft < 120 || Math.random() < 0.5) &&
-        !cpu.goingForSpeed && !cpu.goingForSpecial;
+            const shouldGoSpeed = speedAvailable && 
+                (speedItems[0].timeLeft < 120 || Math.random() < 0.5) &&
+                !cpu.goingForSpeed && !cpu.goingForSpecial;
 
-    if (shouldGoSpeed && speedItems.length > 0) {
-        cpu.goingForSpeed = true;
-        cpu.goingForSpecial = false;
-        cpu.targetFood = null;
-    }
+            if (shouldGoSpeed && speedItems.length > 0) {
+                cpu.goingForSpeed = true;
+                cpu.goingForSpecial = false;
+                cpu.targetFood = null;
+            }
 
     // Decide se vai atrás da especial (40% de chance quando disponível)
-    const shouldGoSpecial = specialAvailable && 
-        (specialFoods[0].timeLeft < 180 || Math.random() < 0.4) &&
-        !cpu.goingForSpecial && !cpu.goingForSpeed;
+            const shouldGoSpecial = specialAvailable && 
+                (specialFoods[0].timeLeft < 180 || Math.random() < 0.4) &&
+                !cpu.goingForSpecial && !cpu.goingForSpeed;
 
-    if (shouldGoSpecial && specialFoods.length > 0) {
-        cpu.goingForSpecial = true;
-        cpu.goingForSpeed = false;
-        cpu.targetFood = null;
-    }
+            if (shouldGoSpecial && specialFoods.length > 0) {
+                cpu.goingForSpecial = true;
+                cpu.goingForSpeed = false;
+                cpu.targetFood = null;
+            }
 
     // Se está indo atrás do item de velocidade
-    if (cpu.goingForSpeed && speedItems.length > 0) {
-        const speed = speedItems[0];
-        
+            if (cpu.goingForSpeed && speedItems.length > 0) {
+                const speed = speedItems[0];
+                
         // Atualizar direção
-        if (speed.x > cpu.x) cpu.facingRight = true;
-        else if (speed.x < cpu.x) cpu.facingRight = false;
-        
+                if (speed.x > cpu.x) cpu.facingRight = true;
+                else if (speed.x < cpu.x) cpu.facingRight = false;
+                
         // Mover em direção ao item de velocidade
-        const wobble = (Math.random() - 0.5) * 0.3;
-        const angle = Math.atan2(speed.y - cpu.y, speed.x - cpu.x) + wobble;
-        cpu.x += Math.cos(angle) * cpu.speed;
-        cpu.y += Math.sin(angle) * cpu.speed;
-    }
+                const wobble = (Math.random() - 0.5) * 0.3;
+                const angle = Math.atan2(speed.y - cpu.y, speed.x - cpu.x) + wobble;
+                cpu.x += Math.cos(angle) * cpu.speed;
+                cpu.y += Math.sin(angle) * cpu.speed;
+            }
     // Se está indo atrás de especial
-    else if (cpu.goingForSpecial && specialFoods.length > 0) {
-        const special = specialFoods[0];
-        
+            else if (cpu.goingForSpecial && specialFoods.length > 0) {
+                const special = specialFoods[0];
+                
         // Atualizar direção
-        if (special.x > cpu.x) cpu.facingRight = true;
-        else if (special.x < cpu.x) cpu.facingRight = false;
-        
+                if (special.x > cpu.x) cpu.facingRight = true;
+                else if (special.x < cpu.x) cpu.facingRight = false;
+                
         // Mover em direção à especial
-        const wobble = (Math.random() - 0.5) * 0.3;
-        const angle = Math.atan2(special.y - cpu.y, special.x - cpu.x) + wobble;
-        cpu.x += Math.cos(angle) * cpu.speed;
-        cpu.y += Math.sin(angle) * cpu.speed;
-    } else {
-        // Comportamento normal para comidas regulares
-        cpu.goingForSpecial = false;
-        cpu.goingForSpeed = false;
-        
-        if (availableFoods.length === 0) return;
+                const wobble = (Math.random() - 0.5) * 0.3;
+                const angle = Math.atan2(special.y - cpu.y, special.x - cpu.x) + wobble;
+                cpu.x += Math.cos(angle) * cpu.speed;
+                cpu.y += Math.sin(angle) * cpu.speed;
+            } else {
+                // Comportamento normal para comidas regulares
+                cpu.goingForSpecial = false;
+                cpu.goingForSpeed = false;
+                
+                if (availableFoods.length === 0) return;
 
         // Só muda de alvo a cada 45 frames (~0.75s) ou se o alvo sumiu
-        if (!cpu.targetFood || !availableFoods.includes(cpu.targetFood) || Math.random() < 0.02) {
+                if (!cpu.targetFood || !availableFoods.includes(cpu.targetFood) || Math.random() < 0.02) {
             // Escolhe uma comida (nem sempre a mais próxima - 30% de chance de errar)
-            if (Math.random() < 0.3 && availableFoods.length > 1) {
-                cpu.targetFood = availableFoods[Math.floor(Math.random() * availableFoods.length)];
-            } else {
+                    if (Math.random() < 0.3 && availableFoods.length > 1) {
+                        cpu.targetFood = availableFoods[Math.floor(Math.random() * availableFoods.length)];
+                    } else {
                 // Encontrar comida mais próxima
-                let nearestFood = availableFoods[0];
-                let nearestDist = distance(cpu, availableFoods[0]);
+                        let nearestFood = availableFoods[0];
+                        let nearestDist = distance(cpu, availableFoods[0]);
 
-                for (let food of availableFoods) {
-                    const dist = distance(cpu, food);
-                    if (dist < nearestDist) {
-                        nearestDist = dist;
-                        nearestFood = food;
+                        for (let food of availableFoods) {
+                            const dist = distance(cpu, food);
+                            if (dist < nearestDist) {
+                                nearestDist = dist;
+                                nearestFood = food;
+                            }
+                        }
+                        cpu.targetFood = nearestFood;
                     }
                 }
-                cpu.targetFood = nearestFood;
-            }
-        }
 
         // Atualizar direção
-        if (cpu.targetFood.x > cpu.x) cpu.facingRight = true;
-        else if (cpu.targetFood.x < cpu.x) cpu.facingRight = false;
-        
+                if (cpu.targetFood.x > cpu.x) cpu.facingRight = true;
+                else if (cpu.targetFood.x < cpu.x) cpu.facingRight = false;
+                
         // Mover em direção ao alvo
-        const wobble = (Math.random() - 0.5) * 0.3;
-        const angle = Math.atan2(cpu.targetFood.y - cpu.y, cpu.targetFood.x - cpu.x) + wobble;
-        cpu.x += Math.cos(angle) * cpu.speed;
-        cpu.y += Math.sin(angle) * cpu.speed;
-    }
+                const wobble = (Math.random() - 0.5) * 0.3;
+                const angle = Math.atan2(cpu.targetFood.y - cpu.y, cpu.targetFood.x - cpu.x) + wobble;
+                cpu.x += Math.cos(angle) * cpu.speed;
+                cpu.y += Math.sin(angle) * cpu.speed;
+            }
 
-    // Limites da tela
-    cpu.x = Math.max(cpu.size, Math.min(canvas.width - cpu.size, cpu.x));
-    cpu.y = Math.max(cpu.size, Math.min(canvas.height - cpu.size, cpu.y));
-}
+            // Limites da tela
+            cpu.x = Math.max(cpu.size, Math.min(canvas.width - cpu.size, cpu.x));
+            cpu.y = Math.max(cpu.size, Math.min(canvas.height - cpu.size, cpu.y));
+        }
 
 // Verificar colisão entre pássaros
-function checkBirdCollision() {
-    const dist = distance(player, cpu);
-    
-    // Verifica se colidiu
-    if (dist < player.size + cpu.size) {
-        const playerHasStun = player.stunCharge >= player.stunChargeMax;
-        const cpuHasStun = cpu.stunCharge >= cpu.stunChargeMax;
-        
+        function checkBirdCollision() {
+            const dist = distance(player, cpu);
+            
+            // Verifica se colidiu
+            if (dist < player.size + cpu.size) {
+                const playerHasStun = player.stunCharge >= player.stunChargeMax;
+                const cpuHasStun = cpu.stunCharge >= cpu.stunChargeMax;
+                
         // Ambos com stun carregado - stun mútuo!
-        if (playerHasStun && cpuHasStun && !player.stunned && !cpu.stunned) {
-            player.stunned = true;
-            player.stunTime = 120;
-            player.stunCharge = 0;
-            player.stunChargeTimer = 0;
-            
-            cpu.stunned = true;
-            cpu.stunTime = 120;
-            cpu.stunCharge = 0;
-            cpu.stunChargeTimer = 0;
-            
+                if (playerHasStun && cpuHasStun && !player.stunned && !cpu.stunned) {
+                    player.stunned = true;
+                    player.stunTime = 120;
+                    player.stunCharge = 0;
+                    player.stunChargeTimer = 0;
+                    
+                    cpu.stunned = true;
+                    cpu.stunTime = 120;
+                    cpu.stunCharge = 0;
+                    cpu.stunChargeTimer = 0;
+                    
             // 🔊 Som de stun (mútuo)
-            playSound('stun');
-            
-            updateStunUI();
-        }
+                    playSound('stun');
+                    
+                    updateStunUI();
+                }
         // Só jogador tem stun
-        else if (playerHasStun && !cpu.stunned && !player.stunned) {
-            cpu.stunned = true;
-            cpu.stunTime = 120;
-            player.stunCharge = 0;
-            player.stunChargeTimer = 0;
-            
+                else if (playerHasStun && !cpu.stunned && !player.stunned) {
+                    cpu.stunned = true;
+                    cpu.stunTime = 120;
+                    player.stunCharge = 0;
+                    player.stunChargeTimer = 0;
+                    
             // 🔊 Som de stun (CPU stunnada - mais baixo)
-            const stunSound = sounds.stun;
-            if (stunSound) {
-                stunSound.volume = masterVolume * 0.6;
-                playSound('stun');
-                stunSound.volume = masterVolume;
-            }
-            
-            updateStunUI();
-        }
+                    const stunSound = sounds.stun;
+                    if (stunSound) {
+                        stunSound.volume = masterVolume * 0.6;
+                        playSound('stun');
+                        stunSound.volume = masterVolume;
+                    }
+                    
+                    updateStunUI();
+                }
         // Só CPU tem stun
-        else if (cpuHasStun && !player.stunned && !cpu.stunned) {
-            player.stunned = true;
-            player.stunTime = 120;
-            cpu.stunCharge = 0;
-            cpu.stunChargeTimer = 0;
-            
+                else if (cpuHasStun && !player.stunned && !cpu.stunned) {
+                    player.stunned = true;
+                    player.stunTime = 120;
+                    cpu.stunCharge = 0;
+                    cpu.stunChargeTimer = 0;
+                    
             // 🔊 Som de stun (player stunnado)
-            playSound('stun');
+                    playSound('stun');
+                }
+            }
         }
-    }
-}
 
-// Atualizar UI do stun
-function updateStunUI() {
-    const cooldownFill = document.getElementById('cooldownFill');
-    const cooldownText = document.getElementById('cooldownText');
-    
-    const progress = player.stunCharge / player.stunChargeMax;
-    cooldownFill.style.width = (progress * 100) + '%';
-    
-    if (player.stunCharge >= player.stunChargeMax) {
-        // Mostrar tempo restante para usar
-        const secondsLeft = Math.ceil(player.stunChargeTimer / 60);
+        // Atualizar UI do stun
+        function updateStunUI() {
+            const cooldownFill = document.getElementById('cooldownFill');
+            const cooldownText = document.getElementById('cooldownText');
+            
+            const progress = player.stunCharge / player.stunChargeMax;
+            cooldownFill.style.width = (progress * 100) + '%';
+            
+            if (player.stunCharge >= player.stunChargeMax) {
+                // Mostrar tempo restante para usar
+                const secondsLeft = Math.ceil(player.stunChargeTimer / 60);
         cooldownText.textContent = `⚡ ${secondsLeft}s`;
-        cooldownText.className = 'ready';
-        
-        // Cor muda conforme o tempo acaba
-        if (secondsLeft <= 2) {
-            cooldownFill.style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
-            cooldownFill.style.animation = 'pulse 0.3s infinite';
-        } else {
-            cooldownFill.style.background = 'linear-gradient(90deg, #2ecc71, #27ae60)';
-            cooldownFill.style.animation = '';
+                cooldownText.className = 'ready';
+                
+                // Cor muda conforme o tempo acaba
+                if (secondsLeft <= 2) {
+                    cooldownFill.style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
+                    cooldownFill.style.animation = 'pulse 0.3s infinite';
+                } else {
+                    cooldownFill.style.background = 'linear-gradient(90deg, #2ecc71, #27ae60)';
+                    cooldownFill.style.animation = '';
+                }
+            } else {
+                cooldownText.textContent = player.stunCharge + '/' + player.stunChargeMax;
+                cooldownText.className = 'charging';
+                cooldownFill.style.background = 'linear-gradient(90deg, #9b59b6, #e74c3c)';
+                cooldownFill.style.animation = '';
+            }
         }
-    } else {
-        cooldownText.textContent = player.stunCharge + '/' + player.stunChargeMax;
-        cooldownText.className = 'charging';
-        cooldownFill.style.background = 'linear-gradient(90deg, #9b59b6, #e74c3c)';
-        cooldownFill.style.animation = '';
-    }
-}
 
 // Verificar colisões com comida
-function checkCollisions() {
-    // Comidas normais
-    for (let i = foods.length - 1; i >= 0; i--) {
-        const food = foods[i];
+        function checkCollisions() {
+            // Comidas normais
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const food = foods[i];
 
         // Só pode comer se a comida estiver no chão!
-        if (!food.grounded) continue;
+                if (!food.grounded) continue;
 
-        // Jogador comeu
-        if (distance(player, food) < player.size + food.size / 2) {
+                // Jogador comeu
+                if (distance(player, food) < player.size + food.size / 2) {
             player.eatAnimation = 20; // Inicia animação
-            player.lastEatenEmoji = food.emoji;
-            foods.splice(i, 1);
-            playerScore += food.points;
+                    player.lastEatenEmoji = food.emoji;
+                    foods.splice(i, 1);
+            lastPlayerScore = playerScore;
+                    playerScore += food.points;
+            if (playerScore !== lastPlayerScore) {
+                playerScoreAnimation = 30; // Inicia animação do placar
+            }
             // Placar agora é desenhado no canvas
-            
+                    
             // 🔊 Som de comer
-            playSound('eat');
-            
-            // Carrega o stun
-            if (player.stunCharge < player.stunChargeMax) {
-                player.stunCharge = Math.min(player.stunCharge + 1, player.stunChargeMax);
-                // Iniciar timer quando carregou completamente
-                if (player.stunCharge >= player.stunChargeMax) {
-                    player.stunChargeTimer = 300; // 5 segundos
+                    playSound('eat');
+                    
+                    // Carrega o stun
+                    if (player.stunCharge < player.stunChargeMax) {
+                        player.stunCharge = Math.min(player.stunCharge + 1, player.stunChargeMax);
+                        // Iniciar timer quando carregou completamente
+                        if (player.stunCharge >= player.stunChargeMax) {
+                            player.stunChargeTimer = 300; // 5 segundos
                     // 🔊 Som de stun carregado
-                    playSound('stunLoaded');
+                            playSound('stunLoaded');
+                        }
+                        updateStunUI();
+                    }
+                    continue;
                 }
-                updateStunUI();
-            }
-            continue;
-        }
 
-        // CPU comeu
-        if (distance(cpu, food) < cpu.size + food.size / 2) {
+                // CPU comeu
+                if (distance(cpu, food) < cpu.size + food.size / 2) {
             cpu.eatAnimation = 20; // Inicia animação
-            cpu.lastEatenEmoji = food.emoji;
-            foods.splice(i, 1);
-            cpuScore += food.points;
+                    cpu.lastEatenEmoji = food.emoji;
+                    foods.splice(i, 1);
+            lastCpuScore = cpuScore;
+                    cpuScore += food.points;
+            if (cpuScore !== lastCpuScore) {
+                cpuScoreAnimation = 30; // Inicia animação do placar
+            }
             // Placar agora é desenhado no canvas
-            
+                    
             // 🔊 Som de comer (mais baixo para CPU)
-            const eatSound = sounds.eat;
-            if (eatSound) {
-                eatSound.volume = masterVolume * 0.6; // 60% do volume para CPU
-                playSound('eat');
-                eatSound.volume = masterVolume; // Restaura volume
-            }
-            
+                    const eatSound = sounds.eat;
+                    if (eatSound) {
+                        eatSound.volume = masterVolume * 0.6; // 60% do volume para CPU
+                        playSound('eat');
+                        eatSound.volume = masterVolume; // Restaura volume
+                    }
+                    
             // CPU também carrega stun
-            if (cpu.stunCharge < cpu.stunChargeMax) {
-                cpu.stunCharge++;
-                // Iniciar timer quando carregou completamente
-                if (cpu.stunCharge >= cpu.stunChargeMax) {
-                    cpu.stunChargeTimer = 300; // 5 segundos
+                    if (cpu.stunCharge < cpu.stunChargeMax) {
+                        cpu.stunCharge++;
+                        // Iniciar timer quando carregou completamente
+                        if (cpu.stunCharge >= cpu.stunChargeMax) {
+                            cpu.stunChargeTimer = 300; // 5 segundos
                     // 🔊 Som de stun carregado (mais baixo para CPU)
-                    const stunSound = sounds.stunLoaded;
-                    if (stunSound) {
-                        stunSound.volume = masterVolume * 0.5; // 50% do volume para CPU
-                        playSound('stunLoaded');
-                        stunSound.volume = masterVolume; // Restaura volume
+                            const stunSound = sounds.stunLoaded;
+                            if (stunSound) {
+                                stunSound.volume = masterVolume * 0.5; // 50% do volume para CPU
+                                playSound('stunLoaded');
+                                stunSound.volume = masterVolume; // Restaura volume
+                            }
+                        }
                     }
                 }
             }
-        }
-    }
-    
+            
     // Comidas especiais (no céu)
-    for (let i = specialFoods.length - 1; i >= 0; i--) {
-        const food = specialFoods[i];
+            for (let i = specialFoods.length - 1; i >= 0; i--) {
+                const food = specialFoods[i];
 
-        // Jogador comeu especial
-        if (distance(player, food) < player.size + food.size / 2) {
+                // Jogador comeu especial
+                if (distance(player, food) < player.size + food.size / 2) {
             player.eatAnimation = 30; // Animação maior para especial
-            player.lastEatenEmoji = food.emoji;
-            specialFoods.splice(i, 1);
-            playerScore += food.points;
+                    player.lastEatenEmoji = food.emoji;
+                    specialFoods.splice(i, 1);
+            lastPlayerScore = playerScore;
+                    playerScore += food.points;
+            if (playerScore !== lastPlayerScore) {
+                playerScoreAnimation = 40; // Animação maior para comida especial
+            }
             // Placar agora é desenhado no canvas
-            
+                    
             // 🔊 Som yummy (comida especial)
-            playSound('yummy');
-            
-            // Comida especial carrega +5 stun
-            if (player.stunCharge < player.stunChargeMax) {
-                const wasNotFull = player.stunCharge < player.stunChargeMax;
-                player.stunCharge = Math.min(player.stunCharge + 5, player.stunChargeMax);
-                // Iniciar timer quando carregou completamente
-                if (wasNotFull && player.stunCharge >= player.stunChargeMax) {
-                    player.stunChargeTimer = 300; // 5 segundos
+                    playSound('yummy');
+                    
+                    // Comida especial carrega +5 stun
+                    if (player.stunCharge < player.stunChargeMax) {
+                        const wasNotFull = player.stunCharge < player.stunChargeMax;
+                        player.stunCharge = Math.min(player.stunCharge + 5, player.stunChargeMax);
+                        // Iniciar timer quando carregou completamente
+                        if (wasNotFull && player.stunCharge >= player.stunChargeMax) {
+                            player.stunChargeTimer = 300; // 5 segundos
                     // 🔊 Som de stun carregado
-                    playSound('stunLoaded');
+                            playSound('stunLoaded');
+                        }
+                        updateStunUI();
+                    }
+                    continue;
                 }
-                updateStunUI();
-            }
-            continue;
-        }
 
-        // CPU comeu especial
-        if (distance(cpu, food) < cpu.size + food.size / 2) {
+                // CPU comeu especial
+                if (distance(cpu, food) < cpu.size + food.size / 2) {
             cpu.eatAnimation = 30; // Animação maior para especial
-            cpu.lastEatenEmoji = food.emoji;
-            specialFoods.splice(i, 1);
-            cpuScore += food.points;
-            // Placar agora é desenhado no canvas
-            
-            // 🔊 Som yummy (mais baixo para CPU)
-            const yummySound = sounds.yummy;
-            if (yummySound) {
-                yummySound.volume = masterVolume * 0.6; // 60% do volume para CPU
-                playSound('yummy');
-                yummySound.volume = masterVolume; // Restaura volume
+                    cpu.lastEatenEmoji = food.emoji;
+                    specialFoods.splice(i, 1);
+            lastCpuScore = cpuScore;
+                    cpuScore += food.points;
+            if (cpuScore !== lastCpuScore) {
+                cpuScoreAnimation = 40; // Animação maior para comida especial
             }
-            
+            // Placar agora é desenhado no canvas
+                    
+            // 🔊 Som yummy (mais baixo para CPU)
+                    const yummySound = sounds.yummy;
+                    if (yummySound) {
+                        yummySound.volume = masterVolume * 0.6; // 60% do volume para CPU
+                        playSound('yummy');
+                        yummySound.volume = masterVolume; // Restaura volume
+                    }
+                    
             // CPU também ganha +5 stun
-            if (cpu.stunCharge < cpu.stunChargeMax) {
-                const wasNotFull = cpu.stunCharge < cpu.stunChargeMax;
-                cpu.stunCharge = Math.min(cpu.stunCharge + 5, cpu.stunChargeMax);
-                // Iniciar timer quando carregou completamente
-                if (wasNotFull && cpu.stunCharge >= cpu.stunChargeMax) {
-                    cpu.stunChargeTimer = 300; // 5 segundos
+                    if (cpu.stunCharge < cpu.stunChargeMax) {
+                        const wasNotFull = cpu.stunCharge < cpu.stunChargeMax;
+                        cpu.stunCharge = Math.min(cpu.stunCharge + 5, cpu.stunChargeMax);
+                        // Iniciar timer quando carregou completamente
+                        if (wasNotFull && cpu.stunCharge >= cpu.stunChargeMax) {
+                            cpu.stunChargeTimer = 300; // 5 segundos
                     // 🔊 Som de stun carregado (mais baixo para CPU)
-                    const stunSound = sounds.stunLoaded;
-                    if (stunSound) {
-                        stunSound.volume = masterVolume * 0.5; // 50% do volume para CPU
-                        playSound('stunLoaded');
-                        stunSound.volume = masterVolume; // Restaura volume
+                            const stunSound = sounds.stunLoaded;
+                            if (stunSound) {
+                                stunSound.volume = masterVolume * 0.5; // 50% do volume para CPU
+                                playSound('stunLoaded');
+                                stunSound.volume = masterVolume; // Restaura volume
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Itens de velocidade
+            for (let i = speedItems.length - 1; i >= 0; i--) {
+                const item = speedItems[i];
+
+                // Jogador pegou
+                if (distance(player, item) < player.size + item.size / 2) {
+                    speedItems.splice(i, 1);
+                    player.speedBoost = 300; // 5 segundos de boost
+                    player.speed = player.boostedSpeed;
+                    
+            // 🔊 Som de powerup
+                    playSound('powerup');
+                    
+                    continue;
+                }
+
+                // CPU pegou
+                if (distance(cpu, item) < cpu.size + item.size / 2) {
+                    speedItems.splice(i, 1);
+                    cpu.speedBoost = 300; // 5 segundos de boost
+                    cpu.speed = cpu.boostedSpeed;
+                    
+            // 🔊 Som de powerup (mais baixo para CPU)
+                    const powerupSound = sounds.powerup;
+                    if (powerupSound) {
+                        powerupSound.volume = masterVolume * 0.6; // 60% do volume para CPU
+                        playSound('powerup');
+                        powerupSound.volume = masterVolume; // Restaura volume
                     }
                 }
             }
         }
-    }
-
-    // Itens de velocidade
-    for (let i = speedItems.length - 1; i >= 0; i--) {
-        const item = speedItems[i];
-
-        // Jogador pegou
-        if (distance(player, item) < player.size + item.size / 2) {
-            speedItems.splice(i, 1);
-            player.speedBoost = 300; // 5 segundos de boost
-            player.speed = player.boostedSpeed;
-            
-            // 🔊 Som de powerup
-            playSound('powerup');
-            
-            continue;
-        }
-
-        // CPU pegou
-        if (distance(cpu, item) < cpu.size + item.size / 2) {
-            speedItems.splice(i, 1);
-            cpu.speedBoost = 300; // 5 segundos de boost
-            cpu.speed = cpu.boostedSpeed;
-            
-            // 🔊 Som de powerup (mais baixo para CPU)
-            const powerupSound = sounds.powerup;
-            if (powerupSound) {
-                powerupSound.volume = masterVolume * 0.6; // 60% do volume para CPU
-                playSound('powerup');
-                powerupSound.volume = masterVolume; // Restaura volume
-            }
-        }
-    }
-}
 
 // Desenhar pássaro
-function drawBird(bird, isPlayer) {
-    ctx.save();
-    
-    // Verificar se tem stun pronto
-    const hasStunReady = bird.stunCharge >= bird.stunChargeMax;
-    
+        function drawBird(bird, isPlayer) {
+            ctx.save();
+            
+            // Verificar se tem stun pronto
+            const hasStunReady = bird.stunCharge >= bird.stunChargeMax;
+            
     // Atualizar animação de comer
-    if (bird.eatAnimation > 0) {
-        bird.eatAnimation--;
-    }
-    
+            if (bird.eatAnimation > 0) {
+                bird.eatAnimation--;
+            }
+            
     // Efeito de atordoamento (pisca e treme) - para qualquer pássaro stunnado
-    if (bird.stunned) {
-        // Tremor
-        const shake = Math.sin(Date.now() / 30) * 5;
-        ctx.translate(shake, 0);
-        
-        // Pisca (visibilidade alternada)
-        if (Math.floor(Date.now() / 100) % 2 === 0) {
-            ctx.globalAlpha = 0.4;
-        }
-    }
-    
+            if (bird.stunned) {
+                // Tremor
+                const shake = Math.sin(Date.now() / 30) * 5;
+                ctx.translate(shake, 0);
+                
+                // Pisca (visibilidade alternada)
+                if (Math.floor(Date.now() / 100) % 2 === 0) {
+                    ctx.globalAlpha = 0.4;
+                }
+            }
+            
+            // Efeito de frio no gelo (tremor leve e mudança de cor)
+            let coldShake = 0;
+            let coldColorModifier = 1;
+            if (currentArea === 3 && !bird.stunned) {
+                const coldProgress = getColdProgress();
+                // Tremor leve devido ao frio (mais intenso com mais frio)
+                coldShake = Math.sin(Date.now() / 80) * (1 + coldProgress * 2);
+                ctx.translate(coldShake, coldShake * 0.3);
+                
+                // Modificador de cor (fica mais azulado/pálido com frio)
+                coldColorModifier = 1 - coldProgress * 0.3; // Reduz saturação
+            }
+            
     // Animação de comer - escala e efeitos
-    let eatScale = 1;
-    if (bird.eatAnimation > 0) {
+            let eatScale = 1;
+            if (bird.eatAnimation > 0) {
         // Pássaro cresce e volta ao normal
-        eatScale = 1 + Math.sin(bird.eatAnimation * 0.3) * 0.15;
-    }
-    
+                eatScale = 1 + Math.sin(bird.eatAnimation * 0.3) * 0.15;
+            }
+            
     // Pássaro maior quando stun carregado (cheio de comida)
-    let stunScale = 1;
-    if (hasStunReady && !bird.stunned) {
+            let stunScale = 1;
+            if (hasStunReady && !bird.stunned) {
         // Apenas maior, sem pulsação (performance)
-        stunScale = 1.2;
-    }
-    
+                stunScale = 1.2;
+            }
+            
     // Verificar se está se movendo para efeito de voo
-    const isMoving = isPlayer ? (player.dx !== 0 || player.dy !== 0) : !cpu.stunned && (cpu.targetFood || cpu.goingForSpecial || cpu.goingForSpeed);
-    let hoverOffset = 0;
-    if (isMoving && !bird.stunned) {
-        hoverOffset = Math.sin(Date.now() / 100) * 3; // Flutua levemente
-    }
-    
+            const isMoving = isPlayer ? (player.dx !== 0 || player.dy !== 0) : !cpu.stunned && (cpu.targetFood || cpu.goingForSpecial || cpu.goingForSpeed);
+            let hoverOffset = 0;
+            if (isMoving && !bird.stunned) {
+                hoverOffset = Math.sin(Date.now() / 100) * 3; // Flutua levemente
+            }
+            
     // Virar pássaro de acordo com a direção
-    ctx.translate(bird.x, bird.y + hoverOffset);
-    if (!bird.facingRight) {
-        ctx.scale(-1, 1); // Espelha horizontalmente
-    }
-    ctx.scale(eatScale * stunScale, eatScale * stunScale);
-    ctx.translate(-bird.x, -bird.y - hoverOffset);
-    
-    // Efeito de boost de velocidade (simplificado)
-    const hasSpeedBoost = bird.speedBoost > 0;
-    if (hasSpeedBoost && !bird.stunned) {
-        // Rastro de velocidade (sem shadow para performance)
-        ctx.fillStyle = 'rgba(52, 152, 219, 0.4)';
-        ctx.beginPath();
-        ctx.ellipse(bird.x - 15, bird.y, 25, 15, 0, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    // Aura maligna quando tem stun pronto (sem shadow - muito pesado)
-    else if (hasStunReady && !bird.stunned) {
-        // Removido shadowBlur - causa lag
-    }
-    
+            ctx.translate(bird.x, bird.y + hoverOffset);
+            if (!bird.facingRight) {
+                ctx.scale(-1, 1); // Espelha horizontalmente
+            }
+            ctx.scale(eatScale * stunScale, eatScale * stunScale);
+            ctx.translate(-bird.x, -bird.y - hoverOffset);
+            
+            // Efeito de boost de velocidade (simplificado)
+            const hasSpeedBoost = bird.speedBoost > 0;
+            if (hasSpeedBoost && !bird.stunned) {
+                // Rastro de velocidade (sem shadow para performance)
+                ctx.fillStyle = 'rgba(52, 152, 219, 0.4)';
+                ctx.beginPath();
+                ctx.ellipse(bird.x - 15, bird.y, 25, 15, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            // Aura maligna quando tem stun pronto (sem shadow - muito pesado)
+            else if (hasStunReady && !bird.stunned) {
+                // Removido shadowBlur - causa lag
+            }
+            
     // Corpo do pássaro
-    let bodyColor = bird.color;
-    if (bird.stunned) {
-        bodyColor = '#9b59b6'; // Roxo quando stunnado
-    } else if (hasStunReady) {
-        // Cor mais escura/intensa quando pronto para atacar
-        bodyColor = darkenColor(bird.color);
-    }
-    ctx.fillStyle = bodyColor;
-    ctx.beginPath();
-    ctx.arc(bird.x, bird.y, bird.size, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Capacete de corrida quando tem speed boost
-    if (hasSpeedBoost && !bird.stunned) {
-        const helmetSize = bird.size * 0.7;
-        const helmetY = bird.y - bird.size * 0.6;
-        
+            let bodyColor = bird.color;
+            if (bird.stunned) {
+                bodyColor = '#9b59b6'; // Roxo quando stunnado
+            } else if (hasStunReady) {
+                // Cor mais escura/intensa quando pronto para atacar
+                bodyColor = darkenColor(bird.color);
+            } else if (currentArea === 3 && !bird.stunned) {
+                // Ficar mais azulado/pálido com frio
+                const coldProgress = getColdProgress();
+                bodyColor = interpolateColor(bird.color, '#B0C4DE', coldProgress * 0.4); // Azul acinzentado
+            }
+            ctx.fillStyle = bodyColor;
+            ctx.beginPath();
+            ctx.arc(bird.x, bird.y, bird.size, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Capacete de corrida quando tem speed boost
+            if (hasSpeedBoost && !bird.stunned) {
+                const helmetSize = bird.size * 0.7;
+                const helmetY = bird.y - bird.size * 0.6;
+                
         // Capacete (meio elíptico)
-        ctx.fillStyle = '#3498db'; // Azul
-        ctx.beginPath();
-        ctx.ellipse(bird.x, helmetY, helmetSize * 0.9, helmetSize * 0.6, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Visor do capacete (transparente com brilho)
-        ctx.fillStyle = 'rgba(52, 152, 219, 0.6)';
-        ctx.beginPath();
-        ctx.ellipse(bird.x, helmetY + helmetSize * 0.1, helmetSize * 0.7, helmetSize * 0.4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Brilho no visor
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.beginPath();
-        ctx.ellipse(bird.x - helmetSize * 0.2, helmetY, helmetSize * 0.3, helmetSize * 0.2, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Borda do capacete
-        ctx.strokeStyle = '#2980b9';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(bird.x, helmetY, helmetSize * 0.9, helmetSize * 0.6, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        
+                ctx.fillStyle = '#3498db'; // Azul
+                ctx.beginPath();
+                ctx.ellipse(bird.x, helmetY, helmetSize * 0.9, helmetSize * 0.6, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Visor do capacete (transparente com brilho)
+                ctx.fillStyle = 'rgba(52, 152, 219, 0.6)';
+                ctx.beginPath();
+                ctx.ellipse(bird.x, helmetY + helmetSize * 0.1, helmetSize * 0.7, helmetSize * 0.4, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Brilho no visor
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.beginPath();
+                ctx.ellipse(bird.x - helmetSize * 0.2, helmetY, helmetSize * 0.3, helmetSize * 0.2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Borda do capacete
+                ctx.strokeStyle = '#2980b9';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(bird.x, helmetY, helmetSize * 0.9, helmetSize * 0.6, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                
         // Símbolo de raio no capacete
-        ctx.fillStyle = '#f1c40f';
-        ctx.font = `${Math.floor(helmetSize * 0.4)}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#f1c40f';
+                ctx.font = `${Math.floor(helmetSize * 0.4)}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
         ctx.fillText('⚡', bird.x, helmetY);
-    }
-    
-    // Detalhes especiais para cada tipo de CPU
-    if (!isPlayer && bird.type) {
-        drawCpuTypeDetails(bird, hasStunReady);
-    }
+            }
+            
+            // Detalhes especiais para cada tipo de CPU
+            if (!isPlayer && bird.type) {
+                drawCpuTypeDetails(bird, hasStunReady);
+            }
     
     // Gotas de suor no deserto (área 2)
     if (currentArea === 2 && !bird.stunned) {
         drawSweatDrops(bird, isPlayer);
     }
     
-    ctx.shadowBlur = 0; // Reset shadow
-
-    // Olho - diferente para cada tipo de CPU
-    const isCpuWithSpecialEyes = !isPlayer && bird.type && ['owl', 'phoenix'].includes(bird.type);
-    
-    if (isCpuWithSpecialEyes && bird.type === 'owl' && !bird.stunned) {
-        // Coruja - dois olhos grandes (escalam com o tamanho)
-        const eyeScale = bird.size / 35;
-        const leftEyeX = bird.x + 5 * eyeScale;
-        const rightEyeX = bird.x + 22 * eyeScale;
-        const eyeY = bird.y - 5 * eyeScale;
+    // Efeitos de frio no gelo (área 3)
+    if (currentArea === 3 && !bird.stunned) {
+        drawColdEffects(bird, isPlayer);
         
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(leftEyeX, eyeY, 12 * eyeScale, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(rightEyeX, eyeY, 10 * eyeScale, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Pupilas grandes da coruja (amarelas)
-        ctx.fillStyle = bird.eyeColor || '#FFD700';
-        ctx.beginPath();
-        ctx.arc(leftEyeX + 2 * eyeScale, eyeY, 8 * eyeScale, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(rightEyeX, eyeY, 6 * eyeScale, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Centro preto
-        ctx.fillStyle = 'black';
-        ctx.beginPath();
-        ctx.arc(leftEyeX + 2 * eyeScale, eyeY, 3.5 * eyeScale, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(rightEyeX, eyeY, 3 * eyeScale, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Brilho nos olhos
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(leftEyeX, eyeY - 3 * eyeScale, 2 * eyeScale, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(rightEyeX - 2 * eyeScale, eyeY - 2 * eyeScale, 1.5 * eyeScale, 0, Math.PI * 2);
-        ctx.fill();
-    } else {
-        // Olho padrão
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(bird.x + 10, bird.y - 5, 10, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Expressões do olho
-        if (bird.stunned) {
-            // Olho atordoado (X)
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(bird.x + 7, bird.y - 10);
-            ctx.lineTo(bird.x + 17, bird.y);
-            ctx.moveTo(bird.x + 17, bird.y - 10);
-            ctx.lineTo(bird.x + 7, bird.y);
-            ctx.stroke();
-        } else if (hasStunReady) {
-            // Olho de mau - pupila vermelha e sobrancelha brava
-            ctx.fillStyle = '#c0392b';
-            ctx.beginPath();
-            ctx.arc(bird.x + 12, bird.y - 5, 6, 0, Math.PI * 2);
-            ctx.fill();
+        // Cristais de gelo se formando ao redor do corpo (com muito frio)
+        const coldProgress = getColdProgress();
+        if (coldProgress > 0.6) {
+            const crystalCount = Math.floor(coldProgress * 8); // 0 a 8 cristais
+            ctx.strokeStyle = 'rgba(200, 220, 255, 0.6)';
+            ctx.fillStyle = 'rgba(200, 220, 255, 0.3)';
+            ctx.lineWidth = 1;
             
-            // Brilho maligno
-            ctx.fillStyle = '#e74c3c';
-            ctx.beginPath();
-            ctx.arc(bird.x + 10, bird.y - 7, 2, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Sobrancelha brava
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(bird.x + 2, bird.y - 18);
-            ctx.lineTo(bird.x + 20, bird.y - 12);
-            ctx.stroke();
-        } else {
-            // Olho normal - usa cor específica do tipo
-            ctx.fillStyle = (!isPlayer && bird.eyeColor) ? bird.eyeColor : 'black';
-            ctx.beginPath();
-            ctx.arc(bird.x + 12, bird.y - 5, 5, 0, Math.PI * 2);
-            ctx.fill();
+            for (let i = 0; i < crystalCount; i++) {
+                const angle = (Math.PI * 2 / crystalCount) * i + Date.now() / 2000;
+                const distance = bird.size * 0.8 + Math.sin(Date.now() / 500 + i) * 3;
+                const crystalX = bird.x + Math.cos(angle) * distance;
+                const crystalY = bird.y + Math.sin(angle) * distance;
+                const crystalSize = 3 + Math.sin(Date.now() / 300 + i) * 1;
+                
+                // Desenhar pequeno cristal hexagonal
+                ctx.save();
+                ctx.translate(crystalX, crystalY);
+                ctx.rotate(angle);
+                ctx.beginPath();
+                for (let j = 0; j < 6; j++) {
+                    const a = (Math.PI / 3) * j;
+                    const x = Math.cos(a) * crystalSize;
+                    const y = Math.sin(a) * crystalSize;
+                    if (j === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
         }
     }
+            
+            ctx.shadowBlur = 0; // Reset shadow
+
+            // Olho - diferente para cada tipo de CPU
+            const isCpuWithSpecialEyes = !isPlayer && bird.type && ['owl', 'phoenix'].includes(bird.type);
+            
+            if (isCpuWithSpecialEyes && bird.type === 'owl' && !bird.stunned) {
+                // Coruja - dois olhos grandes (escalam com o tamanho)
+                const eyeScale = bird.size / 35;
+                const leftEyeX = bird.x + 5 * eyeScale;
+                const rightEyeX = bird.x + 22 * eyeScale;
+                const eyeY = bird.y - 5 * eyeScale;
+                
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(leftEyeX, eyeY, 12 * eyeScale, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(rightEyeX, eyeY, 10 * eyeScale, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Pupilas grandes da coruja (amarelas)
+                ctx.fillStyle = bird.eyeColor || '#FFD700';
+                ctx.beginPath();
+                ctx.arc(leftEyeX + 2 * eyeScale, eyeY, 8 * eyeScale, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(rightEyeX, eyeY, 6 * eyeScale, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Centro preto
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(leftEyeX + 2 * eyeScale, eyeY, 3.5 * eyeScale, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(rightEyeX, eyeY, 3 * eyeScale, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Brilho nos olhos
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(leftEyeX, eyeY - 3 * eyeScale, 2 * eyeScale, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(rightEyeX - 2 * eyeScale, eyeY - 2 * eyeScale, 1.5 * eyeScale, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+        // Olho padrão
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(bird.x + 10, bird.y - 5, 10, 0, Math.PI * 2);
+                ctx.fill();
+
+        // Expressões do olho
+                if (bird.stunned) {
+                    // Olho atordoado (X)
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(bird.x + 7, bird.y - 10);
+                    ctx.lineTo(bird.x + 17, bird.y);
+                    ctx.moveTo(bird.x + 17, bird.y - 10);
+                    ctx.lineTo(bird.x + 7, bird.y);
+                    ctx.stroke();
+                } else if (hasStunReady) {
+                    // Olho de mau - pupila vermelha e sobrancelha brava
+                    ctx.fillStyle = '#c0392b';
+                    ctx.beginPath();
+                    ctx.arc(bird.x + 12, bird.y - 5, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Brilho maligno
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.beginPath();
+                    ctx.arc(bird.x + 10, bird.y - 7, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Sobrancelha brava
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(bird.x + 2, bird.y - 18);
+                    ctx.lineTo(bird.x + 20, bird.y - 12);
+                    ctx.stroke();
+                } else {
+            // Olho normal - usa cor específica do tipo
+                    ctx.fillStyle = (!isPlayer && bird.eyeColor) ? bird.eyeColor : 'black';
+                    ctx.beginPath();
+                    ctx.arc(bird.x + 12, bird.y - 5, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
 
     // Bico - animação de comer ou agressivo
-    ctx.fillStyle = (!isPlayer && bird.beakColor) ? bird.beakColor : '#f39c12';
-    
-    if (bird.eatAnimation > 10 && !bird.stunned) {
-        // Bico mastigando (abre e fecha)
-        const chew = Math.sin(bird.eatAnimation * 0.8) * 4;
-        
-        // Bico superior
-        ctx.beginPath();
-        ctx.moveTo(bird.x + bird.size - 5, bird.y - 2);
-        ctx.lineTo(bird.x + bird.size + 15, bird.y - chew);
-        ctx.lineTo(bird.x + bird.size - 5, bird.y + 2);
-        ctx.closePath();
-        ctx.fill();
-        
-        // Bico inferior
-        ctx.beginPath();
-        ctx.moveTo(bird.x + bird.size - 5, bird.y + 4);
-        ctx.lineTo(bird.x + bird.size + 12, bird.y + 8 + chew);
-        ctx.lineTo(bird.x + bird.size - 5, bird.y + 10);
-        ctx.closePath();
-        ctx.fill();
-    } else if (hasStunReady && !bird.stunned) {
+            ctx.fillStyle = (!isPlayer && bird.beakColor) ? bird.beakColor : '#f39c12';
+            
+            if (bird.eatAnimation > 10 && !bird.stunned) {
+                // Bico mastigando (abre e fecha)
+                const chew = Math.sin(bird.eatAnimation * 0.8) * 4;
+                
+                // Bico superior
+                ctx.beginPath();
+                ctx.moveTo(bird.x + bird.size - 5, bird.y - 2);
+                ctx.lineTo(bird.x + bird.size + 15, bird.y - chew);
+                ctx.lineTo(bird.x + bird.size - 5, bird.y + 2);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Bico inferior
+                ctx.beginPath();
+                ctx.moveTo(bird.x + bird.size - 5, bird.y + 4);
+                ctx.lineTo(bird.x + bird.size + 12, bird.y + 8 + chew);
+                ctx.lineTo(bird.x + bird.size - 5, bird.y + 10);
+                ctx.closePath();
+                ctx.fill();
+            } else if (hasStunReady && !bird.stunned) {
         // Bico aberto (gritando/ameaçando)
-        ctx.beginPath();
-        ctx.moveTo(bird.x + bird.size - 5, bird.y - 3);
-        ctx.lineTo(bird.x + bird.size + 18, bird.y);
-        ctx.lineTo(bird.x + bird.size - 5, bird.y + 3);
-        ctx.closePath();
-        ctx.fill();
-        
-        ctx.beginPath();
-        ctx.moveTo(bird.x + bird.size - 5, bird.y + 5);
-        ctx.lineTo(bird.x + bird.size + 15, bird.y + 8);
-        ctx.lineTo(bird.x + bird.size - 5, bird.y + 12);
-        ctx.closePath();
-        ctx.fill();
-    } else {
-        // Bico normal
-        ctx.beginPath();
-        ctx.moveTo(bird.x + bird.size - 5, bird.y);
-        ctx.lineTo(bird.x + bird.size + 15, bird.y + 5);
-        ctx.lineTo(bird.x + bird.size - 5, bird.y + 10);
-        ctx.closePath();
-        ctx.fill();
-    }
+                ctx.beginPath();
+                ctx.moveTo(bird.x + bird.size - 5, bird.y - 3);
+                ctx.lineTo(bird.x + bird.size + 18, bird.y);
+                ctx.lineTo(bird.x + bird.size - 5, bird.y + 3);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(bird.x + bird.size - 5, bird.y + 5);
+                ctx.lineTo(bird.x + bird.size + 15, bird.y + 8);
+                ctx.lineTo(bird.x + bird.size - 5, bird.y + 12);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                // Bico normal
+                ctx.beginPath();
+                ctx.moveTo(bird.x + bird.size - 5, bird.y);
+                ctx.lineTo(bird.x + bird.size + 15, bird.y + 5);
+                ctx.lineTo(bird.x + bird.size - 5, bird.y + 10);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            // Respiração visível no gelo (vapor saindo do bico)
+            if (currentArea === 3 && !bird.stunned) {
+                const coldProgress = getColdProgress();
+                if (coldProgress > 0.3) {
+                    const breathTime = Date.now() / 800;
+                    const breathPhase = Math.sin(breathTime) * 0.5 + 0.5; // 0 a 1
+                    
+                    if (breathPhase > 0.3) { // Só aparece quando está expirando
+                        const breathX = bird.x + bird.size + 8;
+                        const breathY = bird.y + 2;
+                        const breathSize = (breathPhase - 0.3) * 15 * coldProgress;
+                        
+                        // Vapor da respiração
+                        const breathGradient = ctx.createRadialGradient(
+                            breathX, breathY, 0,
+                            breathX, breathY, breathSize
+                        );
+                        breathGradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
+                        breathGradient.addColorStop(0.5, 'rgba(200, 220, 255, 0.4)');
+                        breathGradient.addColorStop(1, 'rgba(150, 180, 255, 0)');
+                        
+                        ctx.fillStyle = breathGradient;
+                        ctx.beginPath();
+                        ctx.ellipse(breathX, breathY, breathSize * 0.6, breathSize, -0.2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
 
     // Asa com animação de bater
-    let wingColor;
-    if (isPlayer) {
-        wingColor = selectedPlayerWing || '#27ae60';
-    } else {
-        wingColor = cpu.wingColor || '#c0392b';
-    }
-    if (bird.stunned) wingColor = '#8e44ad';
-    else if (hasStunReady) {
-        // Escurecer a cor da asa quando tem stun
-        wingColor = isPlayer ? darkenColor(selectedPlayerWing || '#27ae60') : darkenColor(cpu.wingColor || '#c0392b');
-    }
-    ctx.fillStyle = wingColor;
-    
-    if (isMoving && !bird.stunned) {
-        // Incrementar tempo da asa
-        bird.wingTime += 0.4;
-        
-        // Animação de bater asas
-        const wingFlap = Math.sin(bird.wingTime) * 0.5;
-        const wingY = bird.y + 5 + Math.sin(bird.wingTime) * 8;
-        const wingHeight = 12 + Math.cos(bird.wingTime) * 6;
-        
-        ctx.beginPath();
-        ctx.ellipse(bird.x - 10, wingY, 20, wingHeight, -0.3 + wingFlap, 0, Math.PI * 2);
-        ctx.fill();
-        
+            let wingColor;
+            if (isPlayer) {
+                wingColor = selectedPlayerWing || '#27ae60';
+            } else {
+                wingColor = cpu.wingColor || '#c0392b';
+            }
+            if (bird.stunned) wingColor = '#8e44ad';
+            else if (hasStunReady) {
+                // Escurecer a cor da asa quando tem stun
+                wingColor = isPlayer ? darkenColor(selectedPlayerWing || '#27ae60') : darkenColor(cpu.wingColor || '#c0392b');
+            } else if (currentArea === 3 && !bird.stunned) {
+                // Asa mais azulada com frio
+                const coldProgress = getColdProgress();
+                wingColor = interpolateColor(wingColor, '#B0C4DE', coldProgress * 0.3);
+            }
+            ctx.fillStyle = wingColor;
+            
+            // Modificar animação de asas no gelo (asas mais fechadas tentando se aquecer)
+            let wingAnimationMultiplier = 1;
+            let wingClosedness = 0; // 0 = normal, 1 = muito fechado
+            if (currentArea === 3 && !bird.stunned) {
+                const coldProgress = getColdProgress();
+                wingClosedness = coldProgress * 0.4; // Asas ficam mais fechadas com frio
+                wingAnimationMultiplier = 1 - coldProgress * 0.3; // Animação mais lenta
+            }
+            
+            if (isMoving && !bird.stunned) {
+                // Incrementar tempo da asa (mais lento no gelo)
+                bird.wingTime += 0.4 * wingAnimationMultiplier;
+                
+        // Animação de bater asas (reduzida no gelo)
+                const wingFlap = Math.sin(bird.wingTime) * (0.5 - wingClosedness * 0.3);
+                const wingY = bird.y + 5 + Math.sin(bird.wingTime) * (8 - wingClosedness * 4);
+                const wingHeight = (12 + Math.cos(bird.wingTime) * 6) * (1 - wingClosedness * 0.3);
+                
+                ctx.beginPath();
+                ctx.ellipse(bird.x - 10, wingY, 20, wingHeight, -0.3 + wingFlap, 0, Math.PI * 2);
+                ctx.fill();
+                
         // Segunda asa (mais atrás, efeito de profundidade)
-        ctx.globalAlpha = 0.5;
-        ctx.fillStyle = isPlayer ? '#1e8449' : '#922b21';
-        if (bird.stunned) ctx.fillStyle = '#6c3483';
-        ctx.beginPath();
-        ctx.ellipse(bird.x - 15, wingY - 3, 15, wingHeight * 0.8, -0.3 - wingFlap, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-    } else {
-        // Asa parada
-        ctx.beginPath();
-        ctx.ellipse(bird.x - 10, bird.y + 5, 20, 12, -0.3, 0, Math.PI * 2);
-        ctx.fill();
-    }
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = isPlayer ? '#1e8449' : '#922b21';
+                if (bird.stunned) ctx.fillStyle = '#6c3483';
+                ctx.beginPath();
+                ctx.ellipse(bird.x - 15, wingY - 3, 15, wingHeight * 0.8, -0.3 - wingFlap, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            } else {
+                // Asa parada
+                ctx.beginPath();
+                ctx.ellipse(bird.x - 10, bird.y + 5, 20, 12, -0.3, 0, Math.PI * 2);
+                ctx.fill();
+            }
 
-    // Efeitos visuais
-    if (bird.stunned) {
-        // Estrelas de atordoamento
-        ctx.font = '16px Arial';
+            // Efeitos visuais
+            if (bird.stunned) {
+                // Estrelas de atordoamento
+                ctx.font = '16px Arial';
         ctx.fillText('💫', bird.x - 20, bird.y - 35);
         ctx.fillText('⭐', bird.x + 15, bird.y - 40);
         ctx.fillText('💫', bird.x, bird.y - 45);
-    } else if (hasStunReady) {
-        // Indicador de stun pronto (simplificado para performance)
-        ctx.font = '24px Arial';
+            } else if (hasStunReady) {
+                // Indicador de stun pronto (simplificado para performance)
+                ctx.font = '24px Arial';
         ctx.fillText('⚡', bird.x, bird.y - 55);
-        
+                
         // Apenas um símbolo de raiva (menos desenhos = mais rápido)
-        ctx.font = '16px Arial';
+                ctx.font = '16px Arial';
         ctx.fillText('💢', bird.x + 25, bird.y - 35);
-    }
-    
+            }
+            
     ctx.restore(); // Restaura antes de desenhar textos (para não espelhar)
-    
+            
     // Animação de comer - emoji subindo e partículas (fora do transform)
-    if (bird.eatAnimation > 0 && bird.lastEatenEmoji) {
-        ctx.save();
-        const progress = 1 - (bird.eatAnimation / 30);
-        const yOffset = progress * 40;
-        const alpha = 1 - progress;
-        
-        ctx.globalAlpha = alpha;
-        
-        // Emoji subindo
-        ctx.font = `${20 - progress * 10}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(bird.lastEatenEmoji, bird.x, bird.y - 50 - yOffset);
-        
-        // Texto +1
-        ctx.font = 'bold 14px Arial';
-        ctx.fillStyle = '#f1c40f';
-        ctx.shadowColor = '#000';
-        ctx.shadowBlur = 3;
-        ctx.fillText('+1', bird.x + 25, bird.y - 40 - yOffset);
-        
+            if (bird.eatAnimation > 0 && bird.lastEatenEmoji) {
+                ctx.save();
+                const progress = 1 - (bird.eatAnimation / 30);
+                const yOffset = progress * 40;
+                const alpha = 1 - progress;
+                
+                ctx.globalAlpha = alpha;
+                
+                // Emoji subindo
+                ctx.font = `${20 - progress * 10}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(bird.lastEatenEmoji, bird.x, bird.y - 50 - yOffset);
+                
+                // Texto +1
+                ctx.font = 'bold 14px Arial';
+                ctx.fillStyle = '#f1c40f';
+                ctx.shadowColor = '#000';
+                ctx.shadowBlur = 3;
+                ctx.fillText('+1', bird.x + 25, bird.y - 40 - yOffset);
+                
         // Partículas de comida
-        ctx.shadowBlur = 0;
-        for (let i = 0; i < 4; i++) {
-            const angle = (i / 4) * Math.PI * 2 + progress * 2;
-            const dist = 20 + progress * 30;
-            const px = bird.x + Math.cos(angle) * dist;
-            const py = bird.y - 20 + Math.sin(angle) * dist * 0.5;
-            
-            ctx.fillStyle = isPlayer ? '#2ecc71' : '#e74c3c';
-            ctx.beginPath();
-            ctx.arc(px, py, 4 - progress * 3, 0, Math.PI * 2);
-            ctx.fill();
+                ctx.shadowBlur = 0;
+                for (let i = 0; i < 4; i++) {
+                    const angle = (i / 4) * Math.PI * 2 + progress * 2;
+                    const dist = 20 + progress * 30;
+                    const px = bird.x + Math.cos(angle) * dist;
+                    const py = bird.y - 20 + Math.sin(angle) * dist * 0.5;
+                    
+                    ctx.fillStyle = isPlayer ? '#2ecc71' : '#e74c3c';
+                    ctx.beginPath();
+                    ctx.arc(px, py, 4 - progress * 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.restore();
+            }
         }
-        
-        ctx.restore();
-    }
-}
 
-// Desenhar comida
-function drawFood() {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // Desenhar comidas normais
-    for (let food of foods) {
-        ctx.save();
-        
-        if (!food.grounded) {
-            // Comida quicando - rotaciona baseado na velocidade
-            ctx.globalAlpha = 0.7;
-            ctx.font = '28px Arial';
+        // Desenhar comida
+        function drawFood() {
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
             
+            // Desenhar comidas normais
+            for (let food of foods) {
+                ctx.save();
+                
+                if (!food.grounded) {
+                    // Comida quicando - rotaciona baseado na velocidade
+                    ctx.globalAlpha = 0.7;
+                    ctx.font = '28px Arial';
+                    
             // Rotação baseada no movimento
-            ctx.translate(food.x, food.y);
-            ctx.rotate(food.vx * 0.1);
-            ctx.translate(-food.x, -food.y);
-            
+                    ctx.translate(food.x, food.y);
+                    ctx.rotate(food.vx * 0.1);
+                    ctx.translate(-food.x, -food.y);
+                    
             // Sombra no chão
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-            const shadowSize = Math.max(5, 20 - (groundY - food.y) / 25);
-            ctx.beginPath();
-            ctx.ellipse(food.x, groundY + 10, shadowSize, shadowSize / 3, 0, 0, Math.PI * 2);
-            ctx.fill();
-        } else {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                    const shadowSize = Math.max(5, 20 - (groundY - food.y) / 25);
+                    ctx.beginPath();
+                    ctx.ellipse(food.x, groundY + 10, shadowSize, shadowSize / 3, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
             // Comida parada no chão
-            ctx.font = '30px Arial';
-            ctx.shadowColor = '#f1c40f';
-            ctx.shadowBlur = 15;
-        }
-        
-        ctx.fillText(food.emoji, food.x, food.y);
-        ctx.restore();
-    }
-    
+                    ctx.font = '30px Arial';
+                    ctx.shadowColor = '#f1c40f';
+                    ctx.shadowBlur = 15;
+                }
+                
+                ctx.fillText(food.emoji, food.x, food.y);
+                ctx.restore();
+            }
+            
     // Desenhar comidas especiais (no céu, douradas)
-    for (let food of specialFoods) {
-        ctx.save();
-        
-        const pulse = Math.sin(food.pulseTime / 10) * 5;
-        const urgency = food.timeLeft < 90; // Pisca quando falta pouco tempo
-        
-        // Aura dourada brilhante
-        const glowSize = 35 + pulse;
-        const gradient = ctx.createRadialGradient(food.x, food.y, 0, food.x, food.y, glowSize);
-        gradient.addColorStop(0, 'rgba(241, 196, 15, 0.8)');
-        gradient.addColorStop(0.5, 'rgba(241, 196, 15, 0.4)');
-        gradient.addColorStop(1, 'rgba(241, 196, 15, 0)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(food.x, food.y, glowSize, 0, Math.PI * 2);
-        ctx.fill();
-        
+            for (let food of specialFoods) {
+                ctx.save();
+                
+                const pulse = Math.sin(food.pulseTime / 10) * 5;
+                const urgency = food.timeLeft < 90; // Pisca quando falta pouco tempo
+                
+                // Aura dourada brilhante
+                const glowSize = 35 + pulse;
+                const gradient = ctx.createRadialGradient(food.x, food.y, 0, food.x, food.y, glowSize);
+                gradient.addColorStop(0, 'rgba(241, 196, 15, 0.8)');
+                gradient.addColorStop(0.5, 'rgba(241, 196, 15, 0.4)');
+                gradient.addColorStop(1, 'rgba(241, 196, 15, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(food.x, food.y, glowSize, 0, Math.PI * 2);
+                ctx.fill();
+                
         // Círculo dourado atrás
-        ctx.fillStyle = urgency && Math.floor(Date.now() / 100) % 2 === 0 
-            ? 'rgba(231, 76, 60, 0.6)' 
-            : 'rgba(241, 196, 15, 0.6)';
-        ctx.beginPath();
-        ctx.arc(food.x, food.y, 30 + pulse / 2, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Borda dourada
-        ctx.strokeStyle = '#f39c12';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(food.x, food.y, 32 + pulse / 2, 0, Math.PI * 2);
-        ctx.stroke();
-        
-        // Emoji maior
-        ctx.font = '45px Arial';
-        ctx.shadowColor = '#f1c40f';
-        ctx.shadowBlur = 20;
-        ctx.fillText(food.emoji, food.x, food.y);
-        
-        // Indicador +5
-        ctx.font = 'bold 16px Arial';
-        ctx.fillStyle = '#f1c40f';
-        ctx.shadowBlur = 5;
-        ctx.fillText('+5', food.x, food.y - 45);
-        
-        // Barra de tempo restante
-        ctx.shadowBlur = 0;
-        const barWidth = 50;
-        const barHeight = 6;
-        const timePercent = food.timeLeft / 300;
-        
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(food.x - barWidth / 2, food.y + 35, barWidth, barHeight);
-        
-        ctx.fillStyle = urgency ? '#e74c3c' : '#2ecc71';
-        ctx.fillRect(food.x - barWidth / 2, food.y + 35, barWidth * timePercent, barHeight);
-        
-        ctx.restore();
-    }
+                ctx.fillStyle = urgency && Math.floor(Date.now() / 100) % 2 === 0 
+                    ? 'rgba(231, 76, 60, 0.6)' 
+                    : 'rgba(241, 196, 15, 0.6)';
+                ctx.beginPath();
+                ctx.arc(food.x, food.y, 30 + pulse / 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Borda dourada
+                ctx.strokeStyle = '#f39c12';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(food.x, food.y, 32 + pulse / 2, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // Emoji maior
+                ctx.font = '45px Arial';
+                ctx.shadowColor = '#f1c40f';
+                ctx.shadowBlur = 20;
+                ctx.fillText(food.emoji, food.x, food.y);
+                
+                // Indicador +5
+                ctx.font = 'bold 16px Arial';
+                ctx.fillStyle = '#f1c40f';
+                ctx.shadowBlur = 5;
+                ctx.fillText('+5', food.x, food.y - 45);
+                
+                // Barra de tempo restante
+                ctx.shadowBlur = 0;
+                const barWidth = 50;
+                const barHeight = 6;
+                const timePercent = food.timeLeft / 300;
+                
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(food.x - barWidth / 2, food.y + 35, barWidth, barHeight);
+                
+                ctx.fillStyle = urgency ? '#e74c3c' : '#2ecc71';
+                ctx.fillRect(food.x - barWidth / 2, food.y + 35, barWidth * timePercent, barHeight);
+                
+                ctx.restore();
+            }
 
-    // Desenhar itens de velocidade
-    for (let item of speedItems) {
-        ctx.save();
-        
-        const pulse = Math.sin(item.pulseTime / 8) * 5;
-        const urgency = item.timeLeft < 60;
-        
-        // Aura azul brilhante
-        const glowSize = 35 + pulse;
-        const gradient = ctx.createRadialGradient(item.x, item.y, 0, item.x, item.y, glowSize);
-        gradient.addColorStop(0, 'rgba(52, 152, 219, 0.9)');
-        gradient.addColorStop(0.5, 'rgba(52, 152, 219, 0.4)');
-        gradient.addColorStop(1, 'rgba(52, 152, 219, 0)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(item.x, item.y, glowSize, 0, Math.PI * 2);
-        ctx.fill();
-        
+            // Desenhar itens de velocidade
+            for (let item of speedItems) {
+                ctx.save();
+                
+                const pulse = Math.sin(item.pulseTime / 8) * 5;
+                const urgency = item.timeLeft < 60;
+                
+                // Aura azul brilhante
+                const glowSize = 35 + pulse;
+                const gradient = ctx.createRadialGradient(item.x, item.y, 0, item.x, item.y, glowSize);
+                gradient.addColorStop(0, 'rgba(52, 152, 219, 0.9)');
+                gradient.addColorStop(0.5, 'rgba(52, 152, 219, 0.4)');
+                gradient.addColorStop(1, 'rgba(52, 152, 219, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(item.x, item.y, glowSize, 0, Math.PI * 2);
+                ctx.fill();
+                
         // Círculo azul
-        ctx.fillStyle = urgency && Math.floor(Date.now() / 80) % 2 === 0 
-            ? 'rgba(231, 76, 60, 0.7)' 
-            : 'rgba(52, 152, 219, 0.7)';
-        ctx.beginPath();
-        ctx.arc(item.x, item.y, 28 + pulse / 2, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Borda
-        ctx.strokeStyle = '#2980b9';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(item.x, item.y, 30 + pulse / 2, 0, Math.PI * 2);
-        ctx.stroke();
-        
+                ctx.fillStyle = urgency && Math.floor(Date.now() / 80) % 2 === 0 
+                    ? 'rgba(231, 76, 60, 0.7)' 
+                    : 'rgba(52, 152, 219, 0.7)';
+                ctx.beginPath();
+                ctx.arc(item.x, item.y, 28 + pulse / 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Borda
+                ctx.strokeStyle = '#2980b9';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(item.x, item.y, 30 + pulse / 2, 0, Math.PI * 2);
+                ctx.stroke();
+                
         // Ícone de raio
-        ctx.font = '35px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor = '#3498db';
-        ctx.shadowBlur = 15;
+                ctx.font = '35px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.shadowColor = '#3498db';
+                ctx.shadowBlur = 15;
         ctx.fillText('⚡', item.x, item.y);
-        
-        // Texto SPEED
-        ctx.font = 'bold 12px Arial';
-        ctx.fillStyle = '#3498db';
-        ctx.shadowBlur = 5;
-        ctx.fillText('SPEED', item.x, item.y - 40);
-        
-        // Barra de tempo
-        ctx.shadowBlur = 0;
-        const barWidth = 40;
-        const barHeight = 5;
-        const timePercent = item.timeLeft / 240;
-        
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(item.x - barWidth / 2, item.y + 32, barWidth, barHeight);
-        
-        ctx.fillStyle = urgency ? '#e74c3c' : '#3498db';
-        ctx.fillRect(item.x - barWidth / 2, item.y + 32, barWidth * timePercent, barHeight);
-        
-        ctx.restore();
-    }
-}
+                
+                // Texto SPEED
+                ctx.font = 'bold 12px Arial';
+                ctx.fillStyle = '#3498db';
+                ctx.shadowBlur = 5;
+                ctx.fillText('SPEED', item.x, item.y - 40);
+                
+                // Barra de tempo
+                ctx.shadowBlur = 0;
+                const barWidth = 40;
+                const barHeight = 5;
+                const timePercent = item.timeLeft / 240;
+                
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(item.x - barWidth / 2, item.y + 32, barWidth, barHeight);
+                
+                ctx.fillStyle = urgency ? '#e74c3c' : '#3498db';
+                ctx.fillRect(item.x - barWidth / 2, item.y + 32, barWidth * timePercent, barHeight);
+                
+                ctx.restore();
+            }
+        }
 
-// Desenhar tudo
+        // Desenhar tudo
 // Nuvens móveis
-let clouds = [
-    { x: 100, y: 60, size: 1, speed: 0.3 },
-    { x: 350, y: 90, size: 0.8, speed: 0.5 },
-    { x: 600, y: 50, size: 1.2, speed: 0.2 },
-    { x: 750, y: 100, size: 0.7, speed: 0.4 }
-];
+        let clouds = [
+            { x: 100, y: 60, size: 1, speed: 0.3 },
+            { x: 350, y: 90, size: 0.8, speed: 0.5 },
+            { x: 600, y: 50, size: 1.2, speed: 0.2 },
+            { x: 750, y: 100, size: 0.7, speed: 0.4 }
+        ];
 
 // Elementos decorativos do cenário (variam por subfase)
 let backgroundBirds = []; // Pássaros voando no fundo
-let butterflies = []; // Borboletas
-let fallingLeaves = []; // Folhas caindo
-let fireflies = []; // Vaga-lumes
+        let butterflies = []; // Borboletas
+        let fallingLeaves = []; // Folhas caindo
+        let fireflies = []; // Vaga-lumes
 
 // Elementos decorativos do deserto
 let cacti = []; // Cactos
@@ -2375,205 +3065,221 @@ let mirages = []; // Miragens
 let heatWaves = []; // Ondas de calor
 let desertBirds = []; // Pássaros do deserto
 
-// Desenhar nuvem
-function drawCloud(x, y, size) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(x, y, 25 * size, 0, Math.PI * 2);
-    ctx.arc(x + 30 * size, y - 10 * size, 30 * size, 0, Math.PI * 2);
-    ctx.arc(x + 60 * size, y, 25 * size, 0, Math.PI * 2);
-    ctx.arc(x + 30 * size, y + 5 * size, 20 * size, 0, Math.PI * 2);
-    ctx.fill();
-}
+// Elementos decorativos do gelo
+let snowflakes = []; // Flocos de neve
+let iceCrystals = []; // Cristais de gelo
+let icebergs = []; // Icebergs ao fundo
+let iceBirds = []; // Pássaros do gelo
+
+        // Desenhar nuvem
+        function drawCloud(x, y, size) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.beginPath();
+            ctx.arc(x, y, 25 * size, 0, Math.PI * 2);
+            ctx.arc(x + 30 * size, y - 10 * size, 30 * size, 0, Math.PI * 2);
+            ctx.arc(x + 60 * size, y, 25 * size, 0, Math.PI * 2);
+            ctx.arc(x + 30 * size, y + 5 * size, 20 * size, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
 // Desenhar árvore (com progresso de noite opcional)
-function drawTree(x, height, trunkWidth, nightProgress = 0) {
-    // Tronco (mais escuro conforme anoitece)
-    const trunkColor = interpolateColor('#8B4513', '#1a1a1a', nightProgress);
-    ctx.fillStyle = trunkColor;
-    ctx.fillRect(x - trunkWidth/2, canvas.height - 40 - height * 0.4, trunkWidth, height * 0.4 + 40);
-    
-    // Copa (3 camadas) - mais escura conforme anoitece
-    const leafColor1 = interpolateColor('#228B22', '#0a1a0a', nightProgress);
-    const leafColor2 = interpolateColor('#2E8B57', '#0a2a0a', nightProgress);
-    const leafColor3 = interpolateColor('#3CB371', '#0a2a0a', nightProgress);
-    const leafSize = height * 0.35;
-    
-    // Camada inferior
-    ctx.fillStyle = leafColor1;
-    ctx.beginPath();
-    ctx.moveTo(x - leafSize, canvas.height - 40 - height * 0.3);
-    ctx.lineTo(x + leafSize, canvas.height - 40 - height * 0.3);
-    ctx.lineTo(x, canvas.height - 40 - height * 0.6);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Camada do meio
-    ctx.fillStyle = leafColor2;
-    ctx.beginPath();
-    ctx.moveTo(x - leafSize * 0.8, canvas.height - 40 - height * 0.5);
-    ctx.lineTo(x + leafSize * 0.8, canvas.height - 40 - height * 0.5);
-    ctx.lineTo(x, canvas.height - 40 - height * 0.75);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Camada superior
-    ctx.fillStyle = leafColor3;
-    ctx.beginPath();
-    ctx.moveTo(x - leafSize * 0.6, canvas.height - 40 - height * 0.65);
-    ctx.lineTo(x + leafSize * 0.6, canvas.height - 40 - height * 0.65);
-    ctx.lineTo(x, canvas.height - 40 - height * 0.9);
-    ctx.closePath();
-    ctx.fill();
-}
+        function drawTree(x, height, trunkWidth, nightProgress = 0) {
+            // Tronco (mais escuro conforme anoitece)
+            const trunkColor = interpolateColor('#8B4513', '#1a1a1a', nightProgress);
+            ctx.fillStyle = trunkColor;
+            ctx.fillRect(x - trunkWidth/2, canvas.height - 40 - height * 0.4, trunkWidth, height * 0.4 + 40);
+            
+            // Copa (3 camadas) - mais escura conforme anoitece
+            const leafColor1 = interpolateColor('#228B22', '#0a1a0a', nightProgress);
+            const leafColor2 = interpolateColor('#2E8B57', '#0a2a0a', nightProgress);
+            const leafColor3 = interpolateColor('#3CB371', '#0a2a0a', nightProgress);
+            const leafSize = height * 0.35;
+            
+            // Camada inferior
+            ctx.fillStyle = leafColor1;
+            ctx.beginPath();
+            ctx.moveTo(x - leafSize, canvas.height - 40 - height * 0.3);
+            ctx.lineTo(x + leafSize, canvas.height - 40 - height * 0.3);
+            ctx.lineTo(x, canvas.height - 40 - height * 0.6);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Camada do meio
+            ctx.fillStyle = leafColor2;
+            ctx.beginPath();
+            ctx.moveTo(x - leafSize * 0.8, canvas.height - 40 - height * 0.5);
+            ctx.lineTo(x + leafSize * 0.8, canvas.height - 40 - height * 0.5);
+            ctx.lineTo(x, canvas.height - 40 - height * 0.75);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Camada superior
+            ctx.fillStyle = leafColor3;
+            ctx.beginPath();
+            ctx.moveTo(x - leafSize * 0.6, canvas.height - 40 - height * 0.65);
+            ctx.lineTo(x + leafSize * 0.6, canvas.height - 40 - height * 0.65);
+            ctx.lineTo(x, canvas.height - 40 - height * 0.9);
+            ctx.closePath();
+            ctx.fill();
+        }
 
-// Inicializar elementos decorativos baseado na subfase
-function initBackgroundDecorations() {
-    backgroundBirds = [];
-    butterflies = [];
-    fallingLeaves = [];
-    fireflies = [];
+        // Inicializar elementos decorativos baseado na subfase
+        function initBackgroundDecorations() {
+            backgroundBirds = [];
+            butterflies = [];
+            fallingLeaves = [];
+            fireflies = [];
+            // Limpar elementos do deserto
+            cacti = [];
+            mirages = [];
+            heatWaves = [];
+            desertBirds = [];
+            // Limpar elementos do gelo
+            snowflakes = [];
+            iceCrystals = [];
+            icebergs = [];
+            iceBirds = [];
     cacti = [];
     mirages = [];
     heatWaves = [];
     desertBirds = [];
 
-    if (currentArea === 1 && currentSubstage >= 1 && currentSubstage <= 6) {
-        if (currentSubstage === 1) {
+            if (currentArea === 1 && currentSubstage >= 1 && currentSubstage <= 6) {
+                if (currentSubstage === 1) {
             // 1-1: Pássaros voando no fundo
-            for (let i = 0; i < 3; i++) {
-                backgroundBirds.push({
-                    x: Math.random() * canvas.width,
-                    y: 80 + Math.random() * 100,
-                    speed: 0.5 + Math.random() * 0.5,
-                    size: 0.4 + Math.random() * 0.2,
-                    wingFlap: 0,
-                    color: ['#8B4513', '#654321', '#A0522D'][Math.floor(Math.random() * 3)]
-                });
-            }
-        } else if (currentSubstage === 2) {
-            // 1-2: Borboletas
-            for (let i = 0; i < 4; i++) {
-                butterflies.push({
-                    x: Math.random() * canvas.width,
-                    y: 100 + Math.random() * 150,
-                    speedX: (Math.random() - 0.5) * 0.8,
-                    speedY: Math.sin(Math.random() * Math.PI * 2) * 0.3,
-                    size: 0.6 + Math.random() * 0.4,
-                    wingFlap: Math.random() * Math.PI * 2,
-                    color: ['#FFD700', '#FF69B4', '#87CEEB', '#FF6347'][Math.floor(Math.random() * 4)]
-                });
-            }
-        } else if (currentSubstage === 3) {
+                    for (let i = 0; i < 3; i++) {
+                        backgroundBirds.push({
+                            x: Math.random() * canvas.width,
+                            y: 80 + Math.random() * 100,
+                            speed: 0.5 + Math.random() * 0.5,
+                            size: 0.4 + Math.random() * 0.2,
+                            wingFlap: 0,
+                            color: ['#8B4513', '#654321', '#A0522D'][Math.floor(Math.random() * 3)]
+                        });
+                    }
+                } else if (currentSubstage === 2) {
+                    // 1-2: Borboletas
+                    for (let i = 0; i < 4; i++) {
+                        butterflies.push({
+                            x: Math.random() * canvas.width,
+                            y: 100 + Math.random() * 150,
+                            speedX: (Math.random() - 0.5) * 0.8,
+                            speedY: Math.sin(Math.random() * Math.PI * 2) * 0.3,
+                            size: 0.6 + Math.random() * 0.4,
+                            wingFlap: Math.random() * Math.PI * 2,
+                            color: ['#FFD700', '#FF69B4', '#87CEEB', '#FF6347'][Math.floor(Math.random() * 4)]
+                        });
+                    }
+                } else if (currentSubstage === 3) {
             // 1-3: Pássaros + folhas caindo
-            for (let i = 0; i < 2; i++) {
-                backgroundBirds.push({
-                    x: Math.random() * canvas.width,
-                    y: 70 + Math.random() * 80,
-                    speed: 0.4 + Math.random() * 0.4,
-                    size: 0.35 + Math.random() * 0.15,
-                    wingFlap: 0,
-                    color: ['#8B4513', '#654321'][Math.floor(Math.random() * 2)]
-                });
-            }
-            for (let i = 0; i < 5; i++) {
-                fallingLeaves.push({
-                    x: Math.random() * canvas.width,
-                    y: -20 - Math.random() * 50,
-                    speedX: (Math.random() - 0.5) * 0.5,
-                    speedY: 0.3 + Math.random() * 0.4,
-                    rotation: Math.random() * Math.PI * 2,
-                    rotationSpeed: (Math.random() - 0.5) * 0.05,
-                    size: 0.5 + Math.random() * 0.5,
-                    color: ['#FF8C00', '#FFA500', '#FF6347'][Math.floor(Math.random() * 3)]
-                });
-            }
-        } else if (currentSubstage === 4) {
+                    for (let i = 0; i < 2; i++) {
+                        backgroundBirds.push({
+                            x: Math.random() * canvas.width,
+                            y: 70 + Math.random() * 80,
+                            speed: 0.4 + Math.random() * 0.4,
+                            size: 0.35 + Math.random() * 0.15,
+                            wingFlap: 0,
+                            color: ['#8B4513', '#654321'][Math.floor(Math.random() * 2)]
+                        });
+                    }
+                    for (let i = 0; i < 5; i++) {
+                        fallingLeaves.push({
+                            x: Math.random() * canvas.width,
+                            y: -20 - Math.random() * 50,
+                            speedX: (Math.random() - 0.5) * 0.5,
+                            speedY: 0.3 + Math.random() * 0.4,
+                            rotation: Math.random() * Math.PI * 2,
+                            rotationSpeed: (Math.random() - 0.5) * 0.05,
+                            size: 0.5 + Math.random() * 0.5,
+                            color: ['#FF8C00', '#FFA500', '#FF6347'][Math.floor(Math.random() * 3)]
+                        });
+                    }
+                } else if (currentSubstage === 4) {
             // 1-4: Combinação de todos os elementos
-            for (let i = 0; i < 2; i++) {
-                backgroundBirds.push({
-                    x: Math.random() * canvas.width,
-                    y: 90 + Math.random() * 90,
-                    speed: 0.5 + Math.random() * 0.5,
-                    size: 0.4 + Math.random() * 0.2,
-                    wingFlap: 0,
-                    color: ['#8B4513', '#654321', '#A0522D'][Math.floor(Math.random() * 3)]
-                });
-            }
-            for (let i = 0; i < 3; i++) {
-                butterflies.push({
-                    x: Math.random() * canvas.width,
-                    y: 120 + Math.random() * 120,
-                    speedX: (Math.random() - 0.5) * 0.7,
-                    speedY: Math.sin(Math.random() * Math.PI * 2) * 0.3,
-                    size: 0.6 + Math.random() * 0.4,
-                    wingFlap: Math.random() * Math.PI * 2,
-                    color: ['#FFD700', '#FF69B4', '#87CEEB'][Math.floor(Math.random() * 3)]
-                });
-            }
-            for (let i = 0; i < 4; i++) {
-                fallingLeaves.push({
-                    x: Math.random() * canvas.width,
-                    y: -20 - Math.random() * 40,
-                    speedX: (Math.random() - 0.5) * 0.4,
-                    speedY: 0.3 + Math.random() * 0.3,
-                    rotation: Math.random() * Math.PI * 2,
-                    rotationSpeed: (Math.random() - 0.5) * 0.04,
-                    size: 0.5 + Math.random() * 0.5,
-                    color: ['#FF8C00', '#FFA500', '#FF6347', '#32CD32'][Math.floor(Math.random() * 4)]
-                });
-            }
-        } else if (currentSubstage === 5) {
+                    for (let i = 0; i < 2; i++) {
+                        backgroundBirds.push({
+                            x: Math.random() * canvas.width,
+                            y: 90 + Math.random() * 90,
+                            speed: 0.5 + Math.random() * 0.5,
+                            size: 0.4 + Math.random() * 0.2,
+                            wingFlap: 0,
+                            color: ['#8B4513', '#654321', '#A0522D'][Math.floor(Math.random() * 3)]
+                        });
+                    }
+                    for (let i = 0; i < 3; i++) {
+                        butterflies.push({
+                            x: Math.random() * canvas.width,
+                            y: 120 + Math.random() * 120,
+                            speedX: (Math.random() - 0.5) * 0.7,
+                            speedY: Math.sin(Math.random() * Math.PI * 2) * 0.3,
+                            size: 0.6 + Math.random() * 0.4,
+                            wingFlap: Math.random() * Math.PI * 2,
+                            color: ['#FFD700', '#FF69B4', '#87CEEB'][Math.floor(Math.random() * 3)]
+                        });
+                    }
+                    for (let i = 0; i < 4; i++) {
+                        fallingLeaves.push({
+                            x: Math.random() * canvas.width,
+                            y: -20 - Math.random() * 40,
+                            speedX: (Math.random() - 0.5) * 0.4,
+                            speedY: 0.3 + Math.random() * 0.3,
+                            rotation: Math.random() * Math.PI * 2,
+                            rotationSpeed: (Math.random() - 0.5) * 0.04,
+                            size: 0.5 + Math.random() * 0.5,
+                            color: ['#FF8C00', '#FFA500', '#FF6347', '#32CD32'][Math.floor(Math.random() * 4)]
+                        });
+                    }
+                } else if (currentSubstage === 5) {
             // 1-5: Crepúsculo - Morcegos voando
-            for (let i = 0; i < 3; i++) {
-                backgroundBirds.push({
-                    x: Math.random() * canvas.width,
-                    y: 100 + Math.random() * 120,
-                    speed: 0.6 + Math.random() * 0.4,
-                    size: 0.3 + Math.random() * 0.15,
-                    wingFlap: 0,
-                    color: '#2C2C2C', // Cor escura para morcegos
-                    isBat: true
-                });
-            }
-            // Algumas folhas ainda caindo
-            for (let i = 0; i < 3; i++) {
-                fallingLeaves.push({
-                    x: Math.random() * canvas.width,
-                    y: -20 - Math.random() * 30,
-                    speedX: (Math.random() - 0.5) * 0.3,
-                    speedY: 0.2 + Math.random() * 0.3,
-                    rotation: Math.random() * Math.PI * 2,
-                    rotationSpeed: (Math.random() - 0.5) * 0.03,
-                    size: 0.4 + Math.random() * 0.4,
-                    color: ['#8B4513', '#654321', '#5D4037'][Math.floor(Math.random() * 3)] // Folhas mais escuras
-                });
-            }
-        } else if (currentSubstage === 6) {
-            // 1-6: Quase noite - Morcegos + primeiros vaga-lumes
-            for (let i = 0; i < 4; i++) {
-                backgroundBirds.push({
-                    x: Math.random() * canvas.width,
-                    y: 110 + Math.random() * 100,
-                    speed: 0.7 + Math.random() * 0.3,
-                    size: 0.3 + Math.random() * 0.15,
-                    wingFlap: 0,
-                    color: '#1a1a1a', // Morcegos mais escuros
-                    isBat: true
-                });
-            }
-            // Primeiros vaga-lumes aparecendo
-            for (let i = 0; i < 5; i++) {
-                fireflies.push({
-                    x: 50 + Math.random() * (canvas.width - 100),
-                    y: 150 + Math.random() * 150,
-                    speedX: (Math.random() - 0.5) * 0.3,
-                    speedY: (Math.random() - 0.5) * 0.3,
-                    glowPhase: Math.random() * Math.PI * 2,
-                    glowSpeed: 0.02 + Math.random() * 0.02
-                });
-            }
-        }
+                    for (let i = 0; i < 3; i++) {
+                        backgroundBirds.push({
+                            x: Math.random() * canvas.width,
+                            y: 100 + Math.random() * 120,
+                            speed: 0.6 + Math.random() * 0.4,
+                            size: 0.3 + Math.random() * 0.15,
+                            wingFlap: 0,
+                            color: '#2C2C2C', // Cor escura para morcegos
+                            isBat: true
+                        });
+                    }
+                    // Algumas folhas ainda caindo
+                    for (let i = 0; i < 3; i++) {
+                        fallingLeaves.push({
+                            x: Math.random() * canvas.width,
+                            y: -20 - Math.random() * 30,
+                            speedX: (Math.random() - 0.5) * 0.3,
+                            speedY: 0.2 + Math.random() * 0.3,
+                            rotation: Math.random() * Math.PI * 2,
+                            rotationSpeed: (Math.random() - 0.5) * 0.03,
+                            size: 0.4 + Math.random() * 0.4,
+                            color: ['#8B4513', '#654321', '#5D4037'][Math.floor(Math.random() * 3)] // Folhas mais escuras
+                        });
+                    }
+                } else if (currentSubstage === 6) {
+                    // 1-6: Quase noite - Morcegos + primeiros vaga-lumes
+                    for (let i = 0; i < 4; i++) {
+                        backgroundBirds.push({
+                            x: Math.random() * canvas.width,
+                            y: 110 + Math.random() * 100,
+                            speed: 0.7 + Math.random() * 0.3,
+                            size: 0.3 + Math.random() * 0.15,
+                            wingFlap: 0,
+                            color: '#1a1a1a', // Morcegos mais escuros
+                            isBat: true
+                        });
+                    }
+                    // Primeiros vaga-lumes aparecendo
+                    for (let i = 0; i < 5; i++) {
+                        fireflies.push({
+                            x: 50 + Math.random() * (canvas.width - 100),
+                            y: 150 + Math.random() * 150,
+                            speedX: (Math.random() - 0.5) * 0.3,
+                            speedY: (Math.random() - 0.5) * 0.3,
+                            glowPhase: Math.random() * Math.PI * 2,
+                            glowSpeed: 0.02 + Math.random() * 0.02
+                        });
+                    }
+                }
     } else if (currentArea === 2 && currentSubstage >= 1 && currentSubstage <= 7) {
         // Área 2: Deserto
         if (currentSubstage === 1) {
@@ -2758,241 +3464,470 @@ function initBackgroundDecorations() {
                 });
             }
         }
+    } else if (currentArea === 3 && currentSubstage >= 1 && currentSubstage <= 7) {
+        // Área 3: Gelo
+        // Limpar arrays do gelo
+        snowflakes = [];
+        iceCrystals = [];
+        icebergs = [];
+        iceBirds = [];
+        
+        if (currentSubstage === 1) {
+            // 3-1: Gelo ameno - Alguns flocos e icebergs
+            for (let i = 0; i < 15; i++) {
+                snowflakes.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 3 + Math.random() * 2,
+                    speed: 0.5 + Math.random() * 0.5,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.01 + Math.random() * 0.02,
+                    alpha: 0.3
+                });
+            }
+            for (let i = 0; i < 2; i++) {
+                icebergs.push({
+                    x: 200 + i * 400,
+                    y: canvas.height - 40,
+                    width: 80 + Math.random() * 40,
+                    height: 100 + Math.random() * 50,
+                    coldProgress: 0
+                });
+            }
+            for (let i = 0; i < 2; i++) {
+                iceBirds.push({
+                    x: Math.random() * canvas.width,
+                    y: 100 + Math.random() * 80,
+                    speed: 0.3 + Math.random() * 0.2,
+                    size: 0.6 + Math.random() * 0.3,
+                    wingFlap: Math.random() * Math.PI * 2,
+                    color: '#87CEEB',
+                    wingColor: '#B0E0E6'
+                });
+            }
+        } else if (currentSubstage === 2) {
+            // 3-2: Começando a esfriar - Mais flocos
+            for (let i = 0; i < 25; i++) {
+                snowflakes.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 3 + Math.random() * 3,
+                    speed: 0.6 + Math.random() * 0.6,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.015 + Math.random() * 0.025,
+                    alpha: 0.4
+                });
+            }
+            for (let i = 0; i < 3; i++) {
+                icebergs.push({
+                    x: 150 + i * 250,
+                    y: canvas.height - 40,
+                    width: 90 + Math.random() * 50,
+                    height: 120 + Math.random() * 60,
+                    coldProgress: 0.2
+                });
+            }
+        } else if (currentSubstage === 3) {
+            // 3-3: Esfriando - Flocos e primeiros cristais
+            for (let i = 0; i < 35; i++) {
+                snowflakes.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 4 + Math.random() * 3,
+                    speed: 0.7 + Math.random() * 0.7,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.02 + Math.random() * 0.03,
+                    alpha: 0.5
+                });
+            }
+            for (let i = 0; i < 5; i++) {
+                iceCrystals.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 8 + Math.random() * 6,
+                    speed: 0.3 + Math.random() * 0.3,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.01 + Math.random() * 0.02,
+                    alpha: 0.2
+                });
+            }
+            for (let i = 0; i < 3; i++) {
+                icebergs.push({
+                    x: 100 + i * 250,
+                    y: canvas.height - 40,
+                    width: 100 + Math.random() * 60,
+                    height: 140 + Math.random() * 70,
+                    coldProgress: 0.4
+                });
+            }
+        } else if (currentSubstage === 4) {
+            // 3-4: Gelado - Mais cristais e flocos
+            for (let i = 0; i < 45; i++) {
+                snowflakes.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 4 + Math.random() * 4,
+                    speed: 0.8 + Math.random() * 0.8,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.025 + Math.random() * 0.035,
+                    alpha: 0.6
+                });
+            }
+            for (let i = 0; i < 8; i++) {
+                iceCrystals.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 10 + Math.random() * 8,
+                    speed: 0.4 + Math.random() * 0.4,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.015 + Math.random() * 0.025,
+                    alpha: 0.3
+                });
+            }
+            for (let i = 0; i < 4; i++) {
+                icebergs.push({
+                    x: 80 + i * 220,
+                    y: canvas.height - 40,
+                    width: 110 + Math.random() * 70,
+                    height: 160 + Math.random() * 80,
+                    coldProgress: 0.6
+                });
+            }
+        } else if (currentSubstage === 5) {
+            // 3-5: Muito gelado - Tempestade de neve
+            for (let i = 0; i < 55; i++) {
+                snowflakes.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 5 + Math.random() * 4,
+                    speed: 1 + Math.random() * 1,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.03 + Math.random() * 0.04,
+                    alpha: 0.7
+                });
+            }
+            for (let i = 0; i < 12; i++) {
+                iceCrystals.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 12 + Math.random() * 10,
+                    speed: 0.5 + Math.random() * 0.5,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.02 + Math.random() * 0.03,
+                    alpha: 0.4
+                });
+            }
+            for (let i = 0; i < 4; i++) {
+                icebergs.push({
+                    x: 70 + i * 210,
+                    y: canvas.height - 40,
+                    width: 120 + Math.random() * 80,
+                    height: 180 + Math.random() * 90,
+                    coldProgress: 0.8
+                });
+            }
+        } else if (currentSubstage === 6) {
+            // 3-6: Extremamente gelado - Tempestade intensa
+            for (let i = 0; i < 65; i++) {
+                snowflakes.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 5 + Math.random() * 5,
+                    speed: 1.2 + Math.random() * 1.2,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.035 + Math.random() * 0.045,
+                    alpha: 0.8
+                });
+            }
+            for (let i = 0; i < 15; i++) {
+                iceCrystals.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 14 + Math.random() * 12,
+                    speed: 0.6 + Math.random() * 0.6,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.025 + Math.random() * 0.035,
+                    alpha: 0.5
+                });
+            }
+            for (let i = 0; i < 5; i++) {
+                icebergs.push({
+                    x: 60 + i * 180,
+                    y: canvas.height - 40,
+                    width: 130 + Math.random() * 90,
+                    height: 200 + Math.random() * 100,
+                    coldProgress: 1.0
+                });
+            }
+        } else if (currentSubstage === 7) {
+            // 3-7: Boss - Gelo extremo
+            for (let i = 0; i < 80; i++) {
+                snowflakes.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 6 + Math.random() * 6,
+                    speed: 1.5 + Math.random() * 1.5,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.04 + Math.random() * 0.05,
+                    alpha: 0.9
+                });
+            }
+            for (let i = 0; i < 20; i++) {
+                iceCrystals.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 16 + Math.random() * 14,
+                    speed: 0.8 + Math.random() * 0.8,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.03 + Math.random() * 0.04,
+                    alpha: 0.8
+                });
+            }
+            for (let i = 0; i < 6; i++) {
+                icebergs.push({
+                    x: 50 + i * 150,
+                    y: canvas.height - 40,
+                    width: 140 + Math.random() * 100,
+                    height: 220 + Math.random() * 110,
+                    coldProgress: 1.0
+                });
+            }
+        }
     }
 }
 
 // Desenhar pássaro de fundo
-function drawBackgroundBird(bird) {
-    ctx.save();
-    ctx.translate(bird.x, bird.y);
-    ctx.scale(bird.size, bird.size);
-    
-    bird.wingFlap += 0.15;
-    const wingOffset = Math.sin(bird.wingFlap) * 5;
-    
-    if (bird.isBat) {
-        // Desenhar morcego
-        // Corpo pequeno
-        ctx.fillStyle = bird.color;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 4, 3, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Asas de morcego (mais alongadas e pontiagudas)
-        ctx.fillStyle = bird.color;
-        ctx.globalAlpha = 0.7;
-        
-        // Asa superior esquerda
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(-15, -8 - wingOffset);
-        ctx.lineTo(-25, -5 - wingOffset);
-        ctx.lineTo(-20, 0);
-        ctx.lineTo(-10, -2);
-        ctx.closePath();
-        ctx.fill();
-        
-        // Asa superior direita
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(-15, 8 + wingOffset);
-        ctx.lineTo(-25, 5 + wingOffset);
-        ctx.lineTo(-20, 0);
-        ctx.lineTo(-10, 2);
-        ctx.closePath();
-        ctx.fill();
-        
-        ctx.globalAlpha = 1;
-        
+        function drawBackgroundBird(bird) {
+            ctx.save();
+            ctx.translate(bird.x, bird.y);
+            ctx.scale(bird.size, bird.size);
+            
+            bird.wingFlap += 0.15;
+            const wingOffset = Math.sin(bird.wingFlap) * 5;
+            
+            if (bird.isBat) {
+                // Desenhar morcego
+                // Corpo pequeno
+                ctx.fillStyle = bird.color;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 4, 3, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Asas de morcego (mais alongadas e pontiagudas)
+                ctx.fillStyle = bird.color;
+                ctx.globalAlpha = 0.7;
+                
+                // Asa superior esquerda
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(-15, -8 - wingOffset);
+                ctx.lineTo(-25, -5 - wingOffset);
+                ctx.lineTo(-20, 0);
+                ctx.lineTo(-10, -2);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Asa superior direita
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(-15, 8 + wingOffset);
+                ctx.lineTo(-25, 5 + wingOffset);
+                ctx.lineTo(-20, 0);
+                ctx.lineTo(-10, 2);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.globalAlpha = 1;
+                
         // Cabeça pequena
-        ctx.beginPath();
-        ctx.arc(2, 0, 2, 0, Math.PI * 2);
-        ctx.fill();
-    } else {
+                ctx.beginPath();
+                ctx.arc(2, 0, 2, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
         // Desenhar pássaro normal
-        // Corpo
-        ctx.fillStyle = bird.color;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 8, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Asas
-        ctx.fillStyle = bird.color;
-        ctx.beginPath();
-        ctx.ellipse(-5, wingOffset, 6, 10, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.ellipse(-5, -wingOffset, 6, 10, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
+                // Corpo
+                ctx.fillStyle = bird.color;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 8, 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Asas
+                ctx.fillStyle = bird.color;
+                ctx.beginPath();
+                ctx.ellipse(-5, wingOffset, 6, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(-5, -wingOffset, 6, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
         // Cabeça
-        ctx.beginPath();
-        ctx.arc(5, 0, 4, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    
-    ctx.restore();
-}
+                ctx.beginPath();
+                ctx.arc(5, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
 
-// Desenhar borboleta
-function drawButterfly(butterfly) {
-    ctx.save();
-    ctx.translate(butterfly.x, butterfly.y);
-    ctx.scale(butterfly.size, butterfly.size);
-    
-    butterfly.wingFlap += 0.2;
-    const wingAngle = Math.sin(butterfly.wingFlap) * 0.3;
-    
-    // Corpo
-    ctx.fillStyle = '#333';
-    ctx.fillRect(-1, -8, 2, 16);
-    
-    // Asas superiores
-    ctx.fillStyle = butterfly.color;
-    ctx.globalAlpha = 0.8;
-    ctx.save();
-    ctx.rotate(wingAngle);
-    ctx.beginPath();
-    ctx.ellipse(-8, -5, 10, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    
-    ctx.save();
-    ctx.rotate(-wingAngle);
-    ctx.beginPath();
-    ctx.ellipse(8, -5, 10, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    
-    // Asas inferiores
-    ctx.globalAlpha = 0.6;
-    ctx.save();
-    ctx.rotate(wingAngle * 0.7);
-    ctx.beginPath();
-    ctx.ellipse(-6, 3, 8, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    
-    ctx.save();
-    ctx.rotate(-wingAngle * 0.7);
-    ctx.beginPath();
-    ctx.ellipse(6, 3, 8, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    
-    ctx.globalAlpha = 1;
-    ctx.restore();
-}
+        // Desenhar borboleta
+        function drawButterfly(butterfly) {
+            ctx.save();
+            ctx.translate(butterfly.x, butterfly.y);
+            ctx.scale(butterfly.size, butterfly.size);
+            
+            butterfly.wingFlap += 0.2;
+            const wingAngle = Math.sin(butterfly.wingFlap) * 0.3;
+            
+            // Corpo
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-1, -8, 2, 16);
+            
+            // Asas superiores
+            ctx.fillStyle = butterfly.color;
+            ctx.globalAlpha = 0.8;
+            ctx.save();
+            ctx.rotate(wingAngle);
+            ctx.beginPath();
+            ctx.ellipse(-8, -5, 10, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            ctx.save();
+            ctx.rotate(-wingAngle);
+            ctx.beginPath();
+            ctx.ellipse(8, -5, 10, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            // Asas inferiores
+            ctx.globalAlpha = 0.6;
+            ctx.save();
+            ctx.rotate(wingAngle * 0.7);
+            ctx.beginPath();
+            ctx.ellipse(-6, 3, 8, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            ctx.save();
+            ctx.rotate(-wingAngle * 0.7);
+            ctx.beginPath();
+            ctx.ellipse(6, 3, 8, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
 
-// Desenhar folha caindo
-function drawFallingLeaf(leaf) {
-    ctx.save();
-    ctx.translate(leaf.x, leaf.y);
-    ctx.rotate(leaf.rotation);
-    ctx.scale(leaf.size, leaf.size);
-    
-    ctx.fillStyle = leaf.color;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.quadraticCurveTo(-8, -5, -5, -10);
-    ctx.quadraticCurveTo(0, -12, 5, -10);
-    ctx.quadraticCurveTo(8, -5, 0, 0);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Veia da folha
-    ctx.strokeStyle = 'rgba(139, 69, 19, 0.5)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(0, -10);
-    ctx.stroke();
-    
-    ctx.restore();
-}
+        // Desenhar folha caindo
+        function drawFallingLeaf(leaf) {
+            ctx.save();
+            ctx.translate(leaf.x, leaf.y);
+            ctx.rotate(leaf.rotation);
+            ctx.scale(leaf.size, leaf.size);
+            
+            ctx.fillStyle = leaf.color;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.quadraticCurveTo(-8, -5, -5, -10);
+            ctx.quadraticCurveTo(0, -12, 5, -10);
+            ctx.quadraticCurveTo(8, -5, 0, 0);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Veia da folha
+            ctx.strokeStyle = 'rgba(139, 69, 19, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(0, -10);
+            ctx.stroke();
+            
+            ctx.restore();
+        }
 
-// Desenhar vaga-lume
-function drawFirefly(firefly) {
-    firefly.glowPhase += firefly.glowSpeed;
-    const glow = 0.3 + Math.sin(firefly.glowPhase) * 0.7;
-    
-    ctx.save();
-    ctx.globalAlpha = glow;
-    ctx.shadowColor = '#ffff00';
-    ctx.shadowBlur = 8;
-    ctx.fillStyle = '#ffff00';
-    ctx.beginPath();
-    ctx.arc(firefly.x, firefly.y, 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-}
+        // Desenhar vaga-lume
+        function drawFirefly(firefly) {
+            firefly.glowPhase += firefly.glowSpeed;
+            const glow = 0.3 + Math.sin(firefly.glowPhase) * 0.7;
+            
+            ctx.save();
+            ctx.globalAlpha = glow;
+            ctx.shadowColor = '#ffff00';
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = '#ffff00';
+            ctx.beginPath();
+            ctx.arc(firefly.x, firefly.y, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
 
-// Atualizar elementos decorativos
-function updateBackgroundDecorations() {
+        // Atualizar elementos decorativos
+        function updateBackgroundDecorations() {
     // Atualizar pássaros de fundo
-    for (let bird of backgroundBirds) {
-        bird.x += bird.speed;
-        if (bird.x > canvas.width + 30) {
-            bird.x = -30;
-            bird.y = 80 + Math.random() * 100;
-        }
-    }
-    
-    // Atualizar borboletas
-    for (let butterfly of butterflies) {
-        butterfly.x += butterfly.speedX;
-        butterfly.y += butterfly.speedY;
-        
-        // Movimento flutuante
-        butterfly.speedY += Math.sin(Date.now() / 1000 + butterfly.x) * 0.01;
-        butterfly.speedY = Math.max(-0.5, Math.min(0.5, butterfly.speedY));
-        
-        if (butterfly.x < -20) butterfly.x = canvas.width + 20;
-        if (butterfly.x > canvas.width + 20) butterfly.x = -20;
-        if (butterfly.y < 50) butterfly.speedY = Math.abs(butterfly.speedY);
-        if (butterfly.y > canvas.height - 100) butterfly.speedY = -Math.abs(butterfly.speedY);
-    }
-    
-    // Atualizar folhas caindo
-    for (let i = fallingLeaves.length - 1; i >= 0; i--) {
-        const leaf = fallingLeaves[i];
-        leaf.x += leaf.speedX;
-        leaf.y += leaf.speedY;
-        leaf.rotation += leaf.rotationSpeed;
-        
-        if (leaf.y > canvas.height + 20) {
-            // Reposicionar no topo
-            leaf.y = -20 - Math.random() * 50;
-            leaf.x = Math.random() * canvas.width;
-        }
-    }
-    
-    // Atualizar vaga-lumes
-    for (let firefly of fireflies) {
-        firefly.x += firefly.speedX;
-        firefly.y += firefly.speedY;
-        
-        // Movimento flutuante suave
-        firefly.speedX += Math.sin(Date.now() / 2000 + firefly.y) * 0.01;
-        firefly.speedY += Math.cos(Date.now() / 1800 + firefly.x) * 0.01;
-        
-        // Limitar velocidade
-        firefly.speedX = Math.max(-0.5, Math.min(0.5, firefly.speedX));
-        firefly.speedY = Math.max(-0.5, Math.min(0.5, firefly.speedY));
-        
+            for (let bird of backgroundBirds) {
+                bird.x += bird.speed;
+                if (bird.x > canvas.width + 30) {
+                    bird.x = -30;
+                    bird.y = 80 + Math.random() * 100;
+                }
+            }
+            
+            // Atualizar borboletas
+            for (let butterfly of butterflies) {
+                butterfly.x += butterfly.speedX;
+                butterfly.y += butterfly.speedY;
+                
+                // Movimento flutuante
+                butterfly.speedY += Math.sin(Date.now() / 1000 + butterfly.x) * 0.01;
+                butterfly.speedY = Math.max(-0.5, Math.min(0.5, butterfly.speedY));
+                
+                if (butterfly.x < -20) butterfly.x = canvas.width + 20;
+                if (butterfly.x > canvas.width + 20) butterfly.x = -20;
+                if (butterfly.y < 50) butterfly.speedY = Math.abs(butterfly.speedY);
+                if (butterfly.y > canvas.height - 100) butterfly.speedY = -Math.abs(butterfly.speedY);
+            }
+            
+            // Atualizar folhas caindo
+            for (let i = fallingLeaves.length - 1; i >= 0; i--) {
+                const leaf = fallingLeaves[i];
+                leaf.x += leaf.speedX;
+                leaf.y += leaf.speedY;
+                leaf.rotation += leaf.rotationSpeed;
+                
+                if (leaf.y > canvas.height + 20) {
+                    // Reposicionar no topo
+                    leaf.y = -20 - Math.random() * 50;
+                    leaf.x = Math.random() * canvas.width;
+                }
+            }
+            
+            // Atualizar vaga-lumes
+            for (let firefly of fireflies) {
+                firefly.x += firefly.speedX;
+                firefly.y += firefly.speedY;
+                
+                // Movimento flutuante suave
+                firefly.speedX += Math.sin(Date.now() / 2000 + firefly.y) * 0.01;
+                firefly.speedY += Math.cos(Date.now() / 1800 + firefly.x) * 0.01;
+                
+                // Limitar velocidade
+                firefly.speedX = Math.max(-0.5, Math.min(0.5, firefly.speedX));
+                firefly.speedY = Math.max(-0.5, Math.min(0.5, firefly.speedY));
+                
         // Manter dentro da área visível
-        if (firefly.x < 20) firefly.speedX = Math.abs(firefly.speedX);
-        if (firefly.x > canvas.width - 20) firefly.speedX = -Math.abs(firefly.speedX);
-        if (firefly.y < 100) firefly.speedY = Math.abs(firefly.speedY);
-        if (firefly.y > canvas.height - 100) firefly.speedY = -Math.abs(firefly.speedY);
-    }
-}
+                if (firefly.x < 20) firefly.speedX = Math.abs(firefly.speedX);
+                if (firefly.x > canvas.width - 20) firefly.speedX = -Math.abs(firefly.speedX);
+                if (firefly.y < 100) firefly.speedY = Math.abs(firefly.speedY);
+                if (firefly.y > canvas.height - 100) firefly.speedY = -Math.abs(firefly.speedY);
+            }
+        }
 
 // Calcular progresso da transição dia/noite (0 = dia completo, 1 = noite completa)
-function getDayNightProgress() {
-    if (currentArea !== 1 || currentSubstage >= 7) return 0; // 1-7 usa drawNightForestBackground
-    // 1-1 = 0.0, 1-2 = 0.15, 1-3 = 0.3, 1-4 = 0.5, 1-5 = 0.7, 1-6 = 0.85
-    const progress = (currentSubstage - 1) / 6;
+        function getDayNightProgress() {
+            if (currentArea !== 1 || currentSubstage >= 7) return 0; // 1-7 usa drawNightForestBackground
+            // 1-1 = 0.0, 1-2 = 0.15, 1-3 = 0.3, 1-4 = 0.5, 1-5 = 0.7, 1-6 = 0.85
+            const progress = (currentSubstage - 1) / 6;
     return Math.max(0, Math.min(0.85, progress)); // Máximo 0.85 para 1-6
 }
 
@@ -3002,221 +3937,352 @@ function getHeatProgress() {
     // 2-1 = 0.0 (fresco), 2-2 = 0.2, 2-3 = 0.4, 2-4 = 0.6, 2-5 = 0.8, 2-6 = 1.0 (muito quente)
     const progress = (currentSubstage - 1) / 6;
     return Math.max(0, Math.min(1.0, progress));
+        }
+
+// Calcular progresso do frio no gelo (0 = ameno, 1 = extremamente gelado)
+function getColdProgress() {
+    if (currentArea !== 3 || currentSubstage >= 7) return 0; // 3-7 usa drawExtremeIceBackground
+    // 3-1 = 0.0 (ameno), 3-2 = 0.2, 3-3 = 0.4, 3-4 = 0.6, 3-5 = 0.8, 3-6 = 1.0 (extremamente gelado)
+    const progress = (currentSubstage - 1) / 6;
+    return Math.max(0, Math.min(1.0, progress));
 }
 
-// Interpolar entre duas cores
-function interpolateColor(color1, color2, t) {
-    // Converter hex para RGB
-    const hex1 = color1.replace('#', '');
-    const hex2 = color2.replace('#', '');
-    const r1 = parseInt(hex1.substr(0, 2), 16);
-    const g1 = parseInt(hex1.substr(2, 2), 16);
-    const b1 = parseInt(hex1.substr(4, 2), 16);
-    const r2 = parseInt(hex2.substr(0, 2), 16);
-    const g2 = parseInt(hex2.substr(2, 2), 16);
-    const b2 = parseInt(hex2.substr(4, 2), 16);
-    
-    const r = Math.round(r1 + (r2 - r1) * t);
-    const g = Math.round(g1 + (g2 - g1) * t);
-    const b = Math.round(b1 + (b2 - b1) * t);
-    
-    return `rgb(${r}, ${g}, ${b})`;
-}
+        // Interpolar entre duas cores
+        function interpolateColor(color1, color2, t) {
+            // Converter hex para RGB
+            const hex1 = color1.replace('#', '');
+            const hex2 = color2.replace('#', '');
+            const r1 = parseInt(hex1.substr(0, 2), 16);
+            const g1 = parseInt(hex1.substr(2, 2), 16);
+            const b1 = parseInt(hex1.substr(4, 2), 16);
+            const r2 = parseInt(hex2.substr(0, 2), 16);
+            const g2 = parseInt(hex2.substr(2, 2), 16);
+            const b2 = parseInt(hex2.substr(4, 2), 16);
+            
+            const r = Math.round(r1 + (r2 - r1) * t);
+            const g = Math.round(g1 + (g2 - g1) * t);
+            const b = Math.round(b1 + (b2 - b1) * t);
+            
+            return `rgb(${r}, ${g}, ${b})`;
+        }
 
 // Desenhar cenário da floresta
-function drawForestBackground() {
-    const dayNightProgress = getDayNightProgress();
-    
+        function drawForestBackground() {
+            const dayNightProgress = getDayNightProgress();
+            
     // Interpolar cores do céu entre dia e noite
-    const skyTopDay = '#87CEEB';
-    const skyTopNight = '#0a0a20';
-    const skyBottomDay = '#E0F6FF';
-    const skyBottomNight = '#2a2a4a';
-    
-    const skyTop = interpolateColor(skyTopDay, skyTopNight, dayNightProgress);
-    const skyBottom = interpolateColor(skyBottomDay, skyBottomNight, dayNightProgress);
-    
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
-    skyGradient.addColorStop(0, skyTop);
-    skyGradient.addColorStop(1, skyBottom);
-    ctx.fillStyle = skyGradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const skyTopDay = '#87CEEB';
+            const skyTopNight = '#0a0a20';
+            const skyBottomDay = '#E0F6FF';
+            const skyBottomNight = '#2a2a4a';
+            
+            const skyTop = interpolateColor(skyTopDay, skyTopNight, dayNightProgress);
+            const skyBottom = interpolateColor(skyBottomDay, skyBottomNight, dayNightProgress);
+            
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
+            skyGradient.addColorStop(0, skyTop);
+            skyGradient.addColorStop(1, skyBottom);
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Desenhar estrelas gradualmente (quanto mais escuro, mais estrelas)
-    if (dayNightProgress > 0.3) {
-        ctx.fillStyle = 'white';
-        const starCount = Math.floor(dayNightProgress * 50);
-        for (let i = 0; i < starCount; i++) {
-            const x = (i * 137) % canvas.width;
-            const y = (i * 73) % (canvas.height - 100);
-            const twinkle = 0.3 + Math.sin(Date.now() / 500 + i) * 0.7 * dayNightProgress;
-            ctx.globalAlpha = twinkle * dayNightProgress;
+            // Desenhar estrelas gradualmente (quanto mais escuro, mais estrelas)
+            if (dayNightProgress > 0.3) {
+                ctx.fillStyle = 'white';
+                const starCount = Math.floor(dayNightProgress * 50);
+                for (let i = 0; i < starCount; i++) {
+                    const x = (i * 137) % canvas.width;
+                    const y = (i * 73) % (canvas.height - 100);
+                    const twinkle = 0.3 + Math.sin(Date.now() / 500 + i) * 0.7 * dayNightProgress;
+                    ctx.globalAlpha = twinkle * dayNightProgress;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 1 + (i % 3), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            // Desenhar lua gradualmente
+            if (dayNightProgress > 0.4) {
+                const moonX = 650;
+                const moonY = 80;
+                const moonAlpha = (dayNightProgress - 0.4) / 0.6; // Aparece gradualmente
+                ctx.fillStyle = '#fffacd';
+                ctx.shadowColor = '#fffacd';
+                ctx.shadowBlur = 30 * moonAlpha;
+                ctx.globalAlpha = moonAlpha;
+                ctx.beginPath();
+                ctx.arc(moonX, moonY, 40, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                
+                // Crateras da lua
+                ctx.fillStyle = `rgba(200, 195, 150, ${0.3 * moonAlpha})`;
+                ctx.beginPath();
+                ctx.arc(moonX - 10, moonY - 5, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(moonX + 15, moonY + 10, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+
+            // Atualizar e desenhar nuvens (mais escuras conforme anoitece)
+            for (let cloud of clouds) {
+                cloud.x += cloud.speed;
+                if (cloud.x > canvas.width + 100) {
+                    cloud.x = -100;
+                }
+                ctx.globalAlpha = 1 - dayNightProgress * 0.7; // Nuvens desaparecem gradualmente
+                drawCloud(cloud.x, cloud.y, cloud.size);
+                ctx.globalAlpha = 1;
+            }
+
+            // Atualizar elementos decorativos (variam por subfase)
+            updateBackgroundDecorations();
+
+            // Montanhas ao fundo (mais escuras conforme anoitece)
+            const mountainColor1 = interpolateColor('#6B8E23', '#1a3a1a', dayNightProgress);
+            const mountainColor2 = interpolateColor('#556B2F', '#0a2a0a', dayNightProgress);
+            
+            ctx.fillStyle = mountainColor1;
             ctx.beginPath();
-            ctx.arc(x, y, 1 + (i % 3), 0, Math.PI * 2);
+            ctx.moveTo(0, canvas.height - 40);
+            ctx.lineTo(150, canvas.height - 150);
+            ctx.lineTo(300, canvas.height - 40);
             ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-    }
-
-    // Desenhar lua gradualmente
-    if (dayNightProgress > 0.4) {
-        const moonX = 650;
-        const moonY = 80;
-        const moonAlpha = (dayNightProgress - 0.4) / 0.6; // Aparece gradualmente
-        ctx.fillStyle = '#fffacd';
-        ctx.shadowColor = '#fffacd';
-        ctx.shadowBlur = 30 * moonAlpha;
-        ctx.globalAlpha = moonAlpha;
-        ctx.beginPath();
-        ctx.arc(moonX, moonY, 40, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        
-        // Crateras da lua
-        ctx.fillStyle = `rgba(200, 195, 150, ${0.3 * moonAlpha})`;
-        ctx.beginPath();
-        ctx.arc(moonX - 10, moonY - 5, 8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(moonX + 15, moonY + 10, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-    }
-
-    // Atualizar e desenhar nuvens (mais escuras conforme anoitece)
-    for (let cloud of clouds) {
-        cloud.x += cloud.speed;
-        if (cloud.x > canvas.width + 100) {
-            cloud.x = -100;
-        }
-        ctx.globalAlpha = 1 - dayNightProgress * 0.7; // Nuvens desaparecem gradualmente
-        drawCloud(cloud.x, cloud.y, cloud.size);
-        ctx.globalAlpha = 1;
-    }
-
-    // Atualizar elementos decorativos (variam por subfase)
-    updateBackgroundDecorations();
-
-    // Montanhas ao fundo (mais escuras conforme anoitece)
-    const mountainColor1 = interpolateColor('#6B8E23', '#1a3a1a', dayNightProgress);
-    const mountainColor2 = interpolateColor('#556B2F', '#0a2a0a', dayNightProgress);
-    
-    ctx.fillStyle = mountainColor1;
-    ctx.beginPath();
-    ctx.moveTo(0, canvas.height - 40);
-    ctx.lineTo(150, canvas.height - 150);
-    ctx.lineTo(300, canvas.height - 40);
-    ctx.fill();
-    
-    ctx.fillStyle = mountainColor2;
-    ctx.beginPath();
-    ctx.moveTo(200, canvas.height - 40);
-    ctx.lineTo(400, canvas.height - 180);
-    ctx.lineTo(600, canvas.height - 40);
-    ctx.fill();
-    
-    ctx.fillStyle = mountainColor1;
-    ctx.beginPath();
-    ctx.moveTo(500, canvas.height - 40);
-    ctx.lineTo(700, canvas.height - 130);
-    ctx.lineTo(800, canvas.height - 40);
-    ctx.fill();
-    
+            
+            ctx.fillStyle = mountainColor2;
+            ctx.beginPath();
+            ctx.moveTo(200, canvas.height - 40);
+            ctx.lineTo(400, canvas.height - 180);
+            ctx.lineTo(600, canvas.height - 40);
+            ctx.fill();
+            
+            ctx.fillStyle = mountainColor1;
+            ctx.beginPath();
+            ctx.moveTo(500, canvas.height - 40);
+            ctx.lineTo(700, canvas.height - 130);
+            ctx.lineTo(800, canvas.height - 40);
+            ctx.fill();
+            
     // Desenhar folhas caindo (depois das montanhas, antes das árvores)
-    for (let leaf of fallingLeaves) {
-        drawFallingLeaf(leaf);
-    }
+            for (let leaf of fallingLeaves) {
+                drawFallingLeaf(leaf);
+            }
 
     // Árvores de fundo (menores) - mais escuras conforme anoitece
-    drawTree(50, 120, 12, dayNightProgress);
-    drawTree(180, 100, 10, dayNightProgress);
-    drawTree(620, 110, 11, dayNightProgress);
-    drawTree(750, 130, 13, dayNightProgress);
+            drawTree(50, 120, 12, dayNightProgress);
+            drawTree(180, 100, 10, dayNightProgress);
+            drawTree(620, 110, 11, dayNightProgress);
+            drawTree(750, 130, 13, dayNightProgress);
 
     // Desenhar pássaros de fundo
-    for (let bird of backgroundBirds) {
-        drawBackgroundBird(bird);
-    }
+            for (let bird of backgroundBirds) {
+                drawBackgroundBird(bird);
+            }
 
-    // Desenhar borboletas
-    for (let butterfly of butterflies) {
-        drawButterfly(butterfly);
-    }
+            // Desenhar borboletas
+            for (let butterfly of butterflies) {
+                drawButterfly(butterfly);
+            }
 
-    // Desenhar vaga-lumes (fase 1-6)
-    for (let firefly of fireflies) {
-        drawFirefly(firefly);
-    }
+            // Desenhar vaga-lumes (fase 1-6)
+            for (let firefly of fireflies) {
+                drawFirefly(firefly);
+            }
 
     // Árvores de frente (maiores, nas laterais) - mais escuras conforme anoitece
-    drawTree(-20, 180, 18, dayNightProgress);
-    drawTree(820, 170, 16, dayNightProgress);
+            drawTree(-20, 180, 18, dayNightProgress);
+            drawTree(820, 170, 16, dayNightProgress);
 
     // Grama com variação (mais escura conforme anoitece)
-    const grassTop = interpolateColor('#2ecc71', '#1a4a1a', dayNightProgress);
-    const grassBottom = interpolateColor('#27ae60', '#0a3a0a', dayNightProgress);
-    const grassGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
-    grassGradient.addColorStop(0, grassTop);
-    grassGradient.addColorStop(1, grassBottom);
-    ctx.fillStyle = grassGradient;
-    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
-    
-    // Detalhes na grama
-    const grassDetail = interpolateColor('#27ae60', '#0a3a0a', dayNightProgress);
-    ctx.fillStyle = grassDetail;
-    for (let i = 0; i < canvas.width; i += 30) {
-        ctx.beginPath();
-        ctx.moveTo(i, canvas.height - 40);
-        ctx.lineTo(i + 5, canvas.height - 50);
-        ctx.lineTo(i + 10, canvas.height - 40);
-        ctx.fill();
-    }
+            const grassTop = interpolateColor('#2ecc71', '#1a4a1a', dayNightProgress);
+            const grassBottom = interpolateColor('#27ae60', '#0a3a0a', dayNightProgress);
+            const grassGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
+            grassGradient.addColorStop(0, grassTop);
+            grassGradient.addColorStop(1, grassBottom);
+            ctx.fillStyle = grassGradient;
+            ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+            
+            // Detalhes na grama
+            const grassDetail = interpolateColor('#27ae60', '#0a3a0a', dayNightProgress);
+            ctx.fillStyle = grassDetail;
+            for (let i = 0; i < canvas.width; i += 30) {
+                ctx.beginPath();
+                ctx.moveTo(i, canvas.height - 40);
+                ctx.lineTo(i + 5, canvas.height - 50);
+                ctx.lineTo(i + 10, canvas.height - 40);
+                ctx.fill();
+            }
     
     // Desenhar chuva (apenas na subfase 1-3)
     if (currentArea === 1 && currentSubstage === 3) {
         drawRain();
     }
-}
+        }
 
 // Desenhar cacto
 function drawCactus(x, y, size, heatProgress) {
     ctx.save();
     ctx.translate(x, y);
     
+    // Função para gerar valores pseudo-aleatórios determinísticos baseados na posição
+    function hash(seed) {
+        const str = seed.toString();
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return Math.abs(hash) / 2147483647; // Normalize to 0-1
+    }
+    
     // Cacto fica mais "murcho" com o calor extremo
     const heatEffect = heatProgress * 0.1;
     const cactusSize = size * (1 - heatEffect);
     
     // Cor do cacto (mais amarelado com calor)
-    const cactusColor = interpolateColor('#228B22', '#8B6914', heatProgress * 0.3);
+    const cactusColor = interpolateColor('#2d5016', '#6b8e23', heatProgress * 0.3);
+    const cactusDark = interpolateColor('#1a3d0e', '#556b2f', heatProgress * 0.3);
+    const cactusLight = interpolateColor('#3d6b1f', '#8b9a4f', heatProgress * 0.3);
     
-    // Corpo principal
-    ctx.fillStyle = cactusColor;
+    // Sombra do cacto
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
     ctx.beginPath();
-    ctx.ellipse(0, 0, cactusSize * 0.3, cactusSize * 0.8, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, cactusSize * 0.9, cactusSize * 0.4, cactusSize * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Corpo principal com gradiente
+    const bodyGradient = ctx.createLinearGradient(0, -cactusSize * 0.8, 0, cactusSize * 0.8);
+    bodyGradient.addColorStop(0, cactusLight);
+    bodyGradient.addColorStop(0.5, cactusColor);
+    bodyGradient.addColorStop(1, cactusDark);
+    
+    ctx.fillStyle = bodyGradient;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, cactusSize * 0.32, cactusSize * 0.85, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Destaque de luz no corpo principal
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.beginPath();
+    ctx.ellipse(-cactusSize * 0.1, -cactusSize * 0.3, cactusSize * 0.15, cactusSize * 0.4, 0, 0, Math.PI * 2);
     ctx.fill();
     
     // Braço esquerdo
+    const leftArmGradient = ctx.createLinearGradient(-cactusSize * 0.25, -cactusSize * 0.4, -cactusSize * 0.25, cactusSize * 0.2);
+    leftArmGradient.addColorStop(0, cactusLight);
+    leftArmGradient.addColorStop(0.5, cactusColor);
+    leftArmGradient.addColorStop(1, cactusDark);
+    
+    ctx.fillStyle = leftArmGradient;
     ctx.beginPath();
-    ctx.ellipse(-cactusSize * 0.25, -cactusSize * 0.2, cactusSize * 0.15, cactusSize * 0.4, -0.3, 0, Math.PI * 2);
+    ctx.ellipse(-cactusSize * 0.25, -cactusSize * 0.2, cactusSize * 0.16, cactusSize * 0.45, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Destaque no braço esquerdo
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.beginPath();
+    ctx.ellipse(-cactusSize * 0.3, -cactusSize * 0.3, cactusSize * 0.08, cactusSize * 0.2, -0.3, 0, Math.PI * 2);
     ctx.fill();
     
     // Braço direito
+    const rightArmGradient = ctx.createLinearGradient(cactusSize * 0.25, -cactusSize * 0.35, cactusSize * 0.25, cactusSize * 0.2);
+    rightArmGradient.addColorStop(0, cactusLight);
+    rightArmGradient.addColorStop(0.5, cactusColor);
+    rightArmGradient.addColorStop(1, cactusDark);
+    
+    ctx.fillStyle = rightArmGradient;
     ctx.beginPath();
-    ctx.ellipse(cactusSize * 0.25, -cactusSize * 0.15, cactusSize * 0.15, cactusSize * 0.35, 0.3, 0, Math.PI * 2);
+    ctx.ellipse(cactusSize * 0.25, -cactusSize * 0.15, cactusSize * 0.16, cactusSize * 0.4, 0.3, 0, Math.PI * 2);
     ctx.fill();
     
-    // Espinhos (menos visíveis com calor)
-    ctx.strokeStyle = '#654321';
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = 1 - heatProgress * 0.5;
-    for (let i = -cactusSize * 0.6; i < cactusSize * 0.6; i += cactusSize * 0.15) {
-        ctx.beginPath();
-        ctx.moveTo(i, -cactusSize * 0.3);
-        ctx.lineTo(i, -cactusSize * 0.35);
-        ctx.stroke();
+    // Destaque no braço direito
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.beginPath();
+    ctx.ellipse(cactusSize * 0.3, -cactusSize * 0.25, cactusSize * 0.08, cactusSize * 0.2, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Espinhos mais detalhados e realistas
+    ctx.strokeStyle = '#4a4a2a';
+    ctx.fillStyle = '#4a4a2a';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 1 - heatProgress * 0.4;
+    
+    // Espinhos no corpo principal (em padrão mais natural)
+    const spineRows = 8;
+    for (let row = 0; row < spineRows; row++) {
+        const yPos = -cactusSize * 0.7 + (row / (spineRows - 1)) * cactusSize * 1.2;
+        const numSpines = row % 2 === 0 ? 3 : 2; // Alterna entre 3 e 2 espinhos por linha
+        const startX = row % 2 === 0 ? -cactusSize * 0.25 : -cactusSize * 0.15;
+        
+        for (let i = 0; i < numSpines; i++) {
+            const xPos = startX + (i * cactusSize * 0.2);
+            // Usar hash determinístico baseado na posição do cacto e linha/coluna do espinho
+            const spineSeed = x + y + row * 100 + i * 10;
+            const spineLength = cactusSize * 0.08 + hash(spineSeed) * cactusSize * 0.04;
+            const angle = (hash(spineSeed + 1) - 0.5) * 0.5;
+            
+            ctx.save();
+            ctx.translate(xPos, yPos);
+            ctx.rotate(angle);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(0, -spineLength);
+            ctx.stroke();
+            // Ponta do espinho
+            ctx.beginPath();
+            ctx.arc(0, -spineLength, 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
     }
+    
+    // Espinhos nos braços
+    for (let row = 0; row < 4; row++) {
+        const yPos = -cactusSize * 0.4 + row * cactusSize * 0.15;
+        // Braço esquerdo
+        ctx.save();
+        ctx.translate(-cactusSize * 0.25, yPos);
+        ctx.rotate(-0.3);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, -cactusSize * 0.06);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, -cactusSize * 0.06, 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        // Braço direito
+        ctx.save();
+        ctx.translate(cactusSize * 0.25, yPos);
+        ctx.rotate(0.3);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, -cactusSize * 0.06);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, -cactusSize * 0.06, 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+    
     ctx.globalAlpha = 1;
+    
+    // Pequenas flores/frutos no topo (opcional, raro) - baseado em hash determinístico
+    const flowerSeed = x + y + 999;
+    if (hash(flowerSeed) < 0.15) {
+        ctx.fillStyle = '#ff6b9d';
+        ctx.beginPath();
+        ctx.arc(0, -cactusSize * 0.85, cactusSize * 0.05, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffb3d9';
+        ctx.beginPath();
+        ctx.arc(0, -cactusSize * 0.85, cactusSize * 0.03, 0, Math.PI * 2);
+        ctx.fill();
+    }
     
     ctx.restore();
 }
@@ -3267,6 +4333,346 @@ function drawHeatWave(wave) {
     ctx.restore();
 }
 
+// ========== FUNÇÕES DO GELO ==========
+
+// Desenhar floco de neve
+function drawSnowflake(snowflake) {
+    ctx.save();
+    ctx.translate(snowflake.x, snowflake.y);
+    ctx.rotate(snowflake.rotation);
+    
+    ctx.strokeStyle = `rgba(255, 255, 255, ${snowflake.alpha})`;
+    ctx.lineWidth = 1;
+    
+    // Desenhar floco de neve de 6 pontas
+    for (let i = 0; i < 6; i++) {
+        ctx.save();
+        ctx.rotate((Math.PI / 3) * i);
+        
+        // Braço principal
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, snowflake.size);
+        ctx.stroke();
+        
+        // Braços laterais
+        ctx.beginPath();
+        ctx.moveTo(0, snowflake.size * 0.3);
+        ctx.lineTo(-snowflake.size * 0.3, snowflake.size * 0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, snowflake.size * 0.3);
+        ctx.lineTo(snowflake.size * 0.3, snowflake.size * 0.5);
+        ctx.stroke();
+        
+        ctx.restore();
+    }
+    
+    // Centro do floco
+    ctx.fillStyle = `rgba(255, 255, 255, ${snowflake.alpha})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, snowflake.size * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+}
+
+// Desenhar cristal de gelo
+function drawIceCrystal(crystal) {
+    ctx.save();
+    ctx.translate(crystal.x, crystal.y);
+    ctx.rotate(crystal.rotation);
+    
+    const gradient = ctx.createLinearGradient(-crystal.size, -crystal.size, crystal.size, crystal.size);
+    gradient.addColorStop(0, `rgba(200, 230, 255, ${crystal.alpha})`);
+    gradient.addColorStop(0.5, `rgba(255, 255, 255, ${crystal.alpha})`);
+    gradient.addColorStop(1, `rgba(200, 230, 255, ${crystal.alpha})`);
+    
+    ctx.fillStyle = gradient;
+    ctx.strokeStyle = `rgba(255, 255, 255, ${crystal.alpha * 0.8})`;
+    ctx.lineWidth = 1;
+    
+    // Forma de cristal hexagonal
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i;
+        const x = Math.cos(angle) * crystal.size;
+        const y = Math.sin(angle) * crystal.size;
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    
+    // Brilho interno
+    ctx.fillStyle = `rgba(255, 255, 255, ${crystal.alpha * 0.5})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, crystal.size * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+}
+
+// Desenhar iceberg
+function drawIceberg(iceberg) {
+    ctx.save();
+    ctx.translate(iceberg.x, iceberg.y);
+    
+    // Cor do iceberg (mais azulado com frio extremo)
+    const iceColor = interpolateColor('#E0F6FF', '#B0E0E6', iceberg.coldProgress);
+    const iceDark = interpolateColor('#B0D4E6', '#87CEEB', iceberg.coldProgress);
+    
+    // Corpo principal do iceberg (parte visível)
+    const gradient = ctx.createLinearGradient(0, -iceberg.height, 0, 0);
+    gradient.addColorStop(0, iceColor);
+    gradient.addColorStop(1, iceDark);
+    
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(-iceberg.width / 2, 0);
+    ctx.lineTo(-iceberg.width * 0.3, -iceberg.height * 0.7);
+    ctx.lineTo(0, -iceberg.height);
+    ctx.lineTo(iceberg.width * 0.3, -iceberg.height * 0.7);
+    ctx.lineTo(iceberg.width / 2, 0);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Destaques de luz
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.beginPath();
+    ctx.moveTo(-iceberg.width * 0.2, -iceberg.height * 0.5);
+    ctx.lineTo(-iceberg.width * 0.1, -iceberg.height * 0.8);
+    ctx.lineTo(0, -iceberg.height * 0.6);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Linhas de gelo
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+        const y = -iceberg.height * (0.3 + i * 0.2);
+        ctx.beginPath();
+        ctx.moveTo(-iceberg.width * 0.4, y);
+        ctx.lineTo(iceberg.width * 0.4, y);
+        ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
+// Desenhar pássaro do gelo
+function drawIceBird(bird) {
+    ctx.save();
+    ctx.translate(bird.x, bird.y);
+    ctx.scale(bird.size, bird.size);
+    
+    bird.wingFlap += 0.1;
+    const wingOffset = Math.sin(bird.wingFlap) * 3;
+    
+    // Corpo (azul/branco)
+    ctx.fillStyle = bird.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Asa
+    ctx.fillStyle = bird.wingColor;
+    ctx.beginPath();
+    ctx.ellipse(-5, wingOffset, 6, 4, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Bico
+    ctx.fillStyle = '#FFA500';
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(12, -2);
+    ctx.lineTo(8, 2);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Olho
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(3, -2, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+}
+
+// ========== FUNÇÕES DO GELO ==========
+
+// Desenhar floco de neve
+function drawSnowflake(snowflake) {
+    ctx.save();
+    ctx.translate(snowflake.x, snowflake.y);
+    ctx.rotate(snowflake.rotation);
+    
+    ctx.strokeStyle = `rgba(255, 255, 255, ${snowflake.alpha})`;
+    ctx.lineWidth = 1;
+    
+    // Desenhar floco de neve de 6 pontas
+    for (let i = 0; i < 6; i++) {
+        ctx.save();
+        ctx.rotate((Math.PI / 3) * i);
+        
+        // Braço principal
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, snowflake.size);
+        ctx.stroke();
+        
+        // Braços laterais
+        ctx.beginPath();
+        ctx.moveTo(0, snowflake.size * 0.3);
+        ctx.lineTo(-snowflake.size * 0.3, snowflake.size * 0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, snowflake.size * 0.3);
+        ctx.lineTo(snowflake.size * 0.3, snowflake.size * 0.5);
+        ctx.stroke();
+        
+        ctx.restore();
+    }
+    
+    // Centro do floco
+    ctx.fillStyle = `rgba(255, 255, 255, ${snowflake.alpha})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, snowflake.size * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+}
+
+// Desenhar cristal de gelo
+function drawIceCrystal(crystal) {
+    ctx.save();
+    ctx.translate(crystal.x, crystal.y);
+    ctx.rotate(crystal.rotation);
+    
+    const gradient = ctx.createLinearGradient(-crystal.size, -crystal.size, crystal.size, crystal.size);
+    gradient.addColorStop(0, `rgba(200, 230, 255, ${crystal.alpha})`);
+    gradient.addColorStop(0.5, `rgba(255, 255, 255, ${crystal.alpha})`);
+    gradient.addColorStop(1, `rgba(200, 230, 255, ${crystal.alpha})`);
+    
+    ctx.fillStyle = gradient;
+    ctx.strokeStyle = `rgba(255, 255, 255, ${crystal.alpha * 0.8})`;
+    ctx.lineWidth = 1;
+    
+    // Forma de cristal hexagonal
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i;
+        const x = Math.cos(angle) * crystal.size;
+        const y = Math.sin(angle) * crystal.size;
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    
+    // Brilho interno
+    ctx.fillStyle = `rgba(255, 255, 255, ${crystal.alpha * 0.5})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, crystal.size * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+}
+
+// Desenhar iceberg
+function drawIceberg(iceberg) {
+    ctx.save();
+    ctx.translate(iceberg.x, iceberg.y);
+    
+    // Cor do iceberg (mais azulado com frio extremo)
+    const iceColor = interpolateColor('#E0F6FF', '#B0E0E6', iceberg.coldProgress);
+    const iceDark = interpolateColor('#B0D4E6', '#87CEEB', iceberg.coldProgress);
+    
+    // Corpo principal do iceberg (parte visível)
+    const gradient = ctx.createLinearGradient(0, -iceberg.height, 0, 0);
+    gradient.addColorStop(0, iceColor);
+    gradient.addColorStop(1, iceDark);
+    
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(-iceberg.width / 2, 0);
+    ctx.lineTo(-iceberg.width * 0.3, -iceberg.height * 0.7);
+    ctx.lineTo(0, -iceberg.height);
+    ctx.lineTo(iceberg.width * 0.3, -iceberg.height * 0.7);
+    ctx.lineTo(iceberg.width / 2, 0);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Destaques de luz
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.beginPath();
+    ctx.moveTo(-iceberg.width * 0.2, -iceberg.height * 0.5);
+    ctx.lineTo(-iceberg.width * 0.1, -iceberg.height * 0.8);
+    ctx.lineTo(0, -iceberg.height * 0.6);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Linhas de gelo
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+        const y = -iceberg.height * (0.3 + i * 0.2);
+        ctx.beginPath();
+        ctx.moveTo(-iceberg.width * 0.4, y);
+        ctx.lineTo(iceberg.width * 0.4, y);
+        ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
+// Desenhar pássaro do gelo
+function drawIceBird(bird) {
+    ctx.save();
+    ctx.translate(bird.x, bird.y);
+    ctx.scale(bird.size, bird.size);
+    
+    bird.wingFlap += 0.1;
+    const wingOffset = Math.sin(bird.wingFlap) * 3;
+    
+    // Corpo (azul/branco)
+    ctx.fillStyle = bird.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Asa
+    ctx.fillStyle = bird.wingColor;
+    ctx.beginPath();
+    ctx.ellipse(-5, wingOffset, 6, 4, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Bico
+    ctx.fillStyle = '#FFA500';
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(12, -2);
+    ctx.lineTo(8, 2);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Olho
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(3, -2, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+}
+
 // Desenhar pássaro do deserto
 function drawDesertBird(bird) {
     ctx.save();
@@ -3308,131 +4714,313 @@ function drawDesertBird(bird) {
     ctx.restore();
 }
 
-// Desenhar cenário genérico (para outras áreas por enquanto)
-function drawGenericBackground() {
-    ctx.fillStyle = '#87CEEB';
+// Desenhar cenário do gelo com progressão de frio
+function drawIceBackground() {
+    const coldProgress = getColdProgress();
+    
+    // Interpolar cores do céu entre ameno e gelado
+    const skyTopMild = '#B0E0E6'; // Azul claro (ameno)
+    const skyTopCold = '#4682B4'; // Azul acinzentado (gelado)
+    const skyBottomMild = '#E0F6FF'; // Azul muito claro
+    const skyBottomCold = '#708090'; // Cinza azulado
+    
+    const skyTop = interpolateColor(skyTopMild, skyTopCold, coldProgress);
+    const skyBottom = interpolateColor(skyBottomMild, skyBottomCold, coldProgress);
+    
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
+    skyGradient.addColorStop(0, skyTop);
+    skyGradient.addColorStop(1, skyBottom);
+    ctx.fillStyle = skyGradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Nuvens
+    
+    // Nuvens geladas (mais visíveis com frio)
     for (let cloud of clouds) {
-        cloud.x += cloud.speed;
+        cloud.x += cloud.speed * 0.5;
         if (cloud.x > canvas.width + 100) {
             cloud.x = -100;
         }
+        ctx.globalAlpha = 0.6 + coldProgress * 0.4;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         drawCloud(cloud.x, cloud.y, cloud.size);
+        ctx.globalAlpha = 1;
     }
-
-    // Grama
-    ctx.fillStyle = '#2ecc71';
+    
+    // Flocos de neve (mais intensos com frio)
+    if (coldProgress > 0.2) {
+        for (let flake of snowflakes) {
+            flake.y += flake.speed;
+            flake.x += Math.sin(flake.y / 50) * 0.5;
+            flake.rotation += flake.rotationSpeed;
+            flake.alpha = (coldProgress - 0.2) * 0.8;
+            
+            if (flake.y > canvas.height) {
+                flake.y = -10;
+                flake.x = Math.random() * canvas.width;
+            }
+            drawSnowflake(flake);
+        }
+    }
+    
+    // Cristais de gelo (aparecem com mais frio)
+    if (coldProgress > 0.4) {
+        for (let crystal of iceCrystals) {
+            crystal.y += crystal.speed;
+            crystal.rotation += crystal.rotationSpeed;
+            crystal.alpha = (coldProgress - 0.4) * 0.6;
+            
+            if (crystal.y > canvas.height) {
+                crystal.y = -20;
+                crystal.x = Math.random() * canvas.width;
+            }
+            drawIceCrystal(crystal);
+        }
+    }
+    
+    // Atualizar elementos decorativos
+    updateIceDecorations();
+    
+    // Neve no chão (mais espessa com frio)
+    const snowColor = interpolateColor('#F0F8FF', '#E6E6FA', coldProgress);
+    ctx.fillStyle = snowColor;
     ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+    
+    // Camadas de neve (mais profundas com frio)
+    const snowDepth = coldProgress * 20;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    for (let i = 0; i < 3; i++) {
+        const y = canvas.height - 40 + i * 5;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        for (let x = 0; x < canvas.width; x += 20) {
+            const offset = Math.sin(x / 30 + Date.now() / 1000) * 3;
+            ctx.lineTo(x, y + offset);
+        }
+        ctx.lineTo(canvas.width, y);
+        ctx.lineTo(canvas.width, canvas.height);
+        ctx.lineTo(0, canvas.height);
+        ctx.closePath();
+        ctx.fill();
+    }
+    
+    // Desenhar icebergs ao fundo
+    for (let iceberg of icebergs) {
+        iceberg.coldProgress = coldProgress;
+        drawIceberg(iceberg);
+    }
+    
+    // Desenhar pássaros do gelo
+    for (let bird of iceBirds) {
+        drawIceBird(bird);
+    }
 }
 
-// Desenhar cenário noturno da floresta (para o boss Coruja)
-function drawNightForestBackground() {
-    // Céu noturno
+// Desenhar cenário extremo do gelo (boss)
+function drawExtremeIceBackground() {
+    // Céu extremamente gelado
     const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
-    skyGradient.addColorStop(0, '#0a0a20');
-    skyGradient.addColorStop(0.5, '#1a1a3a');
-    skyGradient.addColorStop(1, '#2a2a4a');
+    skyGradient.addColorStop(0, '#2F4F4F');
+    skyGradient.addColorStop(0.5, '#4682B4');
+    skyGradient.addColorStop(1, '#708090');
     ctx.fillStyle = skyGradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Estrelas
-    ctx.fillStyle = 'white';
-    for (let i = 0; i < 50; i++) {
-        const x = (i * 137) % canvas.width;
-        const y = (i * 73) % (canvas.height - 100);
-        const twinkle = 0.5 + Math.sin(Date.now() / 500 + i) * 0.5;
-        ctx.globalAlpha = twinkle;
+    
+    // Tempestade de neve intensa
+    for (let flake of snowflakes) {
+        flake.y += flake.speed * 2;
+        flake.x += Math.sin(flake.y / 30) * 1.5;
+        flake.rotation += flake.rotationSpeed * 2;
+        flake.alpha = 0.9;
+        
+        if (flake.y > canvas.height) {
+            flake.y = -10;
+            flake.x = Math.random() * canvas.width;
+        }
+        drawSnowflake(flake);
+    }
+    
+    // Cristais de gelo intensos
+    for (let crystal of iceCrystals) {
+        crystal.y += crystal.speed * 1.5;
+        crystal.rotation += crystal.rotationSpeed * 1.5;
+        crystal.alpha = 0.8;
+        
+        if (crystal.y > canvas.height) {
+            crystal.y = -20;
+            crystal.x = Math.random() * canvas.width;
+        }
+        drawIceCrystal(crystal);
+    }
+    
+    // Neve no chão muito espessa
+    ctx.fillStyle = '#E6E6FA';
+    ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+    
+    // Camadas de neve profundas
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    for (let i = 0; i < 5; i++) {
+        const y = canvas.height - 60 + i * 8;
         ctx.beginPath();
-        ctx.arc(x, y, 1 + (i % 3), 0, Math.PI * 2);
+        ctx.moveTo(0, y);
+        for (let x = 0; x < canvas.width; x += 15) {
+            const offset = Math.sin(x / 25 + Date.now() / 800) * 5;
+            ctx.lineTo(x, y + offset);
+        }
+        ctx.lineTo(canvas.width, y);
+        ctx.lineTo(canvas.width, canvas.height);
+        ctx.lineTo(0, canvas.height);
+        ctx.closePath();
         ctx.fill();
     }
-    ctx.globalAlpha = 1;
+    
+    // Icebergs grandes
+    for (let iceberg of icebergs) {
+        iceberg.coldProgress = 1.0;
+        drawIceberg(iceberg);
+    }
+    
+    // Pássaros do gelo
+    for (let bird of iceBirds) {
+        drawIceBird(bird);
+    }
+}
 
-    // Lua
-    const moonX = 650;
-    const moonY = 80;
-    ctx.fillStyle = '#fffacd';
-    ctx.shadowColor = '#fffacd';
-    ctx.shadowBlur = 30;
-    ctx.beginPath();
-    ctx.arc(moonX, moonY, 40, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    
-    // Crateras da lua
-    ctx.fillStyle = 'rgba(200, 195, 150, 0.3)';
-    ctx.beginPath();
-    ctx.arc(moonX - 10, moonY - 5, 8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(moonX + 15, moonY + 10, 5, 0, Math.PI * 2);
-    ctx.fill();
+// Atualizar elementos decorativos do gelo
+function updateIceDecorations() {
+    // Atualizar pássaros do gelo
+    for (let bird of iceBirds) {
+        bird.x += bird.speed;
+        if (bird.x > canvas.width + 50) {
+            bird.x = -50;
+            bird.y = 80 + Math.random() * 100;
+        }
+    }
+}
 
-    // Montanhas escuras
-    ctx.fillStyle = '#1a3a1a';
-    ctx.beginPath();
-    ctx.moveTo(0, canvas.height - 40);
-    ctx.lineTo(150, canvas.height - 150);
-    ctx.lineTo(300, canvas.height - 40);
-    ctx.fill();
-    
-    ctx.fillStyle = '#0a2a0a';
-    ctx.beginPath();
-    ctx.moveTo(200, canvas.height - 40);
-    ctx.lineTo(400, canvas.height - 180);
-    ctx.lineTo(600, canvas.height - 40);
-    ctx.fill();
-    
-    ctx.fillStyle = '#1a3a1a';
-    ctx.beginPath();
-    ctx.moveTo(500, canvas.height - 40);
-    ctx.lineTo(700, canvas.height - 130);
-    ctx.lineTo(800, canvas.height - 40);
-    ctx.fill();
+// Desenhar cenário genérico (para outras áreas por enquanto)
+        function drawGenericBackground() {
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Nuvens
+            for (let cloud of clouds) {
+                cloud.x += cloud.speed;
+                if (cloud.x > canvas.width + 100) {
+                    cloud.x = -100;
+                }
+                drawCloud(cloud.x, cloud.y, cloud.size);
+            }
+
+            // Grama
+            ctx.fillStyle = '#2ecc71';
+            ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+        }
+
+// Desenhar cenário noturno da floresta (para o boss Coruja)
+        function drawNightForestBackground() {
+    // Céu noturno
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
+            skyGradient.addColorStop(0, '#0a0a20');
+            skyGradient.addColorStop(0.5, '#1a1a3a');
+            skyGradient.addColorStop(1, '#2a2a4a');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Estrelas
+            ctx.fillStyle = 'white';
+            for (let i = 0; i < 50; i++) {
+                const x = (i * 137) % canvas.width;
+                const y = (i * 73) % (canvas.height - 100);
+                const twinkle = 0.5 + Math.sin(Date.now() / 500 + i) * 0.5;
+                ctx.globalAlpha = twinkle;
+                ctx.beginPath();
+                ctx.arc(x, y, 1 + (i % 3), 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // Lua
+            const moonX = 650;
+            const moonY = 80;
+            ctx.fillStyle = '#fffacd';
+            ctx.shadowColor = '#fffacd';
+            ctx.shadowBlur = 30;
+            ctx.beginPath();
+            ctx.arc(moonX, moonY, 40, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            
+            // Crateras da lua
+            ctx.fillStyle = 'rgba(200, 195, 150, 0.3)';
+            ctx.beginPath();
+            ctx.arc(moonX - 10, moonY - 5, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(moonX + 15, moonY + 10, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Montanhas escuras
+            ctx.fillStyle = '#1a3a1a';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height - 40);
+            ctx.lineTo(150, canvas.height - 150);
+            ctx.lineTo(300, canvas.height - 40);
+            ctx.fill();
+            
+            ctx.fillStyle = '#0a2a0a';
+            ctx.beginPath();
+            ctx.moveTo(200, canvas.height - 40);
+            ctx.lineTo(400, canvas.height - 180);
+            ctx.lineTo(600, canvas.height - 40);
+            ctx.fill();
+            
+            ctx.fillStyle = '#1a3a1a';
+            ctx.beginPath();
+            ctx.moveTo(500, canvas.height - 40);
+            ctx.lineTo(700, canvas.height - 130);
+            ctx.lineTo(800, canvas.height - 40);
+            ctx.fill();
 
     // Árvores silhueta (escuras)
-    drawNightTree(50, 120, 12);
-    drawNightTree(180, 100, 10);
-    drawNightTree(620, 110, 11);
-    drawNightTree(750, 130, 13);
-    drawNightTree(-20, 180, 18);
-    drawNightTree(820, 170, 16);
+            drawNightTree(50, 120, 12);
+            drawNightTree(180, 100, 10);
+            drawNightTree(620, 110, 11);
+            drawNightTree(750, 130, 13);
+            drawNightTree(-20, 180, 18);
+            drawNightTree(820, 170, 16);
 
-    // Grama noturna
-    const grassGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
-    grassGradient.addColorStop(0, '#1a4a1a');
-    grassGradient.addColorStop(1, '#0a3a0a');
-    ctx.fillStyle = grassGradient;
-    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
-    
-    // Detalhes na grama
-    ctx.fillStyle = '#0a3a0a';
-    for (let i = 0; i < canvas.width; i += 30) {
-        ctx.beginPath();
-        ctx.moveTo(i, canvas.height - 40);
-        ctx.lineTo(i + 5, canvas.height - 50);
-        ctx.lineTo(i + 10, canvas.height - 40);
-        ctx.fill();
-    }
-    
-    // Vaga-lumes flutuantes
-    ctx.fillStyle = '#ffff00';
-    for (let i = 0; i < 8; i++) {
-        const fx = 50 + (i * 100) + Math.sin(Date.now() / 800 + i * 2) * 30;
-        const fy = 200 + Math.sin(Date.now() / 600 + i) * 50;
-        const glow = 0.3 + Math.sin(Date.now() / 300 + i) * 0.7;
-        ctx.globalAlpha = glow;
-        ctx.shadowColor = '#ffff00';
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.arc(fx, fy, 3, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur = 0;
-}
+            // Grama noturna
+            const grassGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
+            grassGradient.addColorStop(0, '#1a4a1a');
+            grassGradient.addColorStop(1, '#0a3a0a');
+            ctx.fillStyle = grassGradient;
+            ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+            
+            // Detalhes na grama
+            ctx.fillStyle = '#0a3a0a';
+            for (let i = 0; i < canvas.width; i += 30) {
+                ctx.beginPath();
+                ctx.moveTo(i, canvas.height - 40);
+                ctx.lineTo(i + 5, canvas.height - 50);
+                ctx.lineTo(i + 10, canvas.height - 40);
+                ctx.fill();
+            }
+            
+            // Vaga-lumes flutuantes
+            ctx.fillStyle = '#ffff00';
+            for (let i = 0; i < 8; i++) {
+                const fx = 50 + (i * 100) + Math.sin(Date.now() / 800 + i * 2) * 30;
+                const fy = 200 + Math.sin(Date.now() / 600 + i) * 50;
+                const glow = 0.3 + Math.sin(Date.now() / 300 + i) * 0.7;
+                ctx.globalAlpha = glow;
+                ctx.shadowColor = '#ffff00';
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.arc(fx, fy, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur = 0;
+        }
 
 // Desenhar cenário do deserto com transição de calor
 function drawDesertBackground() {
@@ -3666,48 +5254,48 @@ function updateDesertDecorations() {
 }
 
 // Árvore silhueta para cena noturna
-function drawNightTree(x, height, trunkWidth) {
-    // Tronco escuro
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(x - trunkWidth/2, canvas.height - 40 - height * 0.4, trunkWidth, height * 0.4 + 40);
-    
-    // Copa escura (silhueta)
-    const leafSize = height * 0.35;
-    
-    ctx.fillStyle = '#0a1a0a';
-    ctx.beginPath();
-    ctx.moveTo(x - leafSize, canvas.height - 40 - height * 0.3);
-    ctx.lineTo(x + leafSize, canvas.height - 40 - height * 0.3);
-    ctx.lineTo(x, canvas.height - 40 - height * 0.6);
-    ctx.closePath();
-    ctx.fill();
-    
-    ctx.fillStyle = '#0a2a0a';
-    ctx.beginPath();
-    ctx.moveTo(x - leafSize * 0.8, canvas.height - 40 - height * 0.5);
-    ctx.lineTo(x + leafSize * 0.8, canvas.height - 40 - height * 0.5);
-    ctx.lineTo(x, canvas.height - 40 - height * 0.75);
-    ctx.closePath();
-    ctx.fill();
-    
-    ctx.fillStyle = '#0a1a0a';
-    ctx.beginPath();
-    ctx.moveTo(x - leafSize * 0.6, canvas.height - 40 - height * 0.65);
-    ctx.lineTo(x + leafSize * 0.6, canvas.height - 40 - height * 0.65);
-    ctx.lineTo(x, canvas.height - 40 - height * 0.9);
-    ctx.closePath();
-    ctx.fill();
-}
-
-function draw() {
-    // Desenhar cenário baseado na área atual
-    if (currentArea === 1) {
-        // Fase do boss (Coruja) = noite
-        if (currentSubstage === 7) {
-            drawNightForestBackground();
-        } else {
-            drawForestBackground();
+        function drawNightTree(x, height, trunkWidth) {
+            // Tronco escuro
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(x - trunkWidth/2, canvas.height - 40 - height * 0.4, trunkWidth, height * 0.4 + 40);
+            
+            // Copa escura (silhueta)
+            const leafSize = height * 0.35;
+            
+            ctx.fillStyle = '#0a1a0a';
+            ctx.beginPath();
+            ctx.moveTo(x - leafSize, canvas.height - 40 - height * 0.3);
+            ctx.lineTo(x + leafSize, canvas.height - 40 - height * 0.3);
+            ctx.lineTo(x, canvas.height - 40 - height * 0.6);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.fillStyle = '#0a2a0a';
+            ctx.beginPath();
+            ctx.moveTo(x - leafSize * 0.8, canvas.height - 40 - height * 0.5);
+            ctx.lineTo(x + leafSize * 0.8, canvas.height - 40 - height * 0.5);
+            ctx.lineTo(x, canvas.height - 40 - height * 0.75);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.fillStyle = '#0a1a0a';
+            ctx.beginPath();
+            ctx.moveTo(x - leafSize * 0.6, canvas.height - 40 - height * 0.65);
+            ctx.lineTo(x + leafSize * 0.6, canvas.height - 40 - height * 0.65);
+            ctx.lineTo(x, canvas.height - 40 - height * 0.9);
+            ctx.closePath();
+            ctx.fill();
         }
+
+        function draw() {
+    // Desenhar cenário baseado na área atual
+            if (currentArea === 1) {
+                // Fase do boss (Coruja) = noite
+                if (currentSubstage === 7) {
+                    drawNightForestBackground();
+                } else {
+                    drawForestBackground();
+                }
     } else if (currentArea === 2) {
         // Fase do boss (Falcão) = deserto extremo
         if (currentSubstage === 7) {
@@ -3715,1619 +5303,1976 @@ function draw() {
         } else {
             drawDesertBackground();
         }
-    } else {
-        drawGenericBackground();
-    }
+    } else if (currentArea === 3) {
+        // Fase do boss (Pinguim) = gelo extremo
+        if (currentSubstage === 7) {
+            drawExtremeIceBackground();
+        } else {
+            drawIceBackground();
+        }
+            } else {
+                drawGenericBackground();
+            }
 
-    if (isBonusStage) {
-        // Fase bônus - desenhar buracos e minhocas
-        drawWormHoles();
-        
-        // Efeitos de captura
-        drawWormEatEffects();
-        
-        // Apenas o player
-        drawBird(player, true);
-    } else {
-        // Fase normal
-        // Comidas
-        drawFood();
+            if (isBonusStage) {
+                if (currentArea === 3) {
+                    // Fase bônus do gelo - desenhar frutas congeladas
+                    drawFrozenFruits();
+                    drawWormEatEffects(); // Reutilizar efeitos visuais
+                } else if (currentArea === 2) {
+                    // Fase bônus do deserto - desenhar frutos de cactos
+                    drawCactusFruits();
+                    drawWormEatEffects(); // Reutilizar efeitos visuais
+                } else {
+                    // Fase bônus - desenhar buracos e minhocas
+                    drawWormHoles();
+                    drawWormEatEffects();
+                }
+                
+                // Apenas o player
+                drawBird(player, true);
+            } else {
+                // Fase normal
+                // Comidas
+                drawFood();
 
         // Gavião (fase 1-6 e 2-6)
-        drawHawk();
+                drawHawk();
 
         // Pássaros
-        drawBird(player, true);
-        drawBird(cpu, false);
-    }
-    
-    // Desenhar UI no canvas
-    drawGameUI();
-}
-
-// Desenhar UI do jogo no canvas
-function drawGameUI() {
-    const padding = 15;
-    const fontSize = 22; // Aumentado de 18 para 22
-    const topY = padding;
-    const boxHeight = 45; // Aumentado de 35 para 45
-    
-    ctx.save();
-    ctx.font = `bold ${fontSize}px Arial`;
-    ctx.textBaseline = 'top';
-    
-    if (isBonusStage) {
-        // UI da fase bônus - Player esquerda, Tempo centro
-        // Player (Minhocas) - Superior esquerdo
-        ctx.textAlign = 'left';
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        const playerText = `🪱 Minhocas: ${playerScore} / 25`;
-        const playerWidth = ctx.measureText(playerText).width + 25;
-        ctx.fillRect(padding, topY, playerWidth, boxHeight);
-        
-        ctx.fillStyle = '#f39c12';
-        ctx.fillText(playerText, padding + 12, topY + 12);
-        
-        // Timer - Centro (apenas número, cor que se destaca do céu)
-        ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        const timerText = `${timeLeft}s`;
-        const timerWidth = ctx.measureText(timerText).width + 25;
-        ctx.fillRect(canvas.width / 2 - timerWidth / 2, topY, timerWidth, boxHeight);
-        
-        // Cor amarela/laranja para se destacar do céu azul
-        ctx.fillStyle = timeLeft <= 10 ? '#ff4444' : '#ffaa00';
-        // Sombra para melhor visibilidade
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 4;
-        ctx.fillText(timerText, canvas.width / 2, topY + 12);
-        ctx.shadowBlur = 0;
-    } else {
-        // Fase normal
-        // Player - Superior esquerdo
-        ctx.textAlign = 'left';
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        const playerText = `🐦 Você: ${playerScore}`;
-        const playerWidth = ctx.measureText(playerText).width + 25;
-        ctx.fillRect(padding, topY, playerWidth, boxHeight);
-        
-        ctx.fillStyle = '#2ecc71';
-        ctx.fillText(playerText, padding + 12, topY + 12);
-        
-        // Timer - Centro (apenas número, cor que se destaca do céu)
-        ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        const timerText = `${timeLeft}s`;
-        const timerWidth = ctx.measureText(timerText).width + 25;
-        ctx.fillRect(canvas.width / 2 - timerWidth / 2, topY, timerWidth, boxHeight);
-        
-        // Cor amarela/laranja para se destacar do céu azul
-        ctx.fillStyle = timeLeft <= 10 ? '#ff4444' : '#ffaa00';
-        // Sombra para melhor visibilidade
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 4;
-        ctx.fillText(timerText, canvas.width / 2, topY + 12);
-        ctx.shadowBlur = 0;
-        
-        // CPU - Superior direito
-        ctx.textAlign = 'right';
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        const cpuText = `🤖 CPU: ${cpuScore}`;
-        const cpuWidth = ctx.measureText(cpuText).width + 25;
-        ctx.fillRect(canvas.width - padding - cpuWidth, topY, cpuWidth, boxHeight);
-        
-        ctx.fillStyle = '#e74c3c';
-        ctx.fillText(cpuText, canvas.width - padding - 12, topY + 12);
-        
-        // Barra de Stun - Canto inferior esquerdo (mais baixo possível)
-        const stunBarWidth = 200; // Aumentado de 180 para 200
-        const stunBarHeight = 22; // Aumentado de 18 para 22
-        const stunBarX = padding + 10;
-        const stunBarY = canvas.height - padding - stunBarHeight; // Mais baixo possível
-        
-        // Fundo mais transparente para stun (aumentado para acomodar texto maior)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-        ctx.fillRect(padding, stunBarY - 5, stunBarWidth + 140, stunBarHeight + 10);
-        
-        // Fundo da barra
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.fillRect(stunBarX, stunBarY, stunBarWidth, stunBarHeight);
-        
-        // Preenchimento da barra
-        const stunProgress = player.stunCharge / 20;
-        ctx.fillStyle = player.stunCharge >= 20 ? '#f39c12' : '#9b59b6';
-        ctx.fillRect(stunBarX, stunBarY, stunBarWidth * stunProgress, stunBarHeight);
-        
-        // Borda da barra
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(stunBarX, stunBarY, stunBarWidth, stunBarHeight);
-        
-        // Texto do stun (aumentado)
-        ctx.textAlign = 'left';
-        ctx.font = `bold ${fontSize - 1}px Arial`;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        if (player.stunCharge >= 20) {
-            // Mostrar timer quando stun está pronto
-            const secondsLeft = Math.ceil(player.stunChargeTimer / 60);
-            ctx.fillText(`💥 ⚡${secondsLeft}s`, stunBarX + stunBarWidth + 10, stunBarY + 3);
-            
-            // Aviso quando tempo está acabando
-            if (secondsLeft <= 2) {
-                ctx.fillStyle = '#e74c3c';
-                ctx.font = `bold ${fontSize + 1}px Arial`;
-                ctx.fillText('⚠️', stunBarX + stunBarWidth + 10, stunBarY + 25);
-                ctx.font = `bold ${fontSize - 1}px Arial`;
-            } else {
-                ctx.fillStyle = '#2ecc71';
-                ctx.font = `bold ${fontSize + 1}px Arial`;
-                ctx.fillText('⚡', stunBarX + stunBarWidth + 10, stunBarY + 25);
-                ctx.font = `bold ${fontSize - 1}px Arial`;
+                drawBird(player, true);
+                drawBird(cpu, false);
             }
-        } else {
-            ctx.fillText(`💥 ${player.stunCharge}/20`, stunBarX + stunBarWidth + 10, stunBarY + 3);
+            
+            // Desenhar UI no canvas
+            drawGameUI();
         }
+
+// Desenhar ave pequena no placar
+function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
+    ctx.save();
+    ctx.translate(x, y);
+    
+    // Espelhar se estiver virado para esquerda (antes do scale)
+    if (!facingRight) {
+        ctx.scale(-1, 1);
     }
+    
+    // Aplicar scale após o espelhamento
+    ctx.scale(scale, scale);
+    
+    const size = 8; // Tamanho base
+    
+    // Corpo
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, 0, size, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Asa
+    ctx.fillStyle = wingColor;
+    ctx.beginPath();
+    ctx.ellipse(-3, 2, 5, 3, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Olho bravo
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(3, -2, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Pupila vermelha (raiva) - igual ao countdown
+    ctx.fillStyle = '#c0392b';
+    ctx.beginPath();
+    ctx.arc(3.5, -2, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Sobrancelha brava (diagonal para baixo)
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(1, -4);
+    ctx.lineTo(5, -3);
+    ctx.stroke();
+    
+    // Bico aberto (gritando) - igual ao countdown
+    ctx.fillStyle = '#f39c12';
+    // Parte superior do bico
+    ctx.beginPath();
+    ctx.moveTo(size - 1, -0.5);
+    ctx.lineTo(size + 2.5, 0);
+    ctx.lineTo(size - 1, 0.5);
+    ctx.closePath();
+    ctx.fill();
+    // Parte inferior do bico (boca aberta)
+    ctx.beginPath();
+    ctx.moveTo(size - 1, 0.5);
+    ctx.lineTo(size + 2, 1);
+    ctx.lineTo(size - 1, 1.5);
+    ctx.closePath();
+    ctx.fill();
     
     ctx.restore();
 }
+        
+        // Desenhar UI do jogo no canvas
+        function drawGameUI() {
+            const padding = 15;
+    const fontSize = 32; // Aumentado para 32
+            const topY = padding;
+    const boxHeight = 60; // Aumentado para 60
+            
+            ctx.save();
+            ctx.font = `bold ${fontSize}px Arial`;
+    ctx.textBaseline = 'middle'; // Mudado para middle para centralizar verticalmente
+            
+            if (isBonusStage) {
+        // UI da fase bônus - Player esquerda, Tempo centro
+                ctx.textAlign = 'left';
+                let playerText;
+                let textColor;
+                if (currentArea === 3) {
+                    playerText = `❄️ Frutas: ${playerScore} / 25`;
+                    textColor = '#87CEEB';
+                } else if (currentArea === 2) {
+                    playerText = `🌵 Frutos: ${playerScore} / 25`;
+                    textColor = '#f39c12';
+                } else {
+                    playerText = `🪱 Minhocas: ${playerScore} / 25`;
+                    textColor = '#f39c12';
+                }
+                ctx.fillStyle = textColor;
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                ctx.shadowBlur = 4;
+                ctx.fillText(playerText, padding, topY + boxHeight / 2);
+                ctx.shadowBlur = 0;
+                
+        // Timer - Centro (apenas número, cor que se destaca do céu)
+                ctx.textAlign = 'center';
+                const timerText = `${timeLeft}s`;
+                
+        // Cor amarela/laranja para se destacar do céu azul
+                ctx.fillStyle = timeLeft <= 10 ? '#ff4444' : '#ffaa00';
+                // Sombra para melhor visibilidade
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 6;
+        ctx.fillText(timerText, canvas.width / 2, topY + boxHeight / 2);
+                ctx.shadowBlur = 0;
+            } else {
+                // Fase normal
+                // Player - Superior esquerdo
+                ctx.textAlign = 'left';
+        const playerScoreText = `${playerScore}`;
+        const scoreTextWidth = ctx.measureText(playerScoreText).width;
+        const birdSize = 20; // Tamanho base da ave
+        const birdScale = 3.5; // Escala maior (aumentado de 2.5 para 3.5)
+        const playerWidth = birdSize * birdScale + scoreTextWidth + 30; // Espaço para ave + número
+        
+        // Desenhar ave do player (maior)
+        drawScoreBird(padding + birdSize * birdScale / 2, topY + boxHeight / 2, selectedPlayerColor || '#2ecc71', selectedPlayerWing || '#27ae60', true, birdScale);
+        
+        // Desenhar pontuação ao lado da ave com animação
+        ctx.save();
+        const playerAnimProgress = playerScoreAnimation > 0 ? playerScoreAnimation / 30 : 0;
+        const playerScale = 1 + playerAnimProgress * 0.5; // Cresce até 1.5x
+        const playerOffsetY = -playerAnimProgress * 5; // Move para cima
+        const playerAlpha = 0.7 + playerAnimProgress * 0.3; // Fica mais brilhante
+        
+        const playerTextX = padding + birdSize * birdScale + 15;
+        ctx.translate(playerTextX + ctx.measureText(playerScoreText).width / 2, topY + boxHeight / 2);
+        ctx.scale(playerScale, playerScale);
+        ctx.translate(-ctx.measureText(playerScoreText).width / 2, playerOffsetY);
+        
+        // Cor mais brilhante durante animação
+        ctx.fillStyle = playerScoreAnimation > 0 ? '#4ade80' : '#2ecc71';
+        ctx.globalAlpha = playerAlpha;
+        // Sombra para melhor visibilidade
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 6;
+        ctx.fillText(playerScoreText, 0, 0);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+                
+        // Timer - Centro (apenas número, cor que se destaca do céu)
+                ctx.textAlign = 'center';
+                const timerText = `${timeLeft}s`;
+                
+        // Cor amarela/laranja para se destacar do céu azul
+                ctx.fillStyle = timeLeft <= 10 ? '#ff4444' : '#ffaa00';
+                // Sombra para melhor visibilidade
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 6;
+        ctx.fillText(timerText, canvas.width / 2, topY + boxHeight / 2);
+                ctx.shadowBlur = 0;
+                
+                // CPU - Superior direito
+                ctx.textAlign = 'right';
+        const cpuScoreText = `${cpuScore}`;
+        const cpuScoreTextWidth = ctx.measureText(cpuScoreText).width;
+        const cpuWidth = birdSize * birdScale + cpuScoreTextWidth + 30; // Espaço para ave + número
+        
+        // Desenhar ave da CPU (maior, posicionada à direita)
+        const cpuBirdX = canvas.width - padding - cpuWidth + birdSize * birdScale / 2;
+        drawScoreBird(cpuBirdX, topY + boxHeight / 2, cpu.color || '#e74c3c', cpu.wingColor || '#c0392b', false, birdScale);
+                
+        // Desenhar pontuação à direita da ave com animação
+        ctx.save();
+        const cpuAnimProgress = cpuScoreAnimation > 0 ? cpuScoreAnimation / 30 : 0;
+        const cpuScale = 1 + cpuAnimProgress * 0.5; // Cresce até 1.5x
+        const cpuOffsetY = -cpuAnimProgress * 5; // Move para cima
+        const cpuAlpha = 0.7 + cpuAnimProgress * 0.3; // Fica mais brilhante
+        
+        const cpuTextX = canvas.width - padding - cpuWidth + birdSize * birdScale + 15;
+        ctx.translate(cpuTextX + ctx.measureText(cpuScoreText).width / 2, topY + boxHeight / 2);
+        ctx.scale(cpuScale, cpuScale);
+        ctx.translate(-ctx.measureText(cpuScoreText).width / 2, cpuOffsetY);
+        
+        // Cor mais brilhante durante animação
+        ctx.fillStyle = cpuScoreAnimation > 0 ? '#ff6b6b' : '#e74c3c';
+        ctx.globalAlpha = cpuAlpha;
+        // Sombra para melhor visibilidade
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 6;
+        ctx.textAlign = 'left';
+        ctx.fillText(cpuScoreText, 0, 0);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+        ctx.textAlign = 'right'; // Restaurar alinhamento
+        
+        // Barra de Stun do Player - Abaixo do placar
+        const stunBarSpacing = 8; // Espaço entre placar e barra
+        const stunBarWidth = playerWidth * 0.8; // 80% da largura do placar
+        const stunBarHeight = 14; // Altura menor e proporcional
+        const stunBarX = padding;
+        const stunBarY = topY + boxHeight + stunBarSpacing;
+                
+                // Fundo da barra
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.fillRect(stunBarX, stunBarY, stunBarWidth, stunBarHeight);
+                
+                // Preenchimento da barra
+        let playerStunProgress = player.stunCharge / player.stunChargeMax;
+        // Se o stun está pronto, a barra regride conforme o timer
+        if (player.stunCharge >= player.stunChargeMax && player.stunChargeTimer > 0) {
+            // Timer máximo é 300 frames (5 segundos), calcular progresso regressivo
+            const maxTimer = 300;
+            playerStunProgress = player.stunChargeTimer / maxTimer; // Regride de 1.0 para 0.0
+        }
+        ctx.fillStyle = player.stunCharge >= player.stunChargeMax ? '#f39c12' : '#9b59b6';
+        ctx.fillRect(stunBarX, stunBarY, stunBarWidth * playerStunProgress, stunBarHeight);
+                
+                // Borda da barra
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 1;
+                ctx.strokeRect(stunBarX, stunBarY, stunBarWidth, stunBarHeight);
+                
+        // Texto do stun (menor e proporcional)
+                ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle'; // Centralizar verticalmente
+        ctx.font = `bold ${fontSize * 0.5}px Arial`;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        // Sombra para melhor visibilidade
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4;
+        if (player.stunCharge >= player.stunChargeMax) {
+            // Mostrar timer quando stun está pronto
+                    const secondsLeft = Math.ceil(player.stunChargeTimer / 60);
+            ctx.fillText(`💥 ${secondsLeft}s`, stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight / 2);
+            ctx.shadowBlur = 0;
+                    
+            // Aviso quando tempo está acabando
+                    if (secondsLeft <= 2) {
+                        ctx.fillStyle = '#e74c3c';
+                ctx.font = `bold ${fontSize * 0.6}px Arial`;
+                ctx.shadowBlur = 4;
+                ctx.fillText('⚠️', stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight + 12);
+                ctx.shadowBlur = 0;
+                ctx.font = `bold ${fontSize * 0.5}px Arial`;
+                    } else {
+                        ctx.fillStyle = '#2ecc71';
+                ctx.font = `bold ${fontSize * 0.6}px Arial`;
+                ctx.shadowBlur = 4;
+                ctx.fillText('⚡', stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight + 12);
+                ctx.shadowBlur = 0;
+                ctx.font = `bold ${fontSize * 0.5}px Arial`;
+                    }
+                } else {
+            ctx.fillText(`💥 ${player.stunCharge}/${player.stunChargeMax}`, stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight / 2);
+            ctx.shadowBlur = 0;
+        }
+        
+        // Barra de Stun da CPU - Abaixo do placar da CPU
+        const cpuStunBarWidth = cpuWidth * 0.8; // 80% da largura do placar
+        const cpuStunBarHeight = 14; // Mesma altura
+        const cpuStunBarX = canvas.width - padding - cpuWidth;
+        const cpuStunBarY = topY + boxHeight + stunBarSpacing;
+        
+        // Fundo da barra
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.fillRect(cpuStunBarX, cpuStunBarY, cpuStunBarWidth, cpuStunBarHeight);
+        
+        // Preenchimento da barra
+        let cpuStunProgress = cpu.stunCharge / cpu.stunChargeMax;
+        // Se o stun está pronto, a barra regride conforme o timer
+        if (cpu.stunCharge >= cpu.stunChargeMax && cpu.stunChargeTimer > 0) {
+            // Timer máximo é 300 frames (5 segundos), calcular progresso regressivo
+            const maxTimer = 300;
+            cpuStunProgress = cpu.stunChargeTimer / maxTimer; // Regride de 1.0 para 0.0
+        }
+        ctx.fillStyle = cpu.stunCharge >= cpu.stunChargeMax ? '#f39c12' : '#9b59b6';
+        ctx.fillRect(cpuStunBarX, cpuStunBarY, cpuStunBarWidth * cpuStunProgress, cpuStunBarHeight);
+        
+        // Borda da barra
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(cpuStunBarX, cpuStunBarY, cpuStunBarWidth, cpuStunBarHeight);
+        
+        // Texto do stun da CPU (menor e proporcional)
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle'; // Centralizar verticalmente
+        ctx.font = `bold ${fontSize * 0.5}px Arial`;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        // Sombra para melhor visibilidade
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4;
+        if (cpu.stunCharge >= cpu.stunChargeMax) {
+            // Mostrar timer quando stun está pronto
+            const cpuSecondsLeft = Math.ceil(cpu.stunChargeTimer / 60);
+            ctx.fillText(`💥 ${cpuSecondsLeft}s`, cpuStunBarX - 8, cpuStunBarY + cpuStunBarHeight / 2);
+            ctx.shadowBlur = 0;
+            
+            // Aviso quando tempo está acabando
+            if (cpuSecondsLeft <= 2) {
+                ctx.fillStyle = '#e74c3c';
+                ctx.font = `bold ${fontSize * 0.6}px Arial`;
+                ctx.shadowBlur = 4;
+                ctx.fillText('⚠️', cpuStunBarX - 8, cpuStunBarY + cpuStunBarHeight + 12);
+                ctx.shadowBlur = 0;
+                ctx.font = `bold ${fontSize * 0.5}px Arial`;
+            } else {
+                ctx.fillStyle = '#2ecc71';
+                ctx.font = `bold ${fontSize * 0.6}px Arial`;
+                ctx.shadowBlur = 4;
+                ctx.fillText('⚡', cpuStunBarX - 8, cpuStunBarY + cpuStunBarHeight + 12);
+                ctx.shadowBlur = 0;
+                ctx.font = `bold ${fontSize * 0.5}px Arial`;
+            }
+        } else {
+            ctx.fillText(`💥 ${cpu.stunCharge}/${cpu.stunChargeMax}`, cpuStunBarX - 8, cpuStunBarY + cpuStunBarHeight / 2);
+            ctx.shadowBlur = 0;
+                }
+            }
+            
+            ctx.restore();
+        }
 
 // Desenhar pássaro feliz (vencedor)
-function drawHappyBird(ctxW, x, y, color, wingColor, scale) {
-    ctxW.save();
-    ctxW.translate(x, y);
-    ctxW.scale(scale, scale);
-    
+        function drawHappyBird(ctxW, x, y, color, wingColor, scale) {
+            ctxW.save();
+            ctxW.translate(x, y);
+            ctxW.scale(scale, scale);
+            
     // Aura de vitória
-    ctxW.shadowColor = color;
-    ctxW.shadowBlur = 15;
-    
-    // Corpo
-    ctxW.fillStyle = color;
-    ctxW.beginPath();
-    ctxW.arc(0, 0, 35, 0, Math.PI * 2);
-    ctxW.fill();
-    
-    ctxW.shadowBlur = 0;
-    
-    // Olho feliz
-    ctxW.fillStyle = 'white';
-    ctxW.beginPath();
-    ctxW.arc(10, -5, 10, 0, Math.PI * 2);
-    ctxW.fill();
-    
-    // Pupila brilhante
-    ctxW.fillStyle = 'black';
-    ctxW.beginPath();
-    ctxW.arc(12, -5, 5, 0, Math.PI * 2);
-    ctxW.fill();
-    
-    // Brilho no olho
-    ctxW.fillStyle = 'white';
-    ctxW.beginPath();
-    ctxW.arc(10, -7, 2, 0, Math.PI * 2);
-    ctxW.fill();
-    
-    // Sobrancelha feliz (arqueada para cima)
-    ctxW.strokeStyle = 'black';
-    ctxW.lineWidth = 2;
-    ctxW.beginPath();
-    ctxW.arc(12, -15, 8, Math.PI * 0.2, Math.PI * 0.8);
-    ctxW.stroke();
-    
-    // Bico sorrindo (aberto)
-    ctxW.fillStyle = '#f39c12';
-    ctxW.beginPath();
-    ctxW.moveTo(30, -2);
-    ctxW.lineTo(48, 3);
-    ctxW.lineTo(30, 8);
-    ctxW.closePath();
-    ctxW.fill();
-    
-    // Bochecha rosada
-    ctxW.fillStyle = 'rgba(255, 150, 150, 0.5)';
-    ctxW.beginPath();
-    ctxW.arc(20, 8, 8, 0, Math.PI * 2);
-    ctxW.fill();
-    
-    // Asa parada (para cima, celebrando)
-    ctxW.fillStyle = wingColor;
-    ctxW.beginPath();
-    ctxW.ellipse(-10, -5, 20, 14, -0.5, 0, Math.PI * 2);
-    ctxW.fill();
-    
-    ctxW.restore();
-}
-
+            ctxW.shadowColor = color;
+            ctxW.shadowBlur = 15;
+            
+            // Corpo
+            ctxW.fillStyle = color;
+            ctxW.beginPath();
+            ctxW.arc(0, 0, 35, 0, Math.PI * 2);
+            ctxW.fill();
+            
+            ctxW.shadowBlur = 0;
+            
+            // Olho feliz
+            ctxW.fillStyle = 'white';
+            ctxW.beginPath();
+            ctxW.arc(10, -5, 10, 0, Math.PI * 2);
+            ctxW.fill();
+            
+            // Pupila brilhante
+            ctxW.fillStyle = 'black';
+            ctxW.beginPath();
+            ctxW.arc(12, -5, 5, 0, Math.PI * 2);
+            ctxW.fill();
+            
+            // Brilho no olho
+            ctxW.fillStyle = 'white';
+            ctxW.beginPath();
+            ctxW.arc(10, -7, 2, 0, Math.PI * 2);
+            ctxW.fill();
+            
+            // Sobrancelha feliz (arqueada para cima)
+            ctxW.strokeStyle = 'black';
+            ctxW.lineWidth = 2;
+            ctxW.beginPath();
+            ctxW.arc(12, -15, 8, Math.PI * 0.2, Math.PI * 0.8);
+            ctxW.stroke();
+            
+            // Bico sorrindo (aberto)
+            ctxW.fillStyle = '#f39c12';
+            ctxW.beginPath();
+            ctxW.moveTo(30, -2);
+            ctxW.lineTo(48, 3);
+            ctxW.lineTo(30, 8);
+            ctxW.closePath();
+            ctxW.fill();
+            
+            // Bochecha rosada
+            ctxW.fillStyle = 'rgba(255, 150, 150, 0.5)';
+            ctxW.beginPath();
+            ctxW.arc(20, 8, 8, 0, Math.PI * 2);
+            ctxW.fill();
+            
+            // Asa parada (para cima, celebrando)
+            ctxW.fillStyle = wingColor;
+            ctxW.beginPath();
+            ctxW.ellipse(-10, -5, 20, 14, -0.5, 0, Math.PI * 2);
+            ctxW.fill();
+            
+            ctxW.restore();
+        }
+        
 // Desenhar pássaro triste (perdedor)
-function drawSadBird(ctxW, x, y, color, wingColor, scale) {
-    ctxW.save();
-    ctxW.translate(x, y);
-    ctxW.scale(scale, scale);
-    
-    // Sem aura (perdeu)
-    
-    // Corpo (mais escuro/apagado)
-    ctxW.fillStyle = color;
-    ctxW.globalAlpha = 0.7;
-    ctxW.beginPath();
-    ctxW.arc(0, 0, 35, 0, Math.PI * 2);
-    ctxW.fill();
-    ctxW.globalAlpha = 1;
-    
-    // Olho triste
-    ctxW.fillStyle = 'white';
-    ctxW.beginPath();
-    ctxW.arc(10, -5, 10, 0, Math.PI * 2);
-    ctxW.fill();
-    
-    // Pupila olhando para baixo
-    ctxW.fillStyle = 'black';
-    ctxW.beginPath();
-    ctxW.arc(10, -2, 5, 0, Math.PI * 2);
-    ctxW.fill();
-    
-    // Sobrancelha triste (inclinada para baixo)
-    ctxW.strokeStyle = 'black';
-    ctxW.lineWidth = 2;
-    ctxW.beginPath();
-    ctxW.moveTo(2, -12);
-    ctxW.lineTo(20, -18);
-    ctxW.stroke();
-    
-    // Bico fechado e triste
-    ctxW.fillStyle = '#f39c12';
-    ctxW.beginPath();
-    ctxW.moveTo(30, 2);
-    ctxW.lineTo(45, 8);
-    ctxW.lineTo(30, 12);
-    ctxW.closePath();
-    ctxW.fill();
-    
+        function drawSadBird(ctxW, x, y, color, wingColor, scale) {
+            ctxW.save();
+            ctxW.translate(x, y);
+            ctxW.scale(scale, scale);
+            
+            // Sem aura (perdeu)
+            
+            // Corpo (mais escuro/apagado)
+            ctxW.fillStyle = color;
+            ctxW.globalAlpha = 0.7;
+            ctxW.beginPath();
+            ctxW.arc(0, 0, 35, 0, Math.PI * 2);
+            ctxW.fill();
+            ctxW.globalAlpha = 1;
+            
+            // Olho triste
+            ctxW.fillStyle = 'white';
+            ctxW.beginPath();
+            ctxW.arc(10, -5, 10, 0, Math.PI * 2);
+            ctxW.fill();
+            
+            // Pupila olhando para baixo
+            ctxW.fillStyle = 'black';
+            ctxW.beginPath();
+            ctxW.arc(10, -2, 5, 0, Math.PI * 2);
+            ctxW.fill();
+            
+            // Sobrancelha triste (inclinada para baixo)
+            ctxW.strokeStyle = 'black';
+            ctxW.lineWidth = 2;
+            ctxW.beginPath();
+            ctxW.moveTo(2, -12);
+            ctxW.lineTo(20, -18);
+            ctxW.stroke();
+            
+            // Bico fechado e triste
+            ctxW.fillStyle = '#f39c12';
+            ctxW.beginPath();
+            ctxW.moveTo(30, 2);
+            ctxW.lineTo(45, 8);
+            ctxW.lineTo(30, 12);
+            ctxW.closePath();
+            ctxW.fill();
+            
     // Lágrima
-    ctxW.fillStyle = '#3498db';
-    ctxW.beginPath();
-    ctxW.ellipse(22, 8, 3, 5, 0, 0, Math.PI * 2);
-    ctxW.fill();
-    
+            ctxW.fillStyle = '#3498db';
+            ctxW.beginPath();
+            ctxW.ellipse(22, 8, 3, 5, 0, 0, Math.PI * 2);
+            ctxW.fill();
+            
     // Asa caída (triste)
-    ctxW.fillStyle = wingColor;
-    ctxW.globalAlpha = 0.7;
-    ctxW.beginPath();
-    ctxW.ellipse(-10, 15, 20, 10, 0.3, 0, Math.PI * 2);
-    ctxW.fill();
-    ctxW.globalAlpha = 1;
-    
-    ctxW.restore();
-}
+            ctxW.fillStyle = wingColor;
+            ctxW.globalAlpha = 0.7;
+            ctxW.beginPath();
+            ctxW.ellipse(-10, 15, 20, 10, 0.3, 0, Math.PI * 2);
+            ctxW.fill();
+            ctxW.globalAlpha = 1;
+            
+            ctxW.restore();
+        }
 
 // Desenhar cena de vitória especial do boss
-function drawBossVictoryScene() {
-    const winnerCanvas = document.getElementById('winnerCanvas');
-    const ctxW = winnerCanvas.getContext('2d');
-    
-    let animFrame;
-    let time = 0;
-    const particles = [];
-    
+        function drawBossVictoryScene() {
+            const winnerCanvas = document.getElementById('winnerCanvas');
+            const ctxW = winnerCanvas.getContext('2d');
+            
+            let animFrame;
+            let time = 0;
+            const particles = [];
+            
     // Criar partículas de fogos de artifício (reduzido para melhor performance)
-    for (let i = 0; i < 15; i++) { // Reduzido de 30 para 15
-        particles.push({
-            x: 200 + (Math.random() - 0.5) * 100,
-            y: 50 + Math.random() * 50,
-            vx: (Math.random() - 0.5) * 3,
-            vy: (Math.random() - 0.5) * 3,
-            life: 1,
-            decay: 0.015 + Math.random() * 0.02,
-            color: ['#FFD700', '#FF6347', '#FF1493', '#00CED1', '#FF4500'][Math.floor(Math.random() * 5)],
-            size: 2 + Math.random() * 3 // Reduzido tamanho
-        });
-    }
-    
-    function animate() {
-        time += 0.03; // Reduzido para melhor performance
-        ctxW.clearRect(0, 0, winnerCanvas.width, winnerCanvas.height);
-        
-        const scale = 1.5;
-        const bounce = Math.sin(time * 2) * 5;
-        
-        // Fundo com gradiente dourado
-        const gradient = ctxW.createLinearGradient(0, 0, 0, winnerCanvas.height);
-        gradient.addColorStop(0, 'rgba(255, 215, 0, 0.3)');
-        gradient.addColorStop(1, 'rgba(255, 140, 0, 0.2)');
-        ctxW.fillStyle = gradient;
-        ctxW.fillRect(0, 0, winnerCanvas.width, winnerCanvas.height);
-        
-        // Coroa grande e brilhante
-        ctxW.font = '50px Arial';
-        ctxW.textAlign = 'center';
-        ctxW.shadowColor = '#FFD700';
-        ctxW.shadowBlur = 20;
-        ctxW.fillStyle = '#FFD700';
-        ctxW.fillText('👑', 200, 35 + bounce);
-        ctxW.shadowBlur = 0;
-        
-        // Múltiplas coroas pequenas ao redor (reduzido para melhor performance)
-        for (let i = 0; i < 6; i++) { // Reduzido de 8 para 6
-            const angle = (i / 6) * Math.PI * 2 + time;
-            const dist = 80;
-            ctxW.font = '18px Arial'; // Reduzido tamanho da fonte
-            ctxW.globalAlpha = 0.6;
-            ctxW.fillText('👑', 200 + Math.cos(angle) * dist, 85 + Math.sin(angle) * dist * 0.5);
-        }
-        ctxW.globalAlpha = 1;
-        
-        // Partículas de fogos de artifício (otimizado)
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i];
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += 0.08; // Gravidade reduzida
-            p.life -= p.decay;
-            
-            if (p.life > 0) {
-                ctxW.globalAlpha = p.life;
-                // Remover shadowBlur para melhor performance
-                ctxW.fillStyle = p.color;
-                ctxW.beginPath();
-                ctxW.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctxW.fill();
-                
-                // Estrelas brilhantes (apenas se vida > 0.5 para reduzir desenho)
-                if (p.life > 0.5) {
-                    ctxW.font = '12px Arial'; // Fonte menor
-                    ctxW.fillText('⭐', p.x, p.y);
-                }
-            } else {
-                // Reposicionar partícula
-                p.x = 200 + (Math.random() - 0.5) * 100;
-                p.y = 50 + Math.random() * 50;
-                p.vx = (Math.random() - 0.5) * 3;
-                p.vy = (Math.random() - 0.5) * 3;
-                p.life = 1;
-            }
-        }
-        ctxW.globalAlpha = 1;
-        
-        // Pássaro do jogador grande e triunfante
-        drawHappyBird(ctxW, 200, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
-        
-        // Aura dourada ao redor do pássaro (sem shadow para melhor performance)
-        ctxW.strokeStyle = '#FFD700';
-        ctxW.lineWidth = 2;
-        ctxW.globalAlpha = 0.5 + Math.sin(time * 2) * 0.2; // Animação mais suave
-        ctxW.beginPath();
-        ctxW.arc(200, 85 + bounce, 60, 0, Math.PI * 2);
-        ctxW.stroke();
-        ctxW.globalAlpha = 1;
-        
-        // Texto "BOSS DERROTADO!"
-        ctxW.font = 'bold 18px Arial';
-        ctxW.fillStyle = '#FFD700';
-        ctxW.textAlign = 'center';
-        ctxW.shadowColor = '#000';
-        ctxW.shadowBlur = 3;
-        ctxW.fillText('⚔️ BOSS DERROTADO! ⚔️', 200, 140);
-        ctxW.shadowBlur = 0;
-        
-        // Estrelas brilhantes ao redor (reduzido para melhor performance)
-        for (let i = 0; i < 8; i++) { // Reduzido de 12 para 8
-            const angle = (i / 8) * Math.PI * 2 + time * 1.5; // Rotação mais lenta
-            const dist = 90;
-            const starX = 200 + Math.cos(angle) * dist;
-            const starY = 85 + Math.sin(angle) * dist * 0.6;
-            ctxW.font = '16px Arial'; // Fonte menor
-            ctxW.globalAlpha = 0.7 + Math.sin(time * 3 + i) * 0.2; // Animação mais suave
-            ctxW.fillText('✨', starX, starY);
-        }
-        ctxW.globalAlpha = 1;
-        
-        animFrame = requestAnimationFrame(animate);
-    }
-    
-    animate();
-    winnerCanvas.animFrame = animFrame;
-}
-
-// Desenhar cena de resultado
-function drawResultScene(playerWon, isDraw) {
-    const winnerCanvas = document.getElementById('winnerCanvas');
-    const ctxW = winnerCanvas.getContext('2d');
-    
-    let animFrame;
-    let time = 0;
-    
-    function animate() {
-        time += 0.05;
-        ctxW.clearRect(0, 0, winnerCanvas.width, winnerCanvas.height);
-        
-        const scale = 1.3;
-        const bounce = Math.sin(time * 2) * 3;
-        
-        if (isBonusStage) {
-            // Fase bônus - apenas o jogador
-            ctxW.font = '30px Arial';
-            ctxW.textAlign = 'center';
-            
-            if (playerWon) {
-                // Sucesso!
-                ctxW.fillText('🪱', 200, 30 + bounce);
-                
-                // Minhocas ao redor
-                for (let i = 0; i < 6; i++) {
-                    const angle = (i / 6) * Math.PI * 2 + time;
-                    const dist = 70;
-                    ctxW.font = '20px Arial';
-                    ctxW.fillText('🪱', 200 + Math.cos(angle) * dist, 85 + Math.sin(angle) * dist * 0.5);
-                }
-                
-                drawHappyBird(ctxW, 200, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
-            } else {
-                // Falhou
-                drawSadBird(ctxW, 200, 95, selectedPlayerColor, selectedPlayerWing, scale * 0.9);
-                
-                // Minhocas fugindo
-                ctxW.font = '15px Arial';
-                for (let i = 0; i < 4; i++) {
-                    const wx = 50 + i * 100 + Math.sin(time * 3 + i) * 10;
-                    ctxW.fillText('🪱', wx, 150);
-                }
-            }
-        } else if (isDraw) {
-            // Empate - ambos normais
-            ctxW.font = '40px Arial';
-            ctxW.textAlign = 'center';
-            ctxW.fillText('🤝', 200, 30);
-            
-            drawHappyBird(ctxW, 100, 85, selectedPlayerColor, selectedPlayerWing, scale);
-            ctxW.save();
-            ctxW.translate(300, 85);
-            ctxW.scale(-scale, scale);
-            ctxW.translate(-300/scale, -85/scale);
-            drawHappyBird(ctxW, 0, 0, cpu.color, cpu.wingColor, 1);
-            ctxW.restore();
-        } else if (playerWon) {
-            // Jogador ganhou
-            // Coroa no vencedor
-            ctxW.font = '30px Arial';
-            ctxW.textAlign = 'center';
-            ctxW.fillText('👑', 100, 20 + bounce);
-            
-            // Partículas
-            for (let i = 0; i < 5; i++) {
-                const angle = (i / 5) * Math.PI * 2 + time;
-                const dist = 60;
-                ctxW.font = '15px Arial';
-                ctxW.fillText(['⭐', '✨', '🎉'][i % 3], 100 + Math.cos(angle) * dist, 85 + Math.sin(angle) * dist * 0.5);
-            }
-            
-            drawHappyBird(ctxW, 100, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
-            
-            // CPU triste (espelhada)
-            ctxW.save();
-            ctxW.translate(300, 0);
-            ctxW.scale(-1, 1);
-            drawSadBird(ctxW, 0, 95, cpu.color, cpu.wingColor, scale * 0.9);
-            ctxW.restore();
-        } else {
-            // CPU ganhou
-            // Coroa no vencedor
-            ctxW.font = '30px Arial';
-            ctxW.textAlign = 'center';
-            ctxW.fillText('👑', 300, 20 + bounce);
-            
-            // Partículas
-            for (let i = 0; i < 5; i++) {
-                const angle = (i / 5) * Math.PI * 2 + time;
-                const dist = 60;
-                ctxW.font = '15px Arial';
-                ctxW.fillText(['⭐', '✨', '🎉'][i % 3], 300 + Math.cos(angle) * dist, 85 + Math.sin(angle) * dist * 0.5);
-            }
-            
-            // Jogador triste
-            drawSadBird(ctxW, 100, 95, selectedPlayerColor, selectedPlayerWing, scale * 0.9);
-            
-            // CPU feliz (espelhada)
-            ctxW.save();
-            ctxW.translate(300, 0);
-            ctxW.scale(-1, 1);
-            drawHappyBird(ctxW, 0, 85 + bounce, cpu.color, cpu.wingColor, scale);
-            ctxW.restore();
-        }
-        
-        // VS no centro (só se não for bônus)
-        if (!isBonusStage) {
-            ctxW.font = 'bold 24px Arial';
-            ctxW.fillStyle = '#f1c40f';
-            ctxW.textAlign = 'center';
-            ctxW.fillText('VS', 200, 90);
-        }
-        
-        animFrame = requestAnimationFrame(animate);
-    }
-    
-    animate();
-    winnerCanvas.animFrame = animFrame;
-}
-
-// ========== FUNÇÕES DE DEBUG ==========
-
-// Simular vitória do boss (para teste)
-function simulateBossVictory() {
-    if (!debugMode && !window.debugMode) {
-        console.log('⚠️ Modo Debug não está ativo! Pressione Ctrl+Shift+D para ativar.');
-        return;
-    }
-    console.log('🔧 DEBUG: Simulando vitória do boss...');
-    
-    // Garantir que estamos em uma fase de boss
-    currentSubstage = 7;
-    
-    // Definir scores para vitória
-    playerScore = 30;
-    cpuScore = 10;
-    
-    // Chamar endGame normalmente
-    endGame();
-}
-
-// Simular vitória normal (para teste)
-function simulateVictory() {
-    if (!debugMode && !window.debugMode) {
-        console.log('⚠️ Modo Debug não está ativo! Pressione Ctrl+Shift+D para ativar.');
-        return;
-    }
-    console.log('🔧 DEBUG: Simulando vitória normal...');
-    
-    // Definir scores para vitória
-    playerScore = 20;
-    cpuScore = 10;
-    
-    // Chamar endGame normalmente
-    endGame();
-}
-
-// Simular derrota (para teste)
-function simulateDefeat() {
-    if (!debugMode && !window.debugMode) {
-        console.log('⚠️ Modo Debug não está ativo! Pressione Ctrl+Shift+D para ativar.');
-        return;
-    }
-    console.log('🔧 DEBUG: Simulando derrota...');
-    
-    // Definir scores para derrota
-    playerScore = 5;
-    cpuScore = 20;
-    
-    // Chamar endGame normalmente
-    endGame();
-}
-
-// Fim do jogo
-function endGame() {
-    gameRunning = false;
-    const gameOverDiv = document.getElementById('gameOver');
-    const resultTitle = document.getElementById('resultTitle');
-    const resultText = document.getElementById('resultText');
-    const config = substageConfig[currentSubstage];
-    
-    // Verificar vitória (fase bônus: atingir meta, fase normal: mais pontos que CPU)
-    const isVictory = isBonusStage ? (playerScore >= config.goalScore) : (playerScore > cpuScore);
-
-    if (isVictory) {
-        // Vitória especial do boss
-        if (currentSubstage === 7) {
-            resultTitle.textContent = '👑 BOSS DERROTADO! 👑';
-            resultTitle.className = 'win';
-            
-            // 🔊 Som especial de vitória do boss (efeito sonoro com loop)
-            // Parar música de introdução se estiver tocando
-            if (sounds.introSound && !sounds.introSound.paused) {
-                sounds.introSound.pause();
-                sounds.introSound.currentTime = 0;
-            }
-            
-            // 🔊 Tocar som de vitória do boss (efeito sonoro com loop)
-            if (sounds.bossWin && !sfxMuted) {
-                // Configurar como efeito sonoro especial com loop
-                sounds.bossWin.loop = true;
-                sounds.bossWin.volume = masterVolume;
-                sounds.bossWin.currentTime = 0;
-                
-                // Tentar tocar diretamente (já que precisa de loop)
-                sounds.bossWin.play().catch(e => {
-                    console.log('Erro ao tocar boss-win:', e);
-                    // Tentar após interação do usuário
-                    const tryPlay = () => {
-                        if (sounds.bossWin && !sfxMuted) {
-                            sounds.bossWin.loop = true;
-                            sounds.bossWin.currentTime = 0;
-                            sounds.bossWin.play().catch(() => {});
-                        }
-                    };
-                    document.addEventListener('click', tryPlay, { once: true });
-                    document.addEventListener('keydown', tryPlay, { once: true });
-                    document.addEventListener('touchstart', tryPlay, { once: true });
+            for (let i = 0; i < 15; i++) { // Reduzido de 30 para 15
+                particles.push({
+                    x: 200 + (Math.random() - 0.5) * 100,
+                    y: 50 + Math.random() * 50,
+                    vx: (Math.random() - 0.5) * 3,
+                    vy: (Math.random() - 0.5) * 3,
+                    life: 1,
+                    decay: 0.015 + Math.random() * 0.02,
+                    color: ['#FFD700', '#FF6347', '#FF1493', '#00CED1', '#FF4500'][Math.floor(Math.random() * 5)],
+                    size: 2 + Math.random() * 3 // Reduzido tamanho
                 });
             }
             
-            // Tela de vitória especial do boss
-            drawBossVictoryScene();
-        } else {
-            resultTitle.textContent = isBonusStage ? '🪱 BÔNUS COMPLETO! 🪱' : '🎉 VOCÊ VENCEU! 🎉';
-            resultTitle.className = 'win';
-            
-            // 🔊 Som de vitória normal
-            playSound('win');
-            
-            drawResultScene(true, false);
-        }
-        
-        // Inicializar arrays se não existirem
-        if (!gameProgress.completedStages[currentArea]) {
-            gameProgress.completedStages[currentArea] = [];
-        }
-        if (!gameProgress.unlockedStages[currentArea]) {
-            gameProgress.unlockedStages[currentArea] = [1];
-        }
-        
-        // Marcar sub-fase como completada
-        if (!gameProgress.completedStages[currentArea].includes(currentSubstage)) {
-            gameProgress.completedStages[currentArea].push(currentSubstage);
-        }
-        
-        // Desbloquear próxima sub-fase
-        const nextSubstage = currentSubstage + 1;
-        if (nextSubstage <= 7 && !gameProgress.unlockedStages[currentArea].includes(nextSubstage)) {
-            gameProgress.unlockedStages[currentArea].push(nextSubstage);
-        }
-        
-        // Se completou o chefe (sub-fase 7), desbloquear próxima área
-        if (currentSubstage === 7) {
-            const nextArea = currentArea + 1;
-            if (nextArea <= 5 && !gameProgress.unlockedAreas.includes(nextArea)) {
-                gameProgress.unlockedAreas.push(nextArea);
-                if (!gameProgress.unlockedStages[nextArea]) {
-                    gameProgress.unlockedStages[nextArea] = [1];
+            function animate() {
+                time += 0.03; // Reduzido para melhor performance
+                ctxW.clearRect(0, 0, winnerCanvas.width, winnerCanvas.height);
+                
+                const scale = 1.5;
+                const bounce = Math.sin(time * 2) * 5;
+                
+                // Fundo com gradiente dourado
+                const gradient = ctxW.createLinearGradient(0, 0, 0, winnerCanvas.height);
+                gradient.addColorStop(0, 'rgba(255, 215, 0, 0.3)');
+                gradient.addColorStop(1, 'rgba(255, 140, 0, 0.2)');
+                ctxW.fillStyle = gradient;
+                ctxW.fillRect(0, 0, winnerCanvas.width, winnerCanvas.height);
+                
+                // Coroa grande e brilhante
+                ctxW.font = '50px Arial';
+                ctxW.textAlign = 'center';
+                ctxW.shadowColor = '#FFD700';
+                ctxW.shadowBlur = 20;
+                ctxW.fillStyle = '#FFD700';
+        ctxW.fillText('👑', 200, 35 + bounce);
+                ctxW.shadowBlur = 0;
+                
+        // Múltiplas coroas pequenas ao redor (reduzido para melhor performance)
+                for (let i = 0; i < 6; i++) { // Reduzido de 8 para 6
+                    const angle = (i / 6) * Math.PI * 2 + time;
+                    const dist = 80;
+                    ctxW.font = '18px Arial'; // Reduzido tamanho da fonte
+                    ctxW.globalAlpha = 0.6;
+            ctxW.fillText('👑', 200 + Math.cos(angle) * dist, 85 + Math.sin(angle) * dist * 0.5);
                 }
+                ctxW.globalAlpha = 1;
+                
+        // Partículas de fogos de artifício (otimizado)
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.08; // Gravidade reduzida
+                    p.life -= p.decay;
+                    
+                    if (p.life > 0) {
+                        ctxW.globalAlpha = p.life;
+                        // Remover shadowBlur para melhor performance
+                        ctxW.fillStyle = p.color;
+                        ctxW.beginPath();
+                        ctxW.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                        ctxW.fill();
+                        
+                        // Estrelas brilhantes (apenas se vida > 0.5 para reduzir desenho)
+                        if (p.life > 0.5) {
+                            ctxW.font = '12px Arial'; // Fonte menor
+                    ctxW.fillText('⭐', p.x, p.y);
+                        }
+                    } else {
+                // Reposicionar partícula
+                        p.x = 200 + (Math.random() - 0.5) * 100;
+                        p.y = 50 + Math.random() * 50;
+                        p.vx = (Math.random() - 0.5) * 3;
+                        p.vy = (Math.random() - 0.5) * 3;
+                        p.life = 1;
+                    }
+                }
+                ctxW.globalAlpha = 1;
+                
+        // Pássaro do jogador grande e triunfante
+                drawHappyBird(ctxW, 200, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
+                
+        // Aura dourada ao redor do pássaro (sem shadow para melhor performance)
+                ctxW.strokeStyle = '#FFD700';
+                ctxW.lineWidth = 2;
+        ctxW.globalAlpha = 0.5 + Math.sin(time * 2) * 0.2; // Animação mais suave
+                ctxW.beginPath();
+                ctxW.arc(200, 85 + bounce, 60, 0, Math.PI * 2);
+                ctxW.stroke();
+                ctxW.globalAlpha = 1;
+                
+                // Texto "BOSS DERROTADO!"
+                ctxW.font = 'bold 18px Arial';
+                ctxW.fillStyle = '#FFD700';
+                ctxW.textAlign = 'center';
+                ctxW.shadowColor = '#000';
+                ctxW.shadowBlur = 3;
+        ctxW.fillText('⚔️ BOSS DERROTADO! ⚔️', 200, 140);
+                ctxW.shadowBlur = 0;
+                
+                // Estrelas brilhantes ao redor (reduzido para melhor performance)
+                for (let i = 0; i < 8; i++) { // Reduzido de 12 para 8
+            const angle = (i / 8) * Math.PI * 2 + time * 1.5; // Rotação mais lenta
+                    const dist = 90;
+                    const starX = 200 + Math.cos(angle) * dist;
+                    const starY = 85 + Math.sin(angle) * dist * 0.6;
+                    ctxW.font = '16px Arial'; // Fonte menor
+            ctxW.globalAlpha = 0.7 + Math.sin(time * 3 + i) * 0.2; // Animação mais suave
+            ctxW.fillText('✨', starX, starY);
+                }
+                ctxW.globalAlpha = 1;
+                
+                animFrame = requestAnimationFrame(animate);
             }
-        }
-        
-        // Calcular estrelas
-        let stars = 1;
-        if (isBonusStage) {
-            // Fase bônus - baseado em quantas minhocas além da meta
-            const extra = playerScore - config.goalScore;
-            if (extra >= 5) stars = 2;
-            if (extra >= 10) stars = 3;
-        } else {
-            // Fase normal - baseado na diferença de pontos
-            const diff = playerScore - cpuScore;
-            if (diff >= 5) stars = 2;
-            if (diff >= 10) stars = 3;
-        }
-        
-        // Salvar melhor resultado de estrelas
-        const stageKey = `${currentArea}-${currentSubstage}`;
-        if (!gameProgress.stageStars[stageKey] || stars > gameProgress.stageStars[stageKey]) {
-            gameProgress.stageStars[stageKey] = stars;
-        }
-        
-        saveProgress();
-        
-    } else if (isBonusStage) {
-        // Fase bônus - não atingiu a meta
-        resultTitle.textContent = '🪱 NÃO CONSEGUIU!';
-        resultTitle.className = 'lose';
-        
-        // 🔊 Som de derrota
-        playSound('lose');
-        
-        drawResultScene(false, false);
-    } else if (cpuScore > playerScore) {
-        resultTitle.textContent = '😔 VOCÊ PERDEU!';
-        resultTitle.className = 'lose';
-        
-        // 🔊 Som de derrota
-        playSound('lose');
-        
-        drawResultScene(false, false);
-    } else {
-        resultTitle.textContent = '🤝 EMPATE!';
-        resultTitle.className = '';
-        drawResultScene(false, true);
-    }
-
-    if (isBonusStage) {
-        resultText.textContent = `Minhocas: ${playerScore} / ${config.goalScore} 🪱`;
-    } else {
-        resultText.textContent = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎`;
-    }
-    
-    // Configurar botões baseado no resultado
-    const resultButtons = document.getElementById('resultButtons');
-    
-    if (isVictory) {
-        // Se derrotou o boss (subfase 7), mostrar apenas Roadmap
-        if (currentSubstage === 7) {
-            resultButtons.innerHTML = `
-                <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
-            `;
-        } else {
-            // Vitória normal - Próxima fase ou Roadmap
-            const hasNextStage = currentSubstage < 7 || (currentSubstage === 7 && currentArea < 5);
             
-            if (hasNextStage) {
-                resultButtons.innerHTML = `
+            animate();
+            winnerCanvas.animFrame = animFrame;
+        }
+
+        // Desenhar cena de resultado
+        function drawResultScene(playerWon, isDraw) {
+            const winnerCanvas = document.getElementById('winnerCanvas');
+            const ctxW = winnerCanvas.getContext('2d');
+            
+            let animFrame;
+            let time = 0;
+            
+            function animate() {
+                time += 0.05;
+                ctxW.clearRect(0, 0, winnerCanvas.width, winnerCanvas.height);
+                
+                const scale = 1.3;
+                const bounce = Math.sin(time * 2) * 3;
+                
+                if (isBonusStage) {
+            // Fase bônus - apenas o jogador
+                    ctxW.font = '30px Arial';
+                    ctxW.textAlign = 'center';
+                    
+                    // Determinar tema baseado na área atual
+                    let bonusEmoji = '🪱'; // Padrão (floresta)
+                    let bonusEmojis = ['🪱', '🪱', '🪱']; // Emojis ao redor
+                    
+                    if (currentArea === 2) {
+                        // Deserto - frutos de cacto
+                        bonusEmoji = '🌵';
+                        bonusEmojis = ['🌵', '🍇', '🍊', '🍑', '🌵', '🍇'];
+                    } else if (currentArea === 3) {
+                        // Gelo - frutas congeladas
+                        bonusEmoji = '❄️';
+                        bonusEmojis = ['❄️', '🍎', '🍌', '🍇', '❄️', '🍎'];
+                    }
+                    
+                    if (playerWon) {
+                        // Sucesso!
+                ctxW.fillText(bonusEmoji, 200, 30 + bounce);
+                        
+                        // Elementos temáticos ao redor
+                        for (let i = 0; i < 6; i++) {
+                            const angle = (i / 6) * Math.PI * 2 + time;
+                            const dist = 70;
+                            ctxW.font = '20px Arial';
+                    ctxW.fillText(bonusEmojis[i % bonusEmojis.length], 200 + Math.cos(angle) * dist, 85 + Math.sin(angle) * dist * 0.5);
+                        }
+                        
+                        drawHappyBird(ctxW, 200, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
+                    } else {
+                        // Falhou
+                        drawSadBird(ctxW, 200, 95, selectedPlayerColor, selectedPlayerWing, scale * 0.9);
+                        
+                        // Elementos temáticos fugindo
+                        ctxW.font = '15px Arial';
+                        for (let i = 0; i < 4; i++) {
+                            const wx = 50 + i * 100 + Math.sin(time * 3 + i) * 10;
+                    ctxW.fillText(bonusEmojis[i % bonusEmojis.length], wx, 150);
+                        }
+                    }
+                } else if (isDraw) {
+                    // Empate - ambos normais
+                    ctxW.font = '40px Arial';
+                    ctxW.textAlign = 'center';
+            ctxW.fillText('🤝', 200, 30);
+                    
+                    drawHappyBird(ctxW, 100, 85, selectedPlayerColor, selectedPlayerWing, scale);
+                    ctxW.save();
+                    ctxW.translate(300, 85);
+                    ctxW.scale(-scale, scale);
+                    ctxW.translate(-300/scale, -85/scale);
+                    drawHappyBird(ctxW, 0, 0, cpu.color, cpu.wingColor, 1);
+                    ctxW.restore();
+                } else if (playerWon) {
+                    // Jogador ganhou
+                    // Coroa no vencedor
+                    ctxW.font = '30px Arial';
+                    ctxW.textAlign = 'center';
+            ctxW.fillText('👑', 100, 20 + bounce);
+                    
+            // Partículas
+                    for (let i = 0; i < 5; i++) {
+                        const angle = (i / 5) * Math.PI * 2 + time;
+                        const dist = 60;
+                        ctxW.font = '15px Arial';
+                ctxW.fillText(['⭐', '✨', '🎉'][i % 3], 100 + Math.cos(angle) * dist, 85 + Math.sin(angle) * dist * 0.5);
+                    }
+                    
+                    drawHappyBird(ctxW, 100, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
+                    
+                    // CPU triste (espelhada)
+                    ctxW.save();
+                    ctxW.translate(300, 0);
+                    ctxW.scale(-1, 1);
+                    drawSadBird(ctxW, 0, 95, cpu.color, cpu.wingColor, scale * 0.9);
+                    ctxW.restore();
+                } else {
+                    // CPU ganhou
+                    // Coroa no vencedor
+                    ctxW.font = '30px Arial';
+                    ctxW.textAlign = 'center';
+            ctxW.fillText('👑', 300, 20 + bounce);
+                    
+            // Partículas
+                    for (let i = 0; i < 5; i++) {
+                        const angle = (i / 5) * Math.PI * 2 + time;
+                        const dist = 60;
+                        ctxW.font = '15px Arial';
+                ctxW.fillText(['⭐', '✨', '🎉'][i % 3], 300 + Math.cos(angle) * dist, 85 + Math.sin(angle) * dist * 0.5);
+                    }
+                    
+                    // Jogador triste
+                    drawSadBird(ctxW, 100, 95, selectedPlayerColor, selectedPlayerWing, scale * 0.9);
+                    
+                    // CPU feliz (espelhada)
+                    ctxW.save();
+                    ctxW.translate(300, 0);
+                    ctxW.scale(-1, 1);
+                    drawHappyBird(ctxW, 0, 85 + bounce, cpu.color, cpu.wingColor, scale);
+                    ctxW.restore();
+                }
+                
+        // VS no centro (só se não for bônus)
+                if (!isBonusStage) {
+                    ctxW.font = 'bold 24px Arial';
+                    ctxW.fillStyle = '#f1c40f';
+                    ctxW.textAlign = 'center';
+                    ctxW.fillText('VS', 200, 90);
+                }
+                
+                animFrame = requestAnimationFrame(animate);
+            }
+            
+            animate();
+            winnerCanvas.animFrame = animFrame;
+        }
+
+// ========== FUNÇÕES DE DEBUG ==========
+        
+// Simular vitória do boss (para teste)
+        function simulateBossVictory() {
+            if (!debugMode && !window.debugMode) {
+        console.log('⚠️ Modo Debug não está ativo! Pressione Ctrl+Shift+D para ativar.');
+                return;
+            }
+    console.log('🔧 DEBUG: Simulando vitória do boss...');
+            
+            // Garantir que estamos em uma fase de boss
+            currentSubstage = 7;
+            
+    // Definir scores para vitória
+            playerScore = 30;
+            cpuScore = 10;
+            
+            // Chamar endGame normalmente
+            endGame();
+        }
+        
+// Simular vitória normal (para teste)
+        function simulateVictory() {
+            if (!debugMode && !window.debugMode) {
+        console.log('⚠️ Modo Debug não está ativo! Pressione Ctrl+Shift+D para ativar.');
+                return;
+            }
+    console.log('🔧 DEBUG: Simulando vitória normal...');
+            
+    // Definir scores para vitória
+            playerScore = 20;
+            cpuScore = 10;
+            
+            // Chamar endGame normalmente
+            endGame();
+        }
+        
+        // Simular derrota (para teste)
+        function simulateDefeat() {
+            if (!debugMode && !window.debugMode) {
+        console.log('⚠️ Modo Debug não está ativo! Pressione Ctrl+Shift+D para ativar.');
+                return;
+            }
+    console.log('🔧 DEBUG: Simulando derrota...');
+            
+            // Definir scores para derrota
+            playerScore = 5;
+            cpuScore = 20;
+            
+            // Chamar endGame normalmente
+            endGame();
+        }
+
+        // Fim do jogo
+        function endGame() {
+            gameRunning = false;
+            const gameOverDiv = document.getElementById('gameOver');
+            const resultTitle = document.getElementById('resultTitle');
+            const resultText = document.getElementById('resultText');
+            const config = substageConfig[currentSubstage];
+            
+    // Verificar vitória (fase bônus: atingir meta, fase normal: mais pontos que CPU)
+            const isVictory = isBonusStage ? (playerScore >= config.goalScore) : (playerScore > cpuScore);
+
+            if (isVictory) {
+        // Vitória especial do boss
+                if (currentSubstage === 7) {
+            resultTitle.textContent = '👑 BOSS DERROTADO! 👑';
+                    resultTitle.className = 'win';
+                    
+            // 🔊 Som especial de vitória do boss (efeito sonoro com loop)
+            // Parar música de introdução se estiver tocando
+                    if (sounds.introSound && !sounds.introSound.paused) {
+                        sounds.introSound.pause();
+                        sounds.introSound.currentTime = 0;
+                    }
+                    
+            // 🔊 Tocar som de vitória do boss (efeito sonoro com loop)
+                    if (sounds.bossWin && !sfxMuted) {
+                        // Configurar como efeito sonoro especial sem loop
+                        sounds.bossWin.loop = false; // Sem loop - efeito sonoro único
+                        sounds.bossWin.volume = masterVolume;
+                        sounds.bossWin.currentTime = 0;
+                        
+                // Tentar tocar diretamente (já que precisa de loop)
+                        sounds.bossWin.play().catch(e => {
+                            console.log('Erro ao tocar boss-win:', e);
+                    // Tentar após interação do usuário
+                            const tryPlay = () => {
+                                if (sounds.bossWin && !sfxMuted) {
+                                    sounds.bossWin.loop = false; // Sem loop - efeito sonoro único
+                                    sounds.bossWin.currentTime = 0;
+                                    sounds.bossWin.play().catch(() => {});
+                                }
+                            };
+                            document.addEventListener('click', tryPlay, { once: true });
+                            document.addEventListener('keydown', tryPlay, { once: true });
+                            document.addEventListener('touchstart', tryPlay, { once: true });
+                        });
+                    }
+                    
+            // Tela de vitória especial do boss
+                    drawBossVictoryScene();
+                } else {
+            resultTitle.textContent = isBonusStage ? 
+                (currentArea === 3 ? '❄️ BÔNUS COMPLETO! ❄️' : 
+                 currentArea === 2 ? '🌵 BÔNUS COMPLETO! 🌵' : 
+                 '🪱 BÔNUS COMPLETO! 🪱') : 
+                '🎉 VOCÊ VENCEU! 🎉';
+                    resultTitle.className = 'win';
+                    
+            // 🔊 Som de vitória normal
+                    playSound('win');
+                    
+                    drawResultScene(true, false);
+                }
+                
+        // Inicializar arrays se não existirem
+                if (!gameProgress.completedStages[currentArea]) {
+                    gameProgress.completedStages[currentArea] = [];
+                }
+                if (!gameProgress.unlockedStages[currentArea]) {
+                    gameProgress.unlockedStages[currentArea] = [1];
+                }
+                
+                // Marcar sub-fase como completada
+                if (!gameProgress.completedStages[currentArea].includes(currentSubstage)) {
+                    gameProgress.completedStages[currentArea].push(currentSubstage);
+                }
+                
+        // Desbloquear próxima sub-fase
+                const nextSubstage = currentSubstage + 1;
+                if (nextSubstage <= 7 && !gameProgress.unlockedStages[currentArea].includes(nextSubstage)) {
+                    gameProgress.unlockedStages[currentArea].push(nextSubstage);
+                }
+                
+        // Se completou o chefe (sub-fase 7), desbloquear próxima área
+                if (currentSubstage === 7) {
+                    const nextArea = currentArea + 1;
+                    if (nextArea <= 5 && !gameProgress.unlockedAreas.includes(nextArea)) {
+                        gameProgress.unlockedAreas.push(nextArea);
+                        if (!gameProgress.unlockedStages[nextArea]) {
+                            gameProgress.unlockedStages[nextArea] = [1];
+                        }
+                    }
+                }
+                
+                // Calcular estrelas
+                let stars = 1;
+                if (isBonusStage) {
+            // Fase bônus - baseado em quantas minhocas além da meta
+                    const extra = playerScore - config.goalScore;
+                    if (extra >= 5) stars = 2;
+                    if (extra >= 10) stars = 3;
+                } else {
+            // Fase normal - baseado na diferença de pontos
+                    const diff = playerScore - cpuScore;
+                    if (diff >= 5) stars = 2;
+                    if (diff >= 10) stars = 3;
+                }
+                
+                // Salvar melhor resultado de estrelas
+                const stageKey = `${currentArea}-${currentSubstage}`;
+                if (!gameProgress.stageStars[stageKey] || stars > gameProgress.stageStars[stageKey]) {
+                    gameProgress.stageStars[stageKey] = stars;
+                }
+                
+                saveProgress();
+                
+            } else if (isBonusStage) {
+        // Fase bônus - não atingiu a meta
+        resultTitle.textContent = currentArea === 3 ? '❄️ NÃO CONSEGUIU! ❄️' : 
+                                   currentArea === 2 ? '🌵 NÃO CONSEGUIU! 🌵' : 
+                                   '🪱 NÃO CONSEGUIU!';
+                resultTitle.className = 'lose';
+                
+        // 🔊 Som de derrota
+                playSound('lose');
+                
+                drawResultScene(false, false);
+            } else if (cpuScore > playerScore) {
+        resultTitle.textContent = '😔 VOCÊ PERDEU!';
+                resultTitle.className = 'lose';
+                
+        // 🔊 Som de derrota
+                playSound('lose');
+                
+                drawResultScene(false, false);
+            } else {
+        resultTitle.textContent = '🤝 EMPATE!';
+                resultTitle.className = '';
+                drawResultScene(false, true);
+            }
+
+            if (isBonusStage) {
+                if (currentArea === 3) {
+                    resultText.textContent = `Frutas: ${playerScore} / ${config.goalScore} ❄️`;
+                } else if (currentArea === 2) {
+                    resultText.textContent = `Frutos: ${playerScore} / ${config.goalScore} 🌵`;
+                } else {
+                    resultText.textContent = `Minhocas: ${playerScore} / ${config.goalScore} 🪱`;
+                }
+            } else {
+        resultText.textContent = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎`;
+            }
+            
+    // Configurar botões baseado no resultado
+            const resultButtons = document.getElementById('resultButtons');
+            
+            if (isVictory) {
+                // Se derrotou o boss (subfase 7), mostrar apenas Roadmap
+                if (currentSubstage === 7) {
+                    resultButtons.innerHTML = `
+                <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
+                    `;
+                } else {
+            // Vitória normal - Próxima fase ou Roadmap
+                    const hasNextStage = currentSubstage < 7 || (currentSubstage === 7 && currentArea < 5);
+                    
+                    if (hasNextStage) {
+                        resultButtons.innerHTML = `
                     <button class="result-btn next" onclick="goToNextStage()">➡️ Próxima Fase</button>
                     <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
-                `;
-            } else {
-                // Completou tudo!
-                resultButtons.innerHTML = `
+                        `;
+                    } else {
+                        // Completou tudo!
+                        resultButtons.innerHTML = `
                     <button class="result-btn retry" onclick="restartGame()">🔄 Jogar Novamente</button>
                     <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
-                `;
-            }
-        }
-    } else if (cpuScore > playerScore) {
-        // Derrota - Tentar novamente ou Roadmap (incluindo boss)
-        resultButtons.innerHTML = `
+                        `;
+                    }
+                }
+            } else if (cpuScore > playerScore) {
+                // Derrota - Tentar novamente ou Roadmap (incluindo boss)
+                resultButtons.innerHTML = `
             <button class="result-btn retry" onclick="restartGame()">🔄 Tentar Novamente</button>
             <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
-        `;
-    } else {
-        // Empate - Jogar novamente ou Roadmap
-        resultButtons.innerHTML = `
+                `;
+            } else {
+                // Empate - Jogar novamente ou Roadmap
+                resultButtons.innerHTML = `
             <button class="result-btn retry" onclick="restartGame()">🔄 Jogar Novamente</button>
             <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
-        `;
-    }
-    
-    gameOverDiv.style.display = 'block';
-}
-
+                `;
+            }
+            
+            gameOverDiv.style.display = 'block';
+        }
+        
 // Ir para próxima fase
-function goToNextStage() {
+        function goToNextStage() {
     // Parar animação do canvas de resultado
-    const winnerCanvas = document.getElementById('winnerCanvas');
-    if (winnerCanvas && winnerCanvas.animFrame) {
-        cancelAnimationFrame(winnerCanvas.animFrame);
-    }
-    
-    document.getElementById('gameOver').style.display = 'none';
-    
+            const winnerCanvas = document.getElementById('winnerCanvas');
+            if (winnerCanvas && winnerCanvas.animFrame) {
+                cancelAnimationFrame(winnerCanvas.animFrame);
+            }
+            
+            document.getElementById('gameOver').style.display = 'none';
+            
     // Determinar próxima fase
-    let nextArea = currentArea;
-    let nextSubstage = currentSubstage + 1;
-    
+            let nextArea = currentArea;
+            let nextSubstage = currentSubstage + 1;
+            
     // Se completou o chefe, vai para próxima área
-    if (currentSubstage === 7) {
-        nextArea = currentArea + 1;
-        nextSubstage = 1;
-    }
-    
+            if (currentSubstage === 7) {
+                nextArea = currentArea + 1;
+                nextSubstage = 1;
+            }
+            
     // Verificar se a próxima fase está desbloqueada
-    if (nextArea <= 5 && gameProgress.unlockedStages[nextArea] && 
-        gameProgress.unlockedStages[nextArea].includes(nextSubstage)) {
-        selectSubstage(nextArea, nextSubstage);
-    } else {
-        goToMenu();
-    }
-}
+            if (nextArea <= 5 && gameProgress.unlockedStages[nextArea] && 
+                gameProgress.unlockedStages[nextArea].includes(nextSubstage)) {
+                selectSubstage(nextArea, nextSubstage);
+            } else {
+                goToMenu();
+            }
+        }
 
 // Ir para roadmap (mantém menu visível ao fundo)
-function goToRoadmap() {
+        function goToRoadmap() {
     // Parar animação do canvas de resultado
-    const winnerCanvas = document.getElementById('winnerCanvas');
-    if (winnerCanvas && winnerCanvas.animFrame) {
-        cancelAnimationFrame(winnerCanvas.animFrame);
-    }
-    
-    // Fechar tela de game over e jogo
-    document.getElementById('gameOver').style.display = 'none';
-    document.getElementById('gameContainer').classList.remove('active');
-    
+            const winnerCanvas = document.getElementById('winnerCanvas');
+            if (winnerCanvas && winnerCanvas.animFrame) {
+                cancelAnimationFrame(winnerCanvas.animFrame);
+            }
+            
+            // Fechar tela de game over e jogo
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('gameContainer').classList.remove('active');
+            
     // NÃO esconder o menu - ele deve ficar visível ao fundo
-    const menuOverlay = document.getElementById('menuOverlay');
-    if (menuOverlay) {
+            const menuOverlay = document.getElementById('menuOverlay');
+            if (menuOverlay) {
         // Remover estilo inline se houver, para que o CSS padrão funcione
-        menuOverlay.style.removeProperty('display');
-    }
-    
-    // Fechar sub-fases se estiver aberta
-    const substagesOverlay = document.getElementById('substagesOverlay');
-    if (substagesOverlay) {
-        substagesOverlay.classList.remove('active');
-    }
-    
-    // Esconder painel de debug
-    const debugPanel = document.getElementById('debugPanel');
-    if (debugPanel) {
-        debugPanel.classList.remove('active');
-    }
-    
-    // Abrir roadmap usando apenas a classe CSS (sem estilo inline)
-    const roadmapOverlay = document.getElementById('roadmapOverlay');
-    if (roadmapOverlay) {
-        // Remover qualquer estilo inline que possa estar interferindo
-        roadmapOverlay.style.removeProperty('display');
-        roadmapOverlay.style.removeProperty('visibility');
-        
-        // Atualizar visual
-        updateRoadmapVisual();
-        
+                menuOverlay.style.removeProperty('display');
+            }
+            
+            // Fechar sub-fases se estiver aberta
+            const substagesOverlay = document.getElementById('substagesOverlay');
+            if (substagesOverlay) {
+                substagesOverlay.classList.remove('active');
+            }
+            
+            // Esconder painel de debug
+            const debugPanel = document.getElementById('debugPanel');
+            if (debugPanel) {
+                debugPanel.classList.remove('active');
+            }
+            
+            // Abrir roadmap usando apenas a classe CSS (sem estilo inline)
+            const roadmapOverlay = document.getElementById('roadmapOverlay');
+            if (roadmapOverlay) {
+                // Remover qualquer estilo inline que possa estar interferindo
+                roadmapOverlay.style.removeProperty('display');
+                roadmapOverlay.style.removeProperty('visibility');
+                
+                // Atualizar visual
+                updateRoadmapVisual();
+                
         // Adicionar classe active (CSS já define display: flex)
-        roadmapOverlay.classList.add('active');
-    }
-}
+                roadmapOverlay.classList.add('active');
+            }
+        }
 
-// Reiniciar jogo
-function restartGame() {
-    playerScore = 0;
-    cpuScore = 0;
-    const baseConfig = substageConfig[currentSubstage] || substageConfig[1];
-    const config = applyDifficultyToConfig(baseConfig);
-    timeLeft = config.time;
-    cpu.baseSpeed = config.cpuSpeed;
-    cpu.speed = config.cpuSpeed;
-    foods = [];
-    specialFoods = [];
-    speedItems = [];
-    player.x = 100;
-    player.y = canvas.height / 2;
-    player.speed = player.baseSpeed;
-    player.speedBoost = 0;
-    cpu.x = canvas.width - 100;
-    cpu.y = canvas.height / 2;
-    cpu.speed = cpu.baseSpeed;
-    cpu.speedBoost = 0;
-    cpu.stunned = false;
-    cpu.stunTime = 0;
-    cpu.reactionDelay = 60;
-    cpu.targetFood = null;
-    cpu.stunCharge = 0;
-    cpu.stunChargeTimer = 0;
-    cpu.specialFoodDelay = 0;
-    cpu.goingForSpecial = false;
-    cpu.goingForSpeed = false;
-    player.stunCharge = 0;
-    player.stunChargeTimer = 0;
-    player.stunned = false;
-    
+        // Reiniciar jogo
+        function restartGame() {
+            playerScore = 0;
+            cpuScore = 0;
+            const baseConfig = substageConfig[currentSubstage] || substageConfig[1];
+            const config = applyDifficultyToConfig(baseConfig);
+            timeLeft = config.time;
+            cpu.baseSpeed = config.cpuSpeed;
+            cpu.speed = config.cpuSpeed;
+            foods = [];
+            specialFoods = [];
+            speedItems = [];
+            player.x = 100;
+            player.y = canvas.height / 2;
+            player.speed = player.baseSpeed;
+            player.speedBoost = 0;
+            cpu.x = canvas.width - 100;
+            cpu.y = canvas.height / 2;
+            cpu.speed = cpu.baseSpeed;
+            cpu.speedBoost = 0;
+            cpu.stunned = false;
+            cpu.stunTime = 0;
+            cpu.reactionDelay = 60;
+            cpu.targetFood = null;
+            cpu.stunCharge = 0;
+            cpu.stunChargeTimer = 0;
+            cpu.specialFoodDelay = 0;
+            cpu.goingForSpecial = false;
+            cpu.goingForSpeed = false;
+            player.stunCharge = 0;
+            player.stunChargeTimer = 0;
+            player.stunned = false;
+            
     // Reset gavião
-    hawk.active = false;
-    hawk.cooldown = 0;
-    hawk.warningTime = 0;
-    player.stunTime = 0;
-    player.eatAnimation = 0;
-    player.facingRight = true;
-    cpu.eatAnimation = 0;
-    cpu.facingRight = false;
-    
-    // Reset minhocas (fase bônus)
-    if (isBonusStage) {
-        initWormHoles();
-        document.getElementById('wormCount').textContent = '0';
-    }
-    
-    // Atualizar UI para o tipo de fase
-    updateStageUI();
+            hawk.active = false;
+            hawk.cooldown = 0;
+            hawk.warningTime = 0;
+            player.stunTime = 0;
+            player.eatAnimation = 0;
+            player.facingRight = true;
+            cpu.eatAnimation = 0;
+            cpu.facingRight = false;
+            
+    // Reset fase bônus
+            if (isBonusStage) {
+                if (currentArea === 3) {
+                    initFrozenFruits();
+                } else if (currentArea === 2) {
+                    initCactusFruits();
+                } else {
+                    initWormHoles();
+                }
+                document.getElementById('wormCount').textContent = '0';
+            }
+            
+            // Atualizar UI para o tipo de fase
+            updateStageUI();
 
     // Placar, timer e stun agora são desenhados no canvas
     // Manter referências apenas para elementos que ainda existem
-    const timerEl = document.getElementById('timer');
-    if (timerEl) timerEl.textContent = timeLeft;
-    
-    const cooldownText = document.getElementById('cooldownText');
-    if (cooldownText) cooldownText.textContent = '0/20';
-    
-    const cooldownFill = document.getElementById('cooldownFill');
-    if (cooldownFill) cooldownFill.style.width = '0%';
-    
-    document.getElementById('gameOver').style.display = 'none';
-    
+            const timerEl = document.getElementById('timer');
+            if (timerEl) timerEl.textContent = timeLeft;
+            
+            const cooldownText = document.getElementById('cooldownText');
+            if (cooldownText) cooldownText.textContent = '0/20';
+            
+            const cooldownFill = document.getElementById('cooldownFill');
+            if (cooldownFill) cooldownFill.style.width = '0%';
+            
+            document.getElementById('gameOver').style.display = 'none';
+            
     // Parar animação do vencedor
-    const winnerCanvas = document.getElementById('winnerCanvas');
-    if (winnerCanvas.animFrame) {
-        cancelAnimationFrame(winnerCanvas.animFrame);
-    }
+            const winnerCanvas = document.getElementById('winnerCanvas');
+            if (winnerCanvas.animFrame) {
+                cancelAnimationFrame(winnerCanvas.animFrame);
+            }
 
-    // Mostrar contagem regressiva
-    showCountdown();
-}
-
-// Timer
-function startTimer() {
-    const timerInterval = setInterval(() => {
-        if (!gameRunning) {
-            clearInterval(timerInterval);
-            document.getElementById('timer').parentElement.classList.remove('urgent');
-            return;
+            // Mostrar contagem regressiva
+            showCountdown();
         }
 
-        timeLeft--;
+        // Timer
+        function startTimer() {
+            const timerInterval = setInterval(() => {
+                if (!gameRunning) {
+                    clearInterval(timerInterval);
+                    document.getElementById('timer').parentElement.classList.remove('urgent');
+                    return;
+                }
+
+                timeLeft--;
         // Timer agora é desenhado no canvas, mas manter sincronização com HTML se existir
-        const timerEl = document.getElementById('timer');
-        if (timerEl) timerEl.textContent = timeLeft;
+                const timerEl = document.getElementById('timer');
+                if (timerEl) timerEl.textContent = timeLeft;
 
-        // Aviso quando faltam 10 segundos
-        if (timeLeft === 10) {
-            showTimeWarning();
-            document.getElementById('timer').parentElement.classList.add('urgent');
-        }
+                // Aviso quando faltam 10 segundos
+                if (timeLeft === 10) {
+                    showTimeWarning();
+                    document.getElementById('timer').parentElement.classList.add('urgent');
+                }
 
         // Aviso a cada segundo nos últimos 5 segundos
-        if (timeLeft <= 5 && timeLeft > 0) {
-            showTimeWarning();
+                if (timeLeft <= 5 && timeLeft > 0) {
+                    showTimeWarning();
+                }
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    document.getElementById('timer').parentElement.classList.remove('urgent');
+                    endGame();
+                }
+            }, 1000);
         }
 
-        if (timeLeft <= 0) {
-            clearInterval(timerInterval);
-            document.getElementById('timer').parentElement.classList.remove('urgent');
-            endGame();
-        }
-    }, 1000);
-}
-
-// Mostrar aviso de tempo
-function showTimeWarning() {
-    const warning = document.createElement('div');
-    warning.className = 'time-warning';
-    warning.textContent = timeLeft;
-    document.body.appendChild(warning);
-    
+        // Mostrar aviso de tempo
+        function showTimeWarning() {
+            const warning = document.createElement('div');
+            warning.className = 'time-warning';
+            warning.textContent = timeLeft;
+            document.body.appendChild(warning);
+            
     // Remove após a animação
-    setTimeout(() => {
-        warning.remove();
-    }, 500);
-}
+            setTimeout(() => {
+                warning.remove();
+            }, 500);
+        }
 
 // Spawn de comida periódico (1 a 5 de cada vez)
-setInterval(() => {
-    if (gameRunning && !isBonusStage) {
-        const quantidade = 1 + Math.floor(Math.random() * 5); // 1 a 5
-        for (let i = 0; i < quantidade; i++) {
-            spawnFood();
-        }
-    }
-}, 2000);
+        setInterval(() => {
+            if (gameRunning && !isBonusStage) {
+                const quantidade = 1 + Math.floor(Math.random() * 5); // 1 a 5
+                for (let i = 0; i < quantidade; i++) {
+                    spawnFood();
+                }
+            }
+        }, 2000);
 
-// Spawn de comida especial (a cada 8-15 segundos)
-setInterval(() => {
-    if (gameRunning && !isBonusStage) {
-        spawnSpecialFood();
-    }
-}, 8000 + Math.random() * 7000);
+        // Spawn de comida especial (a cada 8-15 segundos)
+        setInterval(() => {
+            if (gameRunning && !isBonusStage) {
+                spawnSpecialFood();
+            }
+        }, 8000 + Math.random() * 7000);
 
-// Spawn de item de velocidade (a cada 10-18 segundos)
-setInterval(() => {
-    if (gameRunning && !isBonusStage) {
-        spawnSpeedItem();
-    }
-}, 10000 + Math.random() * 8000);
-
-// Spawn de minhocas (fase bônus - a cada 0.3-0.8 segundos)
-setInterval(() => {
-    if (gameRunning && isBonusStage) {
-        spawnWorm();
-    }
-}, 300 + Math.random() * 500);
-
-// Loop principal do jogo
-function gameLoop() {
-    if (!gameRunning) return;
-
-    updatePlayer();
-    
-    if (isBonusStage) {
-        // Fase bônus - apenas minhocas
-        updateWorms();
-        checkWormCollisions();
-        updateWormEatEffects();
-    } else {
-        // Fase normal - CPU e comidas
-        updateCPU();
-        updateFood();
-        updateHawk();
-        checkBirdCollision();
-        checkCollisions();
+        // Spawn de item de velocidade (a cada 10-18 segundos)
+        setInterval(() => {
+            if (gameRunning && !isBonusStage) {
+                spawnSpeedItem();
+            }
+        }, 10000 + Math.random() * 8000);
         
+// Spawn de minhocas (fase bônus - a cada 0.3-0.8 segundos)
+        setInterval(() => {
+            if (gameRunning && isBonusStage) {
+                spawnWorm();
+            }
+        }, 300 + Math.random() * 500);
+
+        // Loop principal do jogo
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            updatePlayer();
+            
+            if (isBonusStage) {
+                if (currentArea === 3) {
+                    // Fase bônus do gelo - frutas congeladas
+                    updateFrozenFruits();
+                    checkFrozenFruitCollisions();
+                    updateWormEatEffects(); // Reutilizar efeitos visuais
+                } else if (currentArea === 2) {
+                    // Fase bônus do deserto - frutos de cactos
+                    updateCactusFruits();
+                    checkCactusFruitCollisions();
+                    updateWormEatEffects(); // Reutilizar efeitos visuais
+                } else {
+                    // Fase bônus - apenas minhocas (outras áreas)
+                    updateWorms();
+                    checkWormCollisions();
+                    updateWormEatEffects();
+                }
+            } else {
+                // Fase normal - CPU e comidas
+                updateCPU();
+                updateFood();
+                updateHawk();
+                checkBirdCollision();
+                checkCollisions();
+                
         // Atualizar gotas de suor no deserto
         updateSweatDrops();
         
         // Atualizar chuva na floresta
         updateRain();
         
+        // Atualizar elementos decorativos do gelo
+        if (currentArea === 3) {
+            updateIceDecorations();
+            updateColdEffects();
+        }
+        
         // Verificar expiração do stun carregado (5 segundos)
-        if (player.stunCharge >= player.stunChargeMax && !player.stunned) {
-            const oldSeconds = Math.ceil(player.stunChargeTimer / 60);
-            player.stunChargeTimer--;
-            const newSeconds = Math.ceil(player.stunChargeTimer / 60);
-            
+                if (player.stunCharge >= player.stunChargeMax && !player.stunned) {
+                    const oldSeconds = Math.ceil(player.stunChargeTimer / 60);
+                    player.stunChargeTimer--;
+                    const newSeconds = Math.ceil(player.stunChargeTimer / 60);
+                    
             // Só atualiza UI quando muda o segundo (não a cada frame)
-            if (oldSeconds !== newSeconds) {
-                updateStunUI();
+                    if (oldSeconds !== newSeconds) {
+                        updateStunUI();
+                    }
+                    
+                    if (player.stunChargeTimer <= 0) {
+                        player.stunCharge = 0;
+                        player.stunChargeTimer = 0;
+                        updateStunUI();
+                    }
+                }
+                if (cpu.stunCharge >= cpu.stunChargeMax && !cpu.stunned) {
+                    cpu.stunChargeTimer--;
+                    if (cpu.stunChargeTimer <= 0) {
+                        cpu.stunCharge = 0;
+                        cpu.stunChargeTimer = 0;
+                    }
+                }
             }
-            
-            if (player.stunChargeTimer <= 0) {
-                player.stunCharge = 0;
-                player.stunChargeTimer = 0;
-                updateStunUI();
-            }
-        }
-        if (cpu.stunCharge >= cpu.stunChargeMax && !cpu.stunned) {
-            cpu.stunChargeTimer--;
-            if (cpu.stunChargeTimer <= 0) {
-                cpu.stunCharge = 0;
-                cpu.stunChargeTimer = 0;
-            }
-        }
-    }
     
-    draw();
+    // Atualizar animações do placar
+    if (playerScoreAnimation > 0) {
+        playerScoreAnimation--;
+    }
+    if (cpuScoreAnimation > 0) {
+        cpuScoreAnimation--;
+    }
+            
+            draw();
 
-    requestAnimationFrame(gameLoop);
-}
+            requestAnimationFrame(gameLoop);
+        }
 
-// Progresso do jogador
-let gameProgress = JSON.parse(localStorage.getItem('birdGameProgress')) || {};
-
+        // Progresso do jogador
+        let gameProgress = JSON.parse(localStorage.getItem('birdGameProgress')) || {};
+        
 // Garantir estrutura correta do progresso (migração de versão antiga)
-if (!gameProgress.unlockedAreas) {
-    gameProgress.unlockedAreas = [1];
-}
-if (!gameProgress.unlockedStages) {
-    gameProgress.unlockedStages = { 1: [1] };
-}
-if (!gameProgress.completedStages) {
-    gameProgress.completedStages = {};
-}
-if (!gameProgress.stageStars) {
-    gameProgress.stageStars = {};
-}
+        if (!gameProgress.unlockedAreas) {
+            gameProgress.unlockedAreas = [1];
+        }
+        if (!gameProgress.unlockedStages) {
+            gameProgress.unlockedStages = { 1: [1] };
+        }
+        if (!gameProgress.completedStages) {
+            gameProgress.completedStages = {};
+        }
+        if (!gameProgress.stageStars) {
+            gameProgress.stageStars = {};
+        }
 // Garantir que área 1 tenha sub-fase 1 desbloqueada
-if (!gameProgress.unlockedStages[1]) {
-    gameProgress.unlockedStages[1] = [1];
-}
+        if (!gameProgress.unlockedStages[1]) {
+            gameProgress.unlockedStages[1] = [1];
+        }
+        
+        let currentArea = 1;
+        let currentSubstage = 1;
+        let currentLevel = 1; // Mantido para compatibilidade
 
-let currentArea = 1;
-let currentSubstage = 1;
-let currentLevel = 1; // Mantido para compatibilidade
-
-// Salvar progresso
-function saveProgress() {
-    localStorage.setItem('birdGameProgress', JSON.stringify(gameProgress));
-}
+        // Salvar progresso
+        function saveProgress() {
+            localStorage.setItem('birdGameProgress', JSON.stringify(gameProgress));
+        }
 
 // Atualizar visual do roadmap de áreas
-function updateRoadmapVisual() {
-    for (let i = 1; i <= 5; i++) {
-        const areaEl = document.getElementById('area' + i);
-        const progressEl = document.getElementById('areaProgress' + i);
-        
-        if (gameProgress.unlockedAreas.includes(i)) {
-            areaEl.classList.remove('locked');
-            areaEl.classList.add('unlocked');
-            areaEl.onclick = () => openArea(i);
-            
+        function updateRoadmapVisual() {
+            for (let i = 1; i <= 5; i++) {
+                const areaEl = document.getElementById('area' + i);
+                const progressEl = document.getElementById('areaProgress' + i);
+                
+                if (gameProgress.unlockedAreas.includes(i)) {
+                    areaEl.classList.remove('locked');
+                    areaEl.classList.add('unlocked');
+                    areaEl.onclick = () => openArea(i);
+                    
             // Mostrar ícone
-            const lockEl = areaEl.querySelector('.area-lock');
-            if (lockEl) {
-                lockEl.outerHTML = `<div class="area-icon">${areaConfig[i].icon}</div>`;
-            }
-            
-            // Atualizar progresso
-            const completed = gameProgress.completedStages[i] ? gameProgress.completedStages[i].length : 0;
-            progressEl.textContent = `${completed}/7`;
-            
-            if (completed >= 7) {
-                areaEl.classList.add('completed');
+                    const lockEl = areaEl.querySelector('.area-lock');
+                    if (lockEl) {
+                        lockEl.outerHTML = `<div class="area-icon">${areaConfig[i].icon}</div>`;
+                    }
+                    
+                    // Atualizar progresso
+                    const completed = gameProgress.completedStages[i] ? gameProgress.completedStages[i].length : 0;
+                    progressEl.textContent = `${completed}/7`;
+                    
+                    if (completed >= 7) {
+                        areaEl.classList.add('completed');
+                    }
+                }
             }
         }
-    }
-}
 
 // Abrir roadmap (seleção de áreas)
-function openRoadmap() {
+        function openRoadmap() {
     // Garantir que a tela de sub-fases está fechada (apenas remover classe, CSS controla display)
-    const substagesOverlay = document.getElementById('substagesOverlay');
-    if (substagesOverlay) {
-        substagesOverlay.classList.remove('active');
-        substagesOverlay.style.removeProperty('display'); // Remove qualquer display inline
-    }
-    
-    // Atualizar visual do roadmap
-    updateRoadmapVisual();
-    
+            const substagesOverlay = document.getElementById('substagesOverlay');
+            if (substagesOverlay) {
+                substagesOverlay.classList.remove('active');
+                substagesOverlay.style.removeProperty('display'); // Remove qualquer display inline
+            }
+            
+            // Atualizar visual do roadmap
+            updateRoadmapVisual();
+            
     // Abrir roadmap (mostra seleção de áreas)
-    const roadmapOverlay = document.getElementById('roadmapOverlay');
-    if (!roadmapOverlay) {
+            const roadmapOverlay = document.getElementById('roadmapOverlay');
+            if (!roadmapOverlay) {
         console.error('Roadmap overlay não encontrado!');
-        return;
-    }
-    
-    roadmapOverlay.classList.add('active');
+                return;
+            }
+            
+            roadmapOverlay.classList.add('active');
     // Garantir que está visível (forçar display flex)
-    roadmapOverlay.style.display = 'flex';
-}
+            roadmapOverlay.style.display = 'flex';
+        }
 
 // Fechar roadmap (mantém menu visível ao fundo)
-function closeRoadmap() {
-    const roadmapOverlay = document.getElementById('roadmapOverlay');
-    if (roadmapOverlay) {
-        roadmapOverlay.classList.remove('active');
+        function closeRoadmap() {
+            const roadmapOverlay = document.getElementById('roadmapOverlay');
+            if (roadmapOverlay) {
+                roadmapOverlay.classList.remove('active');
         // Remover estilo inline para que o CSS controle a exibição
-        roadmapOverlay.style.removeProperty('display');
-    }
+                roadmapOverlay.style.removeProperty('display');
+            }
     // Não chamar goToMenu() - o menu já está visível ao fundo
     // Apenas garantir que o menu está visível (caso tenha sido escondido)
-    const menuOverlay = document.getElementById('menuOverlay');
-    if (menuOverlay) {
+            const menuOverlay = document.getElementById('menuOverlay');
+            if (menuOverlay) {
         // Remover estilo inline se houver, para que o CSS padrão funcione
-        menuOverlay.style.removeProperty('display');
-    }
-}
+                menuOverlay.style.removeProperty('display');
+            }
+        }
 
 // Abrir área (mostrar sub-fases)
-function openArea(area) {
-    if (!gameProgress.unlockedAreas.includes(area)) return;
-    
-    currentArea = area;
-    const config = areaConfig[area];
-    
-    document.getElementById('substagesTitle').textContent = `${config.icon} ${config.name}`;
-    
-    // Gerar grid de sub-fases
-    const grid = document.getElementById('substagesGrid');
-    grid.innerHTML = '';
-    
+        function openArea(area) {
+            if (!gameProgress.unlockedAreas.includes(area)) return;
+            
+            currentArea = area;
+            const config = areaConfig[area];
+            
+            // Atualizar título
+            document.getElementById('substagesTitle').textContent = `${config.icon} ${config.name}`;
+            
+            // Personalizar cores e estilo baseado na área
+            const substagesOverlayEl = document.getElementById('substagesOverlay');
+            const substagesBox = document.querySelector('.substages-box');
+            
+            if (substagesOverlayEl && substagesBox) {
+                // Remover classes de área anteriores
+                substagesOverlayEl.classList.remove('area-forest', 'area-desert', 'area-ice', 'area-volcano', 'area-castle');
+                substagesBox.classList.remove('area-forest', 'area-desert', 'area-ice', 'area-volcano', 'area-castle');
+                
+                // Adicionar classe da área atual
+                const areaClasses = {
+                    1: 'area-forest',
+                    2: 'area-desert',
+                    3: 'area-ice',
+                    4: 'area-volcano',
+                    5: 'area-castle'
+                };
+                substagesOverlayEl.classList.add(areaClasses[area] || 'area-forest');
+                substagesBox.classList.add(areaClasses[area] || 'area-forest');
+                
+                // Aplicar cores personalizadas via estilo inline
+                const areaStyles = {
+                    1: { // Floresta
+                        overlayBg: 'rgba(26, 61, 14, 0.95)',
+                        boxBg: 'linear-gradient(135deg, #1a3d0e 0%, #2d5016 100%)',
+                        borderColor: '#27ae60',
+                        titleColor: '#2ecc71'
+                    },
+                    2: { // Deserto
+                        overlayBg: 'rgba(139, 69, 19, 0.95)',
+                        boxBg: 'linear-gradient(135deg, #8b4513 0%, #a0522d 100%)',
+                        borderColor: '#d2691e',
+                        titleColor: '#f39c12'
+                    },
+                    3: { // Gelo
+                        overlayBg: 'rgba(26, 61, 92, 0.95)',
+                        boxBg: 'linear-gradient(135deg, #1a3d5c 0%, #2c4a6b 100%)',
+                        borderColor: '#87CEEB',
+                        titleColor: '#B0E0E6'
+                    },
+                    4: { // Vulcão
+                        overlayBg: 'rgba(93, 26, 26, 0.95)',
+                        boxBg: 'linear-gradient(135deg, #5d1a1a 0%, #7d2a2a 100%)',
+                        borderColor: '#e74c3c',
+                        titleColor: '#ff6b6b'
+                    },
+                    5: { // Castelo
+                        overlayBg: 'rgba(44, 44, 84, 0.95)',
+                        boxBg: 'linear-gradient(135deg, #2c2c54 0%, #40407a 100%)',
+                        borderColor: '#9b59b6',
+                        titleColor: '#bb8fce'
+                    }
+                };
+                
+                const style = areaStyles[area] || areaStyles[1];
+                substagesOverlayEl.style.background = style.overlayBg;
+                substagesBox.style.background = style.boxBg;
+                substagesBox.style.borderColor = style.borderColor;
+                const titleEl = substagesBox.querySelector('h3');
+                if (titleEl) {
+                    titleEl.style.color = style.titleColor;
+                }
+            }
+            
+            // Gerar grid de sub-fases
+            const grid = document.getElementById('substagesGrid');
+            grid.innerHTML = '';
+            
     // Garantir que a área tem sub-fases desbloqueadas
-    if (!gameProgress.unlockedStages[area]) {
-        gameProgress.unlockedStages[area] = [1];
-    }
-    if (!gameProgress.completedStages[area]) {
-        gameProgress.completedStages[area] = [];
-    }
-    
-    for (let i = 1; i <= 7; i++) {
-        const substage = substageConfig[i];
-        const isUnlocked = gameProgress.unlockedStages[area].includes(i);
-        const isCompleted = gameProgress.completedStages[area].includes(i);
-        const stars = gameProgress.stageStars[`${area}-${i}`] || 0;
-        
-        const card = document.createElement('div');
-        card.className = `substage-card ${substage.isBoss ? 'boss' : ''} ${substage.isBonus ? 'bonus' : ''} ${isUnlocked ? 'unlocked' : 'locked'} ${isCompleted ? 'completed' : ''}`;
-        
-        if (isUnlocked) {
-            card.onclick = () => selectSubstage(area, i);
-        }
-        
-        let displayName = `${area}-${i}`;
+            if (!gameProgress.unlockedStages[area]) {
+                gameProgress.unlockedStages[area] = [1];
+            }
+            if (!gameProgress.completedStages[area]) {
+                gameProgress.completedStages[area] = [];
+            }
+            
+            for (let i = 1; i <= 7; i++) {
+                const substage = substageConfig[i];
+                const isUnlocked = gameProgress.unlockedStages[area].includes(i);
+                const isCompleted = gameProgress.completedStages[area].includes(i);
+                const stars = gameProgress.stageStars[`${area}-${i}`] || 0;
+                
+                const card = document.createElement('div');
+                card.className = `substage-card ${substage.isBoss ? 'boss' : ''} ${substage.isBonus ? 'bonus' : ''} ${isUnlocked ? 'unlocked' : 'locked'} ${isCompleted ? 'completed' : ''}`;
+                
+                if (isUnlocked) {
+                    card.onclick = () => selectSubstage(area, i);
+                }
+                
+                let displayName = `${area}-${i}`;
         if (substage.isBoss) displayName = '👑 CHEFE';
-        else if (substage.isBonus) displayName = '🪱 BÔNUS';
-        
-        card.innerHTML = `
-            <div class="substage-number">${displayName}</div>
-            <div class="substage-stars">
+        else if (substage.isBonus) {
+                    // Personalizar texto do bônus baseado na área
+                    if (area === 3) {
+                        displayName = '❄️ BÔNUS';
+                    } else if (area === 2) {
+                        displayName = '🌵 BÔNUS';
+                    } else {
+                        displayName = '🪱 BÔNUS';
+                    }
+                }
+                
+                // Personalizar dificuldade do bônus baseado na área
+                let difficultyText = substage.difficulty;
+                if (substage.isBonus) {
+                    if (area === 3) {
+                        difficultyText = '❄️ BÔNUS';
+                    } else if (area === 2) {
+                        difficultyText = '🌵 BÔNUS';
+                    }
+                }
+                
+                card.innerHTML = `
+                    <div class="substage-number">${displayName}</div>
+                    <div class="substage-stars">
                 <span class="${stars >= 1 ? 'filled' : ''}">${stars >= 1 ? '★' : '☆'}</span>
                 <span class="${stars >= 2 ? 'filled' : ''}">${stars >= 2 ? '★' : '☆'}</span>
                 <span class="${stars >= 3 ? 'filled' : ''}">${stars >= 3 ? '★' : '☆'}</span>
-            </div>
-            <div class="substage-difficulty">${isUnlocked ? substage.difficulty : '🔒'}</div>
-        `;
-        
-        grid.appendChild(card);
-    }
-    
-    // Abrir overlay de sub-fases
-    const substagesOverlay = document.getElementById('substagesOverlay');
-    substagesOverlay.style.removeProperty('display'); // Remove qualquer display inline para permitir que CSS funcione
-    substagesOverlay.classList.add('active'); // CSS define display: flex quando tem classe 'active'
-}
+                    </div>
+            <div class="substage-difficulty">${isUnlocked ? difficultyText : '🔒'}</div>
+                `;
+                
+                grid.appendChild(card);
+            }
+            
+            // Abrir overlay de sub-fases
+            const substagesOverlay = document.getElementById('substagesOverlay');
+            substagesOverlay.style.removeProperty('display'); // Remove qualquer display inline para permitir que CSS funcione
+            substagesOverlay.classList.add('active'); // CSS define display: flex quando tem classe 'active'
+        }
 
-// Fechar sub-fases (volta para o roadmap)
-function closeSubstages() {
-    const substagesOverlay = document.getElementById('substagesOverlay');
-    substagesOverlay.classList.remove('active');
+        // Fechar sub-fases (volta para o roadmap)
+        function closeSubstages() {
+            const substagesOverlay = document.getElementById('substagesOverlay');
+            substagesOverlay.classList.remove('active');
     // Não definir style.display = 'none' para permitir que CSS controle a exibição
     // O CSS já define display: none quando não tem a classe 'active'
-}
+        }
 
-// Configurar CPU para a sub-fase
-function setCpuForSubstage(area, substage) {
-    const baseConfig = substageConfig[substage];
-    const config = applyDifficultyToConfig(baseConfig);
-    const diffMod = difficultyModifiers[gameDifficulty];
-    
-    if (baseConfig.isBoss) {
+        // Configurar CPU para a sub-fase
+        function setCpuForSubstage(area, substage) {
+            const baseConfig = substageConfig[substage];
+            const config = applyDifficultyToConfig(baseConfig);
+            const diffMod = difficultyModifiers[gameDifficulty];
+            
+            if (baseConfig.isBoss) {
         // Usar chefe da área
-        const bossType = bossCpuTypes[area];
-        cpu.color = bossType.color;
-        cpu.wingColor = bossType.wingColor;
-        cpu.type = bossType.type;
-        cpu.eyeColor = bossType.eyeColor;
-        cpu.beakColor = bossType.beakColor;
+                const bossType = bossCpuTypes[area];
+                cpu.color = bossType.color;
+                cpu.wingColor = bossType.wingColor;
+                cpu.type = bossType.type;
+                cpu.eyeColor = bossType.eyeColor;
+                cpu.beakColor = bossType.beakColor;
         cpu.size = 50; // Bosses são maiores!
-    } else {
+            } else {
         // Usar pássaro genérico da área
-        const areaCpus = areaCpuColors[area];
-        const cpuData = areaCpus[substage - 1] || areaCpus[0];
-        cpu.color = cpuData.color;
-        cpu.wingColor = cpuData.wingColor;
-        cpu.type = null; // Sem tipo especial
-        cpu.eyeColor = null;
-        cpu.beakColor = '#f39c12';
-        cpu.size = 35; // Tamanho normal
-    }
-    
-    // Configurar velocidade da CPU (com modificador de dificuldade)
-    cpu.baseSpeed = config.cpuSpeed;
-    cpu.speed = config.cpuSpeed;
-    cpu.reactionDelay = diffMod.cpuReactionDelay;
-}
+                const areaCpus = areaCpuColors[area];
+                const cpuData = areaCpus[substage - 1] || areaCpus[0];
+                cpu.color = cpuData.color;
+                cpu.wingColor = cpuData.wingColor;
+                cpu.type = null; // Sem tipo especial
+                cpu.eyeColor = null;
+                cpu.beakColor = '#f39c12';
+                cpu.size = 35; // Tamanho normal
+            }
+            
+            // Configurar velocidade da CPU (com modificador de dificuldade)
+            cpu.baseSpeed = config.cpuSpeed;
+            cpu.speed = config.cpuSpeed;
+            cpu.reactionDelay = diffMod.cpuReactionDelay;
+        }
 
-// Atualizar UI baseado no tipo de fase
-function updateStageUI() {
-    const bonusUI = document.getElementById('bonusUI');
-    const cooldownContainer = document.getElementById('cooldownContainer');
-    
-    if (isBonusStage) {
+        // Atualizar UI baseado no tipo de fase
+        function updateStageUI() {
+            const bonusUI = document.getElementById('bonusUI');
+            const cooldownContainer = document.getElementById('cooldownContainer');
+            
+            if (isBonusStage) {
         // Fase bônus - esconder stun (placar já está no canvas)
-        cooldownContainer.style.display = 'none';
+                cooldownContainer.style.display = 'none';
         bonusUI.style.display = 'none'; // UI bônus também está no canvas agora
-        
+                
         // Atualizar meta de minhocas (para referência interna)
-        const config = substageConfig[currentSubstage];
-        document.getElementById('wormGoal').textContent = config.goalScore;
-        document.getElementById('wormCount').textContent = '0';
-    } else {
+                const config = substageConfig[currentSubstage];
+                document.getElementById('wormGoal').textContent = config.goalScore;
+                document.getElementById('wormCount').textContent = '0';
+            } else {
         // Fase normal - esconder elementos HTML (tudo está no canvas)
-        cooldownContainer.style.display = 'none';
-        bonusUI.style.display = 'none';
-    }
-}
+                cooldownContainer.style.display = 'none';
+                bonusUI.style.display = 'none';
+            }
+        }
 
-// Selecionar sub-fase
-function selectSubstage(area, substage) {
-    if (!gameProgress.unlockedStages[area] || !gameProgress.unlockedStages[area].includes(substage)) return;
-    
-    currentArea = area;
-    currentSubstage = substage;
-    currentLevel = area; // Compatibilidade
-    
+        // Selecionar sub-fase
+        function selectSubstage(area, substage) {
+            if (!gameProgress.unlockedStages[area] || !gameProgress.unlockedStages[area].includes(substage)) return;
+            
+            currentArea = area;
+            currentSubstage = substage;
+            currentLevel = area; // Compatibilidade
+            
     // Inicializar elementos decorativos do cenário
-    initBackgroundDecorations();
-    
-    // Zerar placar ao iniciar nova fase
-    playerScore = 0;
-    cpuScore = 0;
+            initBackgroundDecorations();
+            
+            // Zerar placar ao iniciar nova fase
+            playerScore = 0;
+            cpuScore = 0;
     // Placar agora é desenhado no canvas, não precisa atualizar HTML
-    
-    // Zerar stun ao iniciar nova fase
-    player.stunCharge = 0;
-    player.stunChargeTimer = 0;
-    player.stunned = false;
-    player.stunTime = 0;
-    cpu.stunCharge = 0;
-    cpu.stunChargeTimer = 0;
-    cpu.stunned = false;
-    cpu.stunTime = 0;
-    updateStunUI();
-    
-    // Configurar dificuldade (aplicar modificadores)
-    const baseConfig = substageConfig[substage];
-    const config = applyDifficultyToConfig(baseConfig);
-    timeLeft = config.time;
-    
+            
+            // Zerar stun ao iniciar nova fase
+            player.stunCharge = 0;
+            player.stunChargeTimer = 0;
+            player.stunned = false;
+            player.stunTime = 0;
+            cpu.stunCharge = 0;
+            cpu.stunChargeTimer = 0;
+            cpu.stunned = false;
+            cpu.stunTime = 0;
+            updateStunUI();
+            
+            // Configurar dificuldade (aplicar modificadores)
+            const baseConfig = substageConfig[substage];
+            const config = applyDifficultyToConfig(baseConfig);
+            timeLeft = config.time;
+            
     // Verificar se é fase bônus
-    isBonusStage = baseConfig.isBonus || false;
-    
-    if (isBonusStage) {
-        initWormHoles();
-    }
-    
-    // Atualizar UI para o tipo de fase
-    updateStageUI();
-    
+            isBonusStage = baseConfig.isBonus || false;
+            
+            if (isBonusStage) {
+                if (currentArea === 3) {
+                    // Inicializar frutas congeladas para área do gelo
+                    initFrozenFruits();
+                } else if (currentArea === 2) {
+                    // Inicializar frutos de cactos para área do deserto
+                    initCactusFruits();
+                } else {
+                    // Inicializar minhocas para outras áreas
+                    initWormHoles();
+                }
+            }
+            
+            // Atualizar UI para o tipo de fase
+            updateStageUI();
+            
     // Timer agora é desenhado no canvas, mas manter sincronização com HTML se existir
-    const timerEl = document.getElementById('timer');
-    if (timerEl) timerEl.textContent = timeLeft;
-    
-    if (!isBonusStage) {
-        setCpuForSubstage(area, substage);
-    }
-    
-    closeSubstages();
-    closeRoadmap();
-    
+            const timerEl = document.getElementById('timer');
+            if (timerEl) timerEl.textContent = timeLeft;
+            
+            if (!isBonusStage) {
+                setCpuForSubstage(area, substage);
+            }
+            
+            closeSubstages();
+            closeRoadmap();
+            
     // Parar música de introdução quando iniciar o jogo
-    if (sounds.introSound) {
-        sounds.introSound.pause();
-        sounds.introSound.currentTime = 0;
-    }
-    
-    document.getElementById('menuOverlay').style.display = 'none';
-    document.getElementById('gameContainer').classList.add('active');
-    
-    if (menuAnimFrame) {
-        cancelAnimationFrame(menuAnimFrame);
-    }
-    
-    showCountdown();
-}
+            if (sounds.introSound) {
+                sounds.introSound.pause();
+                sounds.introSound.currentTime = 0;
+            }
+            
+            document.getElementById('menuOverlay').style.display = 'none';
+            document.getElementById('gameContainer').classList.add('active');
+            
+            if (menuAnimFrame) {
+                cancelAnimationFrame(menuAnimFrame);
+            }
+            
+            showCountdown();
+        }
 
 // Manter compatibilidade com função antiga
-function setCpuForLevel(level) {
-    setCpuForSubstage(level, 7); // Assume chefe
-}
+        function setCpuForLevel(level) {
+            setCpuForSubstage(level, 7); // Assume chefe
+        }
 
-// Selecionar fase (compatibilidade)
-function selectLevel(level) {
-    openArea(level);
-}
+        // Selecionar fase (compatibilidade)
+        function selectLevel(level) {
+            openArea(level);
+        }
 
-// Iniciar o jogo pela primeira vez (do menu)
-function startGame() {
-    openRoadmap();
-}
+        // Iniciar o jogo pela primeira vez (do menu)
+        function startGame() {
+            openRoadmap();
+        }
 
 // Desenhar pássaro no canvas de countdown
-function drawCountdownBird(ctxC, x, y, color, facingRight, time) {
-    ctxC.save();
-    
-    const shake = Math.sin(time / 50) * 3;
-    const scale = 1.8; // Maior para a cena
-    
-    ctxC.translate(x + shake, y);
-    if (!facingRight) {
-        ctxC.scale(-1, 1);
-    }
-    ctxC.scale(scale, scale);
-    
+        function drawCountdownBird(ctxC, x, y, color, facingRight, time) {
+            ctxC.save();
+            
+            const shake = Math.sin(time / 50) * 3;
+            const scale = 1.8; // Maior para a cena
+            
+            ctxC.translate(x + shake, y);
+            if (!facingRight) {
+                ctxC.scale(-1, 1);
+            }
+            ctxC.scale(scale, scale);
+            
     // Aura de tensão
-    ctxC.shadowColor = color;
-    ctxC.shadowBlur = 20 + Math.sin(time / 100) * 10;
-    
-    // Corpo
-    ctxC.fillStyle = color;
-    ctxC.beginPath();
-    ctxC.arc(0, 0, 35, 0, Math.PI * 2);
-    ctxC.fill();
-    
-    ctxC.shadowBlur = 0;
-    
-    // Olho
-    ctxC.fillStyle = 'white';
-    ctxC.beginPath();
-    ctxC.arc(10, -5, 10, 0, Math.PI * 2);
-    ctxC.fill();
-    
-    // Pupila vermelha (raiva)
-    ctxC.fillStyle = '#c0392b';
-    ctxC.beginPath();
-    ctxC.arc(12, -5, 6, 0, Math.PI * 2);
-    ctxC.fill();
-    
-    // Sobrancelha brava
-    ctxC.strokeStyle = 'black';
-    ctxC.lineWidth = 3;
-    ctxC.beginPath();
-    ctxC.moveTo(2, -18);
-    ctxC.lineTo(20, -12);
-    ctxC.stroke();
-    
-    // Bico aberto (gritando)
-    ctxC.fillStyle = '#f39c12';
-    ctxC.beginPath();
-    ctxC.moveTo(30, -3);
-    ctxC.lineTo(50, 0);
-    ctxC.lineTo(30, 3);
-    ctxC.closePath();
-    ctxC.fill();
-    
-    ctxC.beginPath();
-    ctxC.moveTo(30, 5);
-    ctxC.lineTo(45, 8);
-    ctxC.lineTo(30, 12);
-    ctxC.closePath();
-    ctxC.fill();
-    
-    // Asa batendo
-    const wingFlap = Math.sin(time / 80) * 0.5;
-    const wingY = 5 + Math.sin(time / 80) * 8;
-    ctxC.fillStyle = facingRight ? selectedPlayerWing : (cpu.wingColor || '#c0392b');
-    ctxC.beginPath();
-    ctxC.ellipse(-10, wingY, 20, 12 + Math.cos(time / 80) * 6, -0.3 + wingFlap, 0, Math.PI * 2);
-    ctxC.fill();
-    
+            ctxC.shadowColor = color;
+            ctxC.shadowBlur = 20 + Math.sin(time / 100) * 10;
+            
+            // Corpo
+            ctxC.fillStyle = color;
+            ctxC.beginPath();
+            ctxC.arc(0, 0, 35, 0, Math.PI * 2);
+            ctxC.fill();
+            
+            ctxC.shadowBlur = 0;
+            
+            // Olho
+            ctxC.fillStyle = 'white';
+            ctxC.beginPath();
+            ctxC.arc(10, -5, 10, 0, Math.PI * 2);
+            ctxC.fill();
+            
+            // Pupila vermelha (raiva)
+            ctxC.fillStyle = '#c0392b';
+            ctxC.beginPath();
+            ctxC.arc(12, -5, 6, 0, Math.PI * 2);
+            ctxC.fill();
+            
+            // Sobrancelha brava
+            ctxC.strokeStyle = 'black';
+            ctxC.lineWidth = 3;
+            ctxC.beginPath();
+            ctxC.moveTo(2, -18);
+            ctxC.lineTo(20, -12);
+            ctxC.stroke();
+            
+            // Bico aberto (gritando)
+            ctxC.fillStyle = '#f39c12';
+            ctxC.beginPath();
+            ctxC.moveTo(30, -3);
+            ctxC.lineTo(50, 0);
+            ctxC.lineTo(30, 3);
+            ctxC.closePath();
+            ctxC.fill();
+            
+            ctxC.beginPath();
+            ctxC.moveTo(30, 5);
+            ctxC.lineTo(45, 8);
+            ctxC.lineTo(30, 12);
+            ctxC.closePath();
+            ctxC.fill();
+            
+            // Asa batendo
+            const wingFlap = Math.sin(time / 80) * 0.5;
+            const wingY = 5 + Math.sin(time / 80) * 8;
+            ctxC.fillStyle = facingRight ? selectedPlayerWing : (cpu.wingColor || '#c0392b');
+            ctxC.beginPath();
+            ctxC.ellipse(-10, wingY, 20, 12 + Math.cos(time / 80) * 6, -0.3 + wingFlap, 0, Math.PI * 2);
+            ctxC.fill();
+            
     // Símbolos de raiva
-    ctxC.font = '16px Arial';
+            ctxC.font = '16px Arial';
     ctxC.fillText('💢', -25, -30 + Math.sin(time / 150) * 3);
-    
-    ctxC.restore();
-}
+            
+            ctxC.restore();
+        }
 
-// Desenhar BOSS no canvas de countdown
-function drawCountdownBoss(ctxC, x, y, color, wingColor, type, time) {
-    ctxC.save();
-    
-    const shake = Math.sin(time / 40) * 4;
-    const scale = 2.5; // Boss bem maior!
-    
-    ctxC.translate(x + shake, y);
-    ctxC.scale(-1, 1); // Virado para esquerda
-    ctxC.scale(scale, scale);
-    
-    // Aura maligna do boss
-    ctxC.shadowColor = '#e74c3c';
-    ctxC.shadowBlur = 25 + Math.sin(time / 80) * 15;
-    
-    // Corpo
-    ctxC.fillStyle = color;
-    ctxC.beginPath();
-    ctxC.arc(0, 0, 35, 0, Math.PI * 2);
-    ctxC.fill();
-    
-    ctxC.shadowBlur = 0;
-    
+        // Desenhar BOSS no canvas de countdown
+        function drawCountdownBoss(ctxC, x, y, color, wingColor, type, time) {
+            ctxC.save();
+            
+            const shake = Math.sin(time / 40) * 4;
+            const scale = 2.5; // Boss bem maior!
+            
+            ctxC.translate(x + shake, y);
+            ctxC.scale(-1, 1); // Virado para esquerda
+            ctxC.scale(scale, scale);
+            
+            // Aura maligna do boss
+            ctxC.shadowColor = '#e74c3c';
+            ctxC.shadowBlur = 25 + Math.sin(time / 80) * 15;
+            
+            // Corpo
+            ctxC.fillStyle = color;
+            ctxC.beginPath();
+            ctxC.arc(0, 0, 35, 0, Math.PI * 2);
+            ctxC.fill();
+            
+            ctxC.shadowBlur = 0;
+            
     // Detalhes específicos do boss
-    if (type === 'owl') {
-        const owlSize = 35; // Tamanho base do corpo
-        const topOfHead = -owlSize * 0.85;
-        const earHeight = owlSize * 0.6;
-        
-        // Orelha esquerda
-        ctxC.fillStyle = wingColor || color;
-        ctxC.beginPath();
-        ctxC.moveTo(-owlSize * 0.5, topOfHead + earHeight * 0.3);
-        ctxC.lineTo(-owlSize * 0.35, topOfHead - earHeight * 0.5);
-        ctxC.lineTo(-owlSize * 0.15, topOfHead + earHeight * 0.3);
-        ctxC.closePath();
-        ctxC.fill();
-        
-        // Orelha direita
-        ctxC.beginPath();
-        ctxC.moveTo(owlSize * 0.15, topOfHead + earHeight * 0.3);
-        ctxC.lineTo(owlSize * 0.35, topOfHead - earHeight * 0.5);
-        ctxC.lineTo(owlSize * 0.55, topOfHead + earHeight * 0.3);
-        ctxC.closePath();
-        ctxC.fill();
-        
-        // Interior das orelhas (mais claro)
-        ctxC.fillStyle = color;
-        ctxC.beginPath();
-        ctxC.moveTo(-owlSize * 0.45, topOfHead + earHeight * 0.35);
-        ctxC.lineTo(-owlSize * 0.35, topOfHead - earHeight * 0.3);
-        ctxC.lineTo(-owlSize * 0.22, topOfHead + earHeight * 0.35);
-        ctxC.closePath();
-        ctxC.fill();
-        
-        ctxC.beginPath();
-        ctxC.moveTo(owlSize * 0.22, topOfHead + earHeight * 0.35);
-        ctxC.lineTo(owlSize * 0.35, topOfHead - earHeight * 0.3);
-        ctxC.lineTo(owlSize * 0.48, topOfHead + earHeight * 0.35);
-        ctxC.closePath();
-        ctxC.fill();
-        
-        // Disco facial
-        ctxC.strokeStyle = 'rgba(0,0,0,0.3)';
-        ctxC.lineWidth = 2;
-        ctxC.beginPath();
-        ctxC.arc(5, -3, 16, 0, Math.PI * 2);
-        ctxC.stroke();
-        ctxC.beginPath();
-        ctxC.arc(25, -3, 14, 0, Math.PI * 2);
-        ctxC.stroke();
-        
-        // Olhos grandes da coruja
-        ctxC.fillStyle = 'white';
-        ctxC.beginPath();
-        ctxC.arc(5, -3, 14, 0, Math.PI * 2);
-        ctxC.fill();
-        ctxC.beginPath();
-        ctxC.arc(25, -3, 12, 0, Math.PI * 2);
-        ctxC.fill();
-        
-        // Pupilas amarelas
-        ctxC.fillStyle = '#FFD700';
-        ctxC.beginPath();
-        ctxC.arc(7, -3, 9, 0, Math.PI * 2);
-        ctxC.fill();
-        ctxC.beginPath();
-        ctxC.arc(25, -3, 7, 0, Math.PI * 2);
-        ctxC.fill();
-        
+            if (type === 'owl') {
+                const owlSize = 35; // Tamanho base do corpo
+                const topOfHead = -owlSize * 0.85;
+                const earHeight = owlSize * 0.6;
+                
+                // Orelha esquerda
+                ctxC.fillStyle = wingColor || color;
+                ctxC.beginPath();
+                ctxC.moveTo(-owlSize * 0.5, topOfHead + earHeight * 0.3);
+                ctxC.lineTo(-owlSize * 0.35, topOfHead - earHeight * 0.5);
+                ctxC.lineTo(-owlSize * 0.15, topOfHead + earHeight * 0.3);
+                ctxC.closePath();
+                ctxC.fill();
+                
+                // Orelha direita
+                ctxC.beginPath();
+                ctxC.moveTo(owlSize * 0.15, topOfHead + earHeight * 0.3);
+                ctxC.lineTo(owlSize * 0.35, topOfHead - earHeight * 0.5);
+                ctxC.lineTo(owlSize * 0.55, topOfHead + earHeight * 0.3);
+                ctxC.closePath();
+                ctxC.fill();
+                
+                // Interior das orelhas (mais claro)
+                ctxC.fillStyle = color;
+                ctxC.beginPath();
+                ctxC.moveTo(-owlSize * 0.45, topOfHead + earHeight * 0.35);
+                ctxC.lineTo(-owlSize * 0.35, topOfHead - earHeight * 0.3);
+                ctxC.lineTo(-owlSize * 0.22, topOfHead + earHeight * 0.35);
+                ctxC.closePath();
+                ctxC.fill();
+                
+                ctxC.beginPath();
+                ctxC.moveTo(owlSize * 0.22, topOfHead + earHeight * 0.35);
+                ctxC.lineTo(owlSize * 0.35, topOfHead - earHeight * 0.3);
+                ctxC.lineTo(owlSize * 0.48, topOfHead + earHeight * 0.35);
+                ctxC.closePath();
+                ctxC.fill();
+                
+                // Disco facial
+                ctxC.strokeStyle = 'rgba(0,0,0,0.3)';
+                ctxC.lineWidth = 2;
+                ctxC.beginPath();
+                ctxC.arc(5, -3, 16, 0, Math.PI * 2);
+                ctxC.stroke();
+                ctxC.beginPath();
+                ctxC.arc(25, -3, 14, 0, Math.PI * 2);
+                ctxC.stroke();
+                
+                // Olhos grandes da coruja
+                ctxC.fillStyle = 'white';
+                ctxC.beginPath();
+                ctxC.arc(5, -3, 14, 0, Math.PI * 2);
+                ctxC.fill();
+                ctxC.beginPath();
+                ctxC.arc(25, -3, 12, 0, Math.PI * 2);
+                ctxC.fill();
+                
+                // Pupilas amarelas
+                ctxC.fillStyle = '#FFD700';
+                ctxC.beginPath();
+                ctxC.arc(7, -3, 9, 0, Math.PI * 2);
+                ctxC.fill();
+                ctxC.beginPath();
+                ctxC.arc(25, -3, 7, 0, Math.PI * 2);
+                ctxC.fill();
+                
         // Centro preto (olhar ameaçador)
-        ctxC.fillStyle = 'black';
-        ctxC.beginPath();
-        ctxC.arc(7, -3, 4, 0, Math.PI * 2);
-        ctxC.fill();
-        ctxC.beginPath();
-        ctxC.arc(25, -3, 3, 0, Math.PI * 2);
-        ctxC.fill();
-        
-        // Sobrancelhas bravas
-        ctxC.strokeStyle = 'black';
-        ctxC.lineWidth = 2;
-        ctxC.beginPath();
-        ctxC.moveTo(-5, -20);
-        ctxC.lineTo(15, -15);
-        ctxC.stroke();
-        ctxC.beginPath();
-        ctxC.moveTo(18, -18);
-        ctxC.lineTo(35, -15);
-        ctxC.stroke();
-    } else {
+                ctxC.fillStyle = 'black';
+                ctxC.beginPath();
+                ctxC.arc(7, -3, 4, 0, Math.PI * 2);
+                ctxC.fill();
+                ctxC.beginPath();
+                ctxC.arc(25, -3, 3, 0, Math.PI * 2);
+                ctxC.fill();
+                
+                // Sobrancelhas bravas
+                ctxC.strokeStyle = 'black';
+                ctxC.lineWidth = 2;
+                ctxC.beginPath();
+                ctxC.moveTo(-5, -20);
+                ctxC.lineTo(15, -15);
+                ctxC.stroke();
+                ctxC.beginPath();
+                ctxC.moveTo(18, -18);
+                ctxC.lineTo(35, -15);
+                ctxC.stroke();
+            } else {
         // Boss genérico
-        ctxC.fillStyle = 'white';
-        ctxC.beginPath();
-        ctxC.arc(12, -5, 12, 0, Math.PI * 2);
-        ctxC.fill();
-        
-        ctxC.fillStyle = '#c0392b';
-        ctxC.beginPath();
-        ctxC.arc(14, -5, 7, 0, Math.PI * 2);
-        ctxC.fill();
-        
-        // Sobrancelha brava
-        ctxC.strokeStyle = 'black';
-        ctxC.lineWidth = 3;
-        ctxC.beginPath();
-        ctxC.moveTo(2, -20);
-        ctxC.lineTo(22, -14);
-        ctxC.stroke();
-    }
-    
-    // Bico
-    ctxC.fillStyle = '#f39c12';
-    ctxC.beginPath();
-    ctxC.moveTo(30, -3);
-    ctxC.lineTo(50, 0);
-    ctxC.lineTo(30, 3);
-    ctxC.closePath();
-    ctxC.fill();
-    ctxC.beginPath();
-    ctxC.moveTo(30, 5);
-    ctxC.lineTo(45, 10);
-    ctxC.lineTo(30, 14);
-    ctxC.closePath();
-    ctxC.fill();
-    
-    // Asa
-    const wingFlap = Math.sin(time / 60) * 0.5;
-    const wingY = 5 + Math.sin(time / 60) * 10;
-    ctxC.fillStyle = wingColor || '#c0392b';
-    ctxC.beginPath();
-    ctxC.ellipse(-12, wingY, 25, 15 + Math.cos(time / 60) * 8, -0.3 + wingFlap, 0, Math.PI * 2);
-    ctxC.fill();
-    
-    // Coroa do boss
-    ctxC.font = '20px Arial';
+                ctxC.fillStyle = 'white';
+                ctxC.beginPath();
+                ctxC.arc(12, -5, 12, 0, Math.PI * 2);
+                ctxC.fill();
+                
+                ctxC.fillStyle = '#c0392b';
+                ctxC.beginPath();
+                ctxC.arc(14, -5, 7, 0, Math.PI * 2);
+                ctxC.fill();
+                
+                // Sobrancelha brava
+                ctxC.strokeStyle = 'black';
+                ctxC.lineWidth = 3;
+                ctxC.beginPath();
+                ctxC.moveTo(2, -20);
+                ctxC.lineTo(22, -14);
+                ctxC.stroke();
+            }
+            
+            // Bico
+            ctxC.fillStyle = '#f39c12';
+            ctxC.beginPath();
+            ctxC.moveTo(30, -3);
+            ctxC.lineTo(50, 0);
+            ctxC.lineTo(30, 3);
+            ctxC.closePath();
+            ctxC.fill();
+            ctxC.beginPath();
+            ctxC.moveTo(30, 5);
+            ctxC.lineTo(45, 10);
+            ctxC.lineTo(30, 14);
+            ctxC.closePath();
+            ctxC.fill();
+            
+            // Asa
+            const wingFlap = Math.sin(time / 60) * 0.5;
+            const wingY = 5 + Math.sin(time / 60) * 10;
+            ctxC.fillStyle = wingColor || '#c0392b';
+            ctxC.beginPath();
+            ctxC.ellipse(-12, wingY, 25, 15 + Math.cos(time / 60) * 8, -0.3 + wingFlap, 0, Math.PI * 2);
+            ctxC.fill();
+            
+            // Coroa do boss
+            ctxC.font = '20px Arial';
     ctxC.fillText('👑', -5, -50 + Math.sin(time / 100) * 3);
-    
-    // Aura de fogo
-    ctxC.font = '14px Arial';
-    for (let i = 0; i < 3; i++) {
-        const angle = (i / 3) * Math.PI * 2 + time / 300;
-        const fx = Math.cos(angle) * 45;
-        const fy = Math.sin(angle) * 30;
+            
+            // Aura de fogo
+            ctxC.font = '14px Arial';
+            for (let i = 0; i < 3; i++) {
+                const angle = (i / 3) * Math.PI * 2 + time / 300;
+                const fx = Math.cos(angle) * 45;
+                const fy = Math.sin(angle) * 30;
         ctxC.fillText('🔥', fx - 5, fy);
-    }
-    
-    ctxC.restore();
-}
+            }
+            
+            ctxC.restore();
+        }
 
-// Contagem regressiva
-function showCountdown() {
-    const overlay = document.getElementById('countdownOverlay');
-    const numberEl = document.getElementById('countdownNumber');
-    const effectsEl = document.getElementById('countdownEffects');
-    const countdownCanvas = document.getElementById('countdownCanvas');
-    const ctxC = countdownCanvas.getContext('2d');
-    
-    overlay.style.display = 'flex';
-    effectsEl.innerHTML = '';
+        // Contagem regressiva
+        function showCountdown() {
+            const overlay = document.getElementById('countdownOverlay');
+            const numberEl = document.getElementById('countdownNumber');
+            const effectsEl = document.getElementById('countdownEffects');
+            const countdownCanvas = document.getElementById('countdownCanvas');
+            const ctxC = countdownCanvas.getContext('2d');
+            
+            overlay.style.display = 'flex';
+            effectsEl.innerHTML = '';
     
     // Tocar som especial do boss coruja se for a fase do boss coruja
     const config = substageConfig[currentSubstage];
@@ -5341,282 +7286,380 @@ function showCountdown() {
             });
         }
     }
-    
-    let count = 3;
-    numberEl.textContent = count;
-    numberEl.className = 'countdown-number';
-    
+            
+            let count = 3;
+            numberEl.textContent = count;
+            numberEl.className = 'countdown-number';
+            
     // Animação dos pássaros se encarando
-    let animFrame;
-    function animateBirds() {
-        const time = Date.now();
-        
-        // Limpar canvas
-        ctxC.clearRect(0, 0, countdownCanvas.width, countdownCanvas.height);
-        
-        // Fundo com gradiente
-        const gradient = ctxC.createLinearGradient(0, 0, countdownCanvas.width, 0);
-        gradient.addColorStop(0, 'rgba(46, 204, 113, 0.2)');
-        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0)');
-        gradient.addColorStop(1, 'rgba(231, 76, 60, 0.2)');
-        ctxC.fillStyle = gradient;
-        ctxC.fillRect(0, 0, countdownCanvas.width, countdownCanvas.height);
-        
-        // Raios de energia no centro
-        ctxC.strokeStyle = `rgba(241, 196, 15, ${0.3 + Math.sin(time / 100) * 0.2})`;
-        ctxC.lineWidth = 2;
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2 + time / 500;
-            ctxC.beginPath();
-            ctxC.moveTo(300, 100);
-            ctxC.lineTo(300 + Math.cos(angle) * 50, 100 + Math.sin(angle) * 50);
-            ctxC.stroke();
-        }
-        
-        // VS no centro
-        ctxC.font = 'bold 30px Arial';
-        ctxC.fillStyle = '#f1c40f';
-        ctxC.textAlign = 'center';
-        ctxC.textBaseline = 'middle';
-        ctxC.shadowColor = '#f39c12';
-        ctxC.shadowBlur = 10;
-        if (isBonusStage) {
-            // Fase bônus - layout especial
-            ctxC.shadowBlur = 0;
-            
-            // Título no topo
-            ctxC.font = 'bold 28px Arial';
-            ctxC.fillStyle = '#9b59b6';
-            ctxC.textAlign = 'center';
-            ctxC.shadowColor = '#8e44ad';
-            ctxC.shadowBlur = 10;
-            ctxC.fillText('🪱 CAÇA ÀS MINHOCAS! 🪱', 300, 35);
-            ctxC.shadowBlur = 0;
-            
-            // Pássaro no centro (mais abaixo)
-            drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
-            
-            // Minhocas animadas na parte inferior
-            ctxC.font = '30px Arial';
-            for (let i = 0; i < 5; i++) {
-                const wx = 80 + i * 110;
-                const wy = 175 + Math.sin(time / 150 + i * 0.8) * 8;
-                const wobble = Math.sin(time / 100 + i) * 5;
-                ctxC.save();
-                ctxC.translate(wx, wy);
-                ctxC.rotate(wobble * 0.05);
-                ctxC.fillText('🪱', 0, 0);
-                ctxC.restore();
-            }
-            
-            // Meta de minhocas
-            const config = substageConfig[currentSubstage];
-            ctxC.font = 'bold 18px Arial';
-            ctxC.fillStyle = '#f1c40f';
-            ctxC.fillText(`Meta: ${config.goalScore} minhocas em ${config.time}s!`, 300, 195);
-        } else {
-            const config = substageConfig[currentSubstage];
-            
-            if (config.isBoss) {
-                // Fase do BOSS - layout especial
-                ctxC.font = 'bold 22px Arial';
-                ctxC.fillStyle = '#e74c3c';
-                ctxC.shadowColor = '#c0392b';
-                ctxC.shadowBlur = 15;
-                ctxC.fillText('⚔️ BOSS FIGHT! ⚔️', 300, 25);
-                ctxC.shadowBlur = 0;
+            let animFrame;
+            function animateBirds() {
+                const time = Date.now();
+                
+                // Limpar canvas
+                ctxC.clearRect(0, 0, countdownCanvas.width, countdownCanvas.height);
+                
+                // Fundo com gradiente
+                const gradient = ctxC.createLinearGradient(0, 0, countdownCanvas.width, 0);
+                gradient.addColorStop(0, 'rgba(46, 204, 113, 0.2)');
+                gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0)');
+                gradient.addColorStop(1, 'rgba(231, 76, 60, 0.2)');
+                ctxC.fillStyle = gradient;
+                ctxC.fillRect(0, 0, countdownCanvas.width, countdownCanvas.height);
+                
+                // Raios de energia no centro
+                ctxC.strokeStyle = `rgba(241, 196, 15, ${0.3 + Math.sin(time / 100) * 0.2})`;
+                ctxC.lineWidth = 2;
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2 + time / 500;
+                    ctxC.beginPath();
+                    ctxC.moveTo(300, 100);
+                    ctxC.lineTo(300 + Math.cos(angle) * 50, 100 + Math.sin(angle) * 50);
+                    ctxC.stroke();
+                }
                 
                 // VS no centro
-                ctxC.font = 'bold 35px Arial';
+                ctxC.font = 'bold 30px Arial';
                 ctxC.fillStyle = '#f1c40f';
+                ctxC.textAlign = 'center';
+                ctxC.textBaseline = 'middle';
                 ctxC.shadowColor = '#f39c12';
                 ctxC.shadowBlur = 10;
-                ctxC.fillText('VS', 300, 100);
-                ctxC.shadowBlur = 0;
-                
+                if (isBonusStage) {
+            // Fase bônus - layout especial
+                    ctxC.shadowBlur = 0;
+                    
+                    const config = substageConfig[currentSubstage];
+                    
+                    if (currentArea === 3) {
+                        // Fase bônus do gelo - frutas congeladas
+                        // Título no topo
+                        ctxC.font = 'bold 28px Arial';
+                        ctxC.fillStyle = '#87CEEB';
+                        ctxC.textAlign = 'center';
+                        ctxC.shadowColor = '#5DADE2';
+                        ctxC.shadowBlur = 10;
+                        ctxC.fillText('❄️ FRUTAS CONGELADAS! ❄️', 300, 35);
+                        ctxC.shadowBlur = 0;
+                        
+                        // Pássaro no centro (mais abaixo)
+                        drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
+                        
+                        // Frutas congeladas animadas na parte inferior
+                        const frozenFruitEmojis = ['🍎', '🍌', '🍇', '🍊', '🍓'];
+                        ctxC.font = '30px Arial';
+                        for (let i = 0; i < 5; i++) {
+                            const fx = 80 + i * 110;
+                            const fy = 175 + Math.sin(time / 200 + i * 0.8) * 6;
+                            const float = Math.sin(time / 150 + i) * 3;
+                            ctxC.save();
+                            ctxC.translate(fx, fy);
+                            ctxC.rotate(float * 0.03);
+                            
+                            // Camada de gelo ao redor da fruta
+                            ctxC.fillStyle = 'rgba(200, 220, 255, 0.6)';
+                            ctxC.beginPath();
+                            ctxC.arc(0, 0, 20, 0, Math.PI * 2);
+                            ctxC.fill();
+                            
+                            // Fruta dentro do gelo
+                            ctxC.fillText(frozenFruitEmojis[i % frozenFruitEmojis.length], 0, 0);
+                            
+                            // Cristais de gelo pequenos ao redor
+                            ctxC.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                            for (let j = 0; j < 6; j++) {
+                                const angle = (j / 6) * Math.PI * 2 + time / 300;
+                                const px = Math.cos(angle) * 15;
+                                const py = Math.sin(angle) * 15;
+                                ctxC.fillText('❄', px, py);
+                            }
+                            
+                            ctxC.restore();
+                        }
+                        
+                        // Meta de frutas
+                        ctxC.font = 'bold 18px Arial';
+                        ctxC.fillStyle = '#87CEEB';
+                        ctxC.fillText(`Meta: ${config.goalScore} frutas em ${config.time}s!`, 300, 195);
+                    } else if (currentArea === 2) {
+                        // Fase bônus do deserto - frutos de cactos
+                        // Título no topo
+                        ctxC.font = 'bold 28px Arial';
+                        ctxC.fillStyle = '#f39c12';
+                        ctxC.textAlign = 'center';
+                        ctxC.shadowColor = '#d2691e';
+                        ctxC.shadowBlur = 10;
+                        ctxC.fillText('🌵 FRUTOS DE CACTOS! 🌵', 300, 35);
+                        ctxC.shadowBlur = 0;
+                        
+                        // Pássaro no centro (mais abaixo)
+                        drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
+                        
+                        // Frutos de cactos animados na parte inferior
+                        const fruitEmojis = ['🌵', '🍇', '🍊', '🍑'];
+                        ctxC.font = '30px Arial';
+                        for (let i = 0; i < 5; i++) {
+                            const fx = 80 + i * 110;
+                            const fy = 175 + Math.sin(time / 200 + i * 0.8) * 6;
+                            const float = Math.sin(time / 150 + i) * 3;
+                            ctxC.save();
+                            ctxC.translate(fx, fy);
+                            ctxC.rotate(float * 0.03);
+                            
+                            // Efeito de calor (ondas)
+                            const heatAlpha = 0.3 + Math.sin(time / 100 + i) * 0.2;
+                            ctxC.globalAlpha = heatAlpha;
+                            ctxC.fillStyle = '#f39c12';
+                            ctxC.beginPath();
+                            ctxC.arc(0, 0, 20, 0, Math.PI * 2);
+                            ctxC.fill();
+                            
+                            // Fruto
+                            ctxC.globalAlpha = 1;
+                            ctxC.fillText(fruitEmojis[i % fruitEmojis.length], 0, 0);
+                            
+                            ctxC.restore();
+                        }
+                        
+                        // Meta de frutos
+                        ctxC.font = 'bold 18px Arial';
+                        ctxC.fillStyle = '#f39c12';
+                        ctxC.fillText(`Meta: ${config.goalScore} frutos em ${config.time}s!`, 300, 195);
+                    } else {
+                        // Fase bônus - minhocas (outras áreas)
+                        // Título no topo
+                        ctxC.font = 'bold 28px Arial';
+                        ctxC.fillStyle = '#9b59b6';
+                        ctxC.textAlign = 'center';
+                        ctxC.shadowColor = '#8e44ad';
+                        ctxC.shadowBlur = 10;
+                        ctxC.fillText('🪱 CAÇA ÀS MINHOCAS! 🪱', 300, 35);
+                        ctxC.shadowBlur = 0;
+                        
+                        // Pássaro no centro (mais abaixo)
+                        drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
+                        
+                        // Minhocas animadas na parte inferior
+                        ctxC.font = '30px Arial';
+                        for (let i = 0; i < 5; i++) {
+                            const wx = 80 + i * 110;
+                            const wy = 175 + Math.sin(time / 150 + i * 0.8) * 8;
+                            const wobble = Math.sin(time / 100 + i) * 5;
+                            ctxC.save();
+                            ctxC.translate(wx, wy);
+                            ctxC.rotate(wobble * 0.05);
+                            ctxC.fillText('🪱', 0, 0);
+                            ctxC.restore();
+                        }
+                        
+                        // Meta de minhocas
+                        ctxC.font = 'bold 18px Arial';
+                        ctxC.fillStyle = '#f1c40f';
+                        ctxC.fillText(`Meta: ${config.goalScore} minhocas em ${config.time}s!`, 300, 195);
+                    }
+                } else {
+                    const config = substageConfig[currentSubstage];
+                    
+                    if (config.isBoss) {
+                        // Fase do BOSS - layout especial
+                        ctxC.font = 'bold 22px Arial';
+                        ctxC.fillStyle = '#e74c3c';
+                        ctxC.shadowColor = '#c0392b';
+                        ctxC.shadowBlur = 15;
+                ctxC.fillText('⚔️ BOSS FIGHT! ⚔️', 300, 25);
+                        ctxC.shadowBlur = 0;
+                        
+                        // VS no centro
+                        ctxC.font = 'bold 35px Arial';
+                        ctxC.fillStyle = '#f1c40f';
+                        ctxC.shadowColor = '#f39c12';
+                        ctxC.shadowBlur = 10;
+                        ctxC.fillText('VS', 300, 100);
+                        ctxC.shadowBlur = 0;
+                        
                 // Desenhar pássaro do jogador (esquerda, menor)
-                drawCountdownBird(ctxC, 100, 100, selectedPlayerColor, true, time);
-                
-                // Desenhar BOSS (direita, MAIOR)
-                drawCountdownBoss(ctxC, 480, 95, cpu.color, cpu.wingColor, cpu.type, time);
-                
-                // Nome do boss
-                const bossType = bossCpuTypes[currentArea];
-                ctxC.font = 'bold 16px Arial';
-                ctxC.fillStyle = '#e74c3c';
+                        drawCountdownBird(ctxC, 100, 100, selectedPlayerColor, true, time);
+                        
+                        // Desenhar BOSS (direita, MAIOR)
+                        drawCountdownBoss(ctxC, 480, 95, cpu.color, cpu.wingColor, cpu.type, time);
+                        
+                        // Nome do boss
+                        const bossType = bossCpuTypes[currentArea];
+                        ctxC.font = 'bold 16px Arial';
+                        ctxC.fillStyle = '#e74c3c';
                 ctxC.fillText(`👑 ${bossType.name}`, 480, 175);
-            } else {
-                ctxC.fillText('VS', 300, 100);
-                ctxC.shadowBlur = 0;
-                
+                    } else {
+                        ctxC.fillText('VS', 300, 100);
+                        ctxC.shadowBlur = 0;
+                        
                 // Desenhar pássaro do jogador (esquerda, olhando para direita)
-                drawCountdownBird(ctxC, 100, 100, selectedPlayerColor, true, time);
-                
+                        drawCountdownBird(ctxC, 100, 100, selectedPlayerColor, true, time);
+                        
                 // Desenhar pássaro da CPU (direita, olhando para esquerda)
-                drawCountdownBird(ctxC, 500, 100, cpu.color, false, time);
+                        drawCountdownBird(ctxC, 500, 100, cpu.color, false, time);
+                    }
+                }
+                
+                animFrame = requestAnimationFrame(animateBirds);
             }
-        }
-        
-        animFrame = requestAnimationFrame(animateBirds);
-    }
-    
-    animateBirds();
-    
+            
+            animateBirds();
+            
     // Adicionar faíscas entre os pássaros
-    function addSparks() {
-        for (let i = 0; i < 5; i++) {
-            const spark = document.createElement('div');
-            spark.className = 'spark';
+            function addSparks() {
+                for (let i = 0; i < 5; i++) {
+                    const spark = document.createElement('div');
+                    spark.className = 'spark';
             spark.textContent = ['⚡', '✨', '💥', '🔥'][Math.floor(Math.random() * 4)];
-            spark.style.setProperty('--x', (Math.random() - 0.5) * 200 + 'px');
-            spark.style.setProperty('--y', (Math.random() - 0.5) * 150 + 'px');
-            effectsEl.appendChild(spark);
+                    spark.style.setProperty('--x', (Math.random() - 0.5) * 200 + 'px');
+                    spark.style.setProperty('--y', (Math.random() - 0.5) * 150 + 'px');
+                    effectsEl.appendChild(spark);
+                    
+                    setTimeout(() => spark.remove(), 500);
+                }
+            }
             
-            setTimeout(() => spark.remove(), 500);
-        }
-    }
-    
-    addSparks();
-    
+            addSparks();
+            
     // Desenhar o cenário parado durante a contagem
-    draw();
-    
+            draw();
+            
     // 🔊 Tocar som do countdown apenas uma vez
-    playSound('countdown');
-    
-    const countInterval = setInterval(() => {
-        count--;
-        addSparks();
-        
-        if (count > 0) {
-            numberEl.textContent = count;
+            playSound('countdown');
+            
+            const countInterval = setInterval(() => {
+                count--;
+                addSparks();
+                
+                if (count > 0) {
+                    numberEl.textContent = count;
             // Reiniciar animação
-            numberEl.style.animation = 'none';
-            setTimeout(() => numberEl.style.animation = 'countPulse 0.5s ease-out', 10);
-        } else if (count === 0) {
-            numberEl.textContent = 'VAI!';
-            numberEl.className = 'countdown-number countdown-go';
-            numberEl.style.animation = 'none';
-            setTimeout(() => numberEl.style.animation = 'countPulse 0.5s ease-out', 10);
-            
+                    numberEl.style.animation = 'none';
+                    setTimeout(() => numberEl.style.animation = 'countPulse 0.5s ease-out', 10);
+                } else if (count === 0) {
+                    numberEl.textContent = 'VAI!';
+                    numberEl.className = 'countdown-number countdown-go';
+                    numberEl.style.animation = 'none';
+                    setTimeout(() => numberEl.style.animation = 'countPulse 0.5s ease-out', 10);
+                    
             // Mais faíscas no VAI!
-            for (let i = 0; i < 3; i++) {
-                setTimeout(() => addSparks(), i * 100);
-            }
-        } else {
-            clearInterval(countInterval);
-            cancelAnimationFrame(animFrame);
-            overlay.style.display = 'none';
-            
-            // Agora inicia o jogo de verdade
-            gameStarted = true;
-            gameRunning = true;
-            
-            // Mostrar painel e indicador de debug se estiver ativo
-            if (debugMode || window.debugMode) {
-                const debugPanel = document.getElementById('debugPanel');
-                const debugIndicator = document.getElementById('debugIndicator');
-                if (debugPanel) debugPanel.classList.add('active');
-                if (debugIndicator) debugIndicator.classList.add('active');
-            }
-            
-            spawnFood();
-            spawnFood();
-            spawnFood();
-            gameLoop();
-            startTimer();
+                    for (let i = 0; i < 3; i++) {
+                        setTimeout(() => addSparks(), i * 100);
+                    }
+                } else {
+                    clearInterval(countInterval);
+                    cancelAnimationFrame(animFrame);
+                    overlay.style.display = 'none';
+                    
+                    // Agora inicia o jogo de verdade
+                    gameStarted = true;
+                    gameRunning = true;
+                    
+                    // Mostrar painel e indicador de debug se estiver ativo
+                    if (debugMode || window.debugMode) {
+                        const debugPanel = document.getElementById('debugPanel');
+                        const debugIndicator = document.getElementById('debugIndicator');
+                        if (debugPanel) debugPanel.classList.add('active');
+                        if (debugIndicator) debugIndicator.classList.add('active');
+                    }
+                    
+                    spawnFood();
+                    spawnFood();
+                    spawnFood();
+                    gameLoop();
+                    startTimer();
+                }
+            }, 800);
         }
-    }, 800);
-}
 
-// Voltar ao menu
-function goToMenu() {
+        // Voltar ao menu
+        function goToMenu() {
 
-  
+          
     // Remover estilo inline para que o CSS padrão (display: flex) funcione
-    const menuOverlay = document.getElementById('menuOverlay');
-    if (menuOverlay) {
-        menuOverlay.style.removeProperty('display');  console.log('Voltando ao menu');
-    }
-    
-    document.getElementById('gameContainer').classList.remove('active');
-    document.getElementById('gameOver').style.display = 'none';
-    
-    // Fechar roadmap (remover classe e estilo inline)
-    const roadmapOverlayEl = document.getElementById('roadmapOverlay');
-    if (roadmapOverlayEl) {
-        roadmapOverlayEl.classList.remove('active');
-        roadmapOverlayEl.style.removeProperty('display');
-    }
-    
-    // Fechar sub-fases (remover classe e estilo inline)
-    const substagesOverlayEl = document.getElementById('substagesOverlay');
-    if (substagesOverlayEl) {
-        substagesOverlayEl.classList.remove('active');
-        substagesOverlayEl.style.removeProperty('display');
-    }
-    
+            const menuOverlay = document.getElementById('menuOverlay');
+            if (menuOverlay) {
+                menuOverlay.style.removeProperty('display');  console.log('Voltando ao menu');
+            }
+            
+            document.getElementById('gameContainer').classList.remove('active');
+            document.getElementById('gameOver').style.display = 'none';
+            
+            // Fechar roadmap (remover classe e estilo inline)
+            const roadmapOverlayEl = document.getElementById('roadmapOverlay');
+            if (roadmapOverlayEl) {
+                roadmapOverlayEl.classList.remove('active');
+                roadmapOverlayEl.style.removeProperty('display');
+            }
+            
+            // Fechar sub-fases (remover classe e estilo inline)
+            const substagesOverlayEl = document.getElementById('substagesOverlay');
+            if (substagesOverlayEl) {
+                substagesOverlayEl.classList.remove('active');
+                substagesOverlayEl.style.removeProperty('display');
+            }
+            
     // Parar animação do vencedor
-    const winnerCanvas = document.getElementById('winnerCanvas');
-    if (winnerCanvas && winnerCanvas.animFrame) {
-        cancelAnimationFrame(winnerCanvas.animFrame);
-    }
-    
+            const winnerCanvas = document.getElementById('winnerCanvas');
+            if (winnerCanvas && winnerCanvas.animFrame) {
+                cancelAnimationFrame(winnerCanvas.animFrame);
+            }
+            
     // Parar som de vitória do boss se estiver tocando (efeito sonoro)
-    if (sounds.bossWin && !sounds.bossWin.paused) {
-        sounds.bossWin.pause();
-        sounds.bossWin.currentTime = 0;
-        sounds.bossWin.loop = false; // Desativar loop ao sair
-    }
-    
+            if (sounds.bossWin && !sounds.bossWin.paused) {
+                sounds.bossWin.pause();
+                sounds.bossWin.currentTime = 0;
+                sounds.bossWin.loop = false; // Desativar loop ao sair
+            }
+            
     // Tocar música de introdução em loop
-    playIntroMusic();
-    
-    // Atualizar cor da CPU para ser diferente
-    updateCpuColor();
-    
+            playIntroMusic();
+            
+            // Atualizar cor da CPU para ser diferente
+            updateCpuColor();
+            
     // Resetar tempo de espera e reiniciar animação do menu
-    resetMenuWaitTime();
-    animateMenu();
-    
-    // Reset completo
-    gameRunning = false;
-    gameStarted = false;
-    playerScore = 0;
-    cpuScore = 0;
-    timeLeft = 60;
-    foods = [];
-    specialFoods = [];
-    speedItems = [];
-    player.x = 100;
-    player.y = canvas.height / 2;
-    player.stunCharge = 0;
-    player.stunChargeTimer = 0;
-    player.speed = player.baseSpeed;
-    player.speedBoost = 0;
-    cpu.x = canvas.width - 100;
-    cpu.y = canvas.height / 2;
-    cpu.stunned = false;
-    cpu.stunTime = 0;
-    cpu.reactionDelay = 60;
-    cpu.targetFood = null;
-    cpu.stunCharge = 0;
-    cpu.stunChargeTimer = 0;
-    cpu.specialFoodDelay = 0;
-    cpu.goingForSpecial = false;
-    cpu.goingForSpeed = false;
-    player.stunned = false;
-    player.stunTime = 0;
-    
+            resetMenuWaitTime();
+            animateMenu();
+            
+            // Reset completo
+            gameRunning = false;
+            gameStarted = false;
+            playerScore = 0;
+            cpuScore = 0;
+            timeLeft = 60;
+            foods = [];
+            specialFoods = [];
+            speedItems = [];
+            player.x = 100;
+            player.y = canvas.height / 2;
+            player.stunCharge = 0;
+            player.stunChargeTimer = 0;
+            player.speed = player.baseSpeed;
+            player.speedBoost = 0;
+            cpu.x = canvas.width - 100;
+            cpu.y = canvas.height / 2;
+            cpu.stunned = false;
+            cpu.stunTime = 0;
+            cpu.reactionDelay = 60;
+            cpu.targetFood = null;
+            cpu.stunCharge = 0;
+            cpu.stunChargeTimer = 0;
+            cpu.specialFoodDelay = 0;
+            cpu.goingForSpecial = false;
+            cpu.goingForSpeed = false;
+            player.stunned = false;
+            player.stunTime = 0;
+            
     // Placar agora é desenhado no canvas
-    const timerEl = document.getElementById('timer');
-    if (timerEl) timerEl.textContent = '60';
-}
+            const timerEl = document.getElementById('timer');
+            if (timerEl) timerEl.textContent = '60';
+        }
 
 // Desenhar pássaro do menu (amigável)
-function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime) {
-    ctxM.save();
-    
+        function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime) {
+            ctxM.save();
+            
     // Ciclo de irritação/calma em loop (independente do tempo de espera)
     // Alterna entre 'angry' e 'calm' a cada ~4 segundos
     const cycleDuration = 8; // 8 segundos para um ciclo completo (4s irritado + 4s calmo)
@@ -5638,12 +7681,12 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
             mood = 'calming'; // Acalmando gradualmente
         }
     }
-    
-    let hover = Math.sin(time * 2) * 5;
-    let scale = 1.5;
-    let shake = 0;
-    
-    // Ajustes por mood
+            
+            let hover = Math.sin(time * 2) * 5;
+            let scale = 1.5;
+            let shake = 0;
+            
+            // Ajustes por mood
     if (mood === 'calm') {
         // Calmo - movimento suave e tranquilo
         hover = Math.sin(time * 1.5) * 3;
@@ -5664,27 +7707,27 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
         shake = Math.sin(time * (3 - calmProgress * 2)) * (3 - calmProgress * 3);
         scale = 1.6 - calmProgress * 0.1;
     } else if (mood === 'warmup') {
-        // Aquecendo - pula mais
-        hover = Math.sin(time * 4) * 10;
-    } else if (mood === 'bored') {
+                // Aquecendo - pula mais
+                hover = Math.sin(time * 4) * 10;
+            } else if (mood === 'bored') {
         // Entediado - balança de lado a lado
-        shake = Math.sin(time * 1.5) * 3;
-    } else if (mood === 'sleepy') {
+                shake = Math.sin(time * 1.5) * 3;
+            } else if (mood === 'sleepy') {
         // Sonolento - quase não se move
-        hover = Math.sin(time * 0.5) * 2;
-    }
-    
-    ctxM.translate(x + shake, y + hover);
-    if (!facingRight) {
-        ctxM.scale(-1, 1);
-    }
-    ctxM.scale(scale, scale);
-    
-    // Aura (muda cor com mood)
-    if (mood === 'angry') {
+                hover = Math.sin(time * 0.5) * 2;
+            }
+            
+            ctxM.translate(x + shake, y + hover);
+            if (!facingRight) {
+                ctxM.scale(-1, 1);
+            }
+            ctxM.scale(scale, scale);
+            
+            // Aura (muda cor com mood)
+            if (mood === 'angry') {
         ctxM.shadowColor = '#e74c3c'; // Vermelho quando irritado
         ctxM.shadowBlur = 20 + Math.sin(time * 6) * 8;
-    } else if (mood === 'impatient') {
+            } else if (mood === 'impatient') {
         ctxM.shadowColor = '#f39c12'; // Laranja quando impaciente
         ctxM.shadowBlur = 18 + Math.sin(time * 4) * 6;
     } else if (mood === 'calming') {
@@ -5704,39 +7747,39 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
     } else if (mood === 'calm') {
         ctxM.shadowColor = color; // Cor normal quando calmo
         ctxM.shadowBlur = 10 + Math.sin(time * 2) * 3;
-    } else {
-        ctxM.shadowColor = color;
-        ctxM.shadowBlur = 15 + Math.sin(time * 3) * 5;
+            } else {
+                ctxM.shadowColor = color;
+            ctxM.shadowBlur = 15 + Math.sin(time * 3) * 5;
     }
-    
-    // Corpo
-    ctxM.fillStyle = color;
-    ctxM.beginPath();
-    ctxM.arc(0, 0, 35, 0, Math.PI * 2);
-    ctxM.fill();
-    
-    ctxM.shadowBlur = 0;
-    
-    // Olho (muda com mood)
-    ctxM.fillStyle = 'white';
-    ctxM.beginPath();
-    
-    if (mood === 'sleepy') {
-        // Olho meio fechado
-        ctxM.ellipse(10, -5, 10, 4 + Math.sin(time) * 2, 0, 0, Math.PI * 2);
-    } else {
-        ctxM.arc(10, -5, 10, 0, Math.PI * 2);
-    }
-    ctxM.fill();
-    
-    // Pupila
-    let lookX = Math.sin(time) * 2;
-    let pupilSize = 5;
-    
-    if (mood === 'angry') {
-        lookX = 0;
-        pupilSize = 3; // Pupila menor quando bravo
-        ctxM.fillStyle = '#c0392b';
+            
+            // Corpo
+            ctxM.fillStyle = color;
+            ctxM.beginPath();
+            ctxM.arc(0, 0, 35, 0, Math.PI * 2);
+            ctxM.fill();
+            
+            ctxM.shadowBlur = 0;
+            
+            // Olho (muda com mood)
+            ctxM.fillStyle = 'white';
+            ctxM.beginPath();
+            
+            if (mood === 'sleepy') {
+                // Olho meio fechado
+                ctxM.ellipse(10, -5, 10, 4 + Math.sin(time) * 2, 0, 0, Math.PI * 2);
+            } else {
+                ctxM.arc(10, -5, 10, 0, Math.PI * 2);
+            }
+            ctxM.fill();
+            
+            // Pupila
+            let lookX = Math.sin(time) * 2;
+            let pupilSize = 5;
+            
+            if (mood === 'angry') {
+                lookX = 0;
+                pupilSize = 3; // Pupila menor quando bravo
+                ctxM.fillStyle = '#c0392b';
     } else if (mood === 'impatient') {
         lookX = Math.sin(time * 4) * 1;
         pupilSize = 4;
@@ -5756,25 +7799,25 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
         lookX = Math.sin(time * 0.8) * 2;
         pupilSize = 5;
         ctxM.fillStyle = 'black';
-    } else if (mood === 'sleepy') {
-        pupilSize = 3;
-        ctxM.fillStyle = 'black';
-    } else {
-        ctxM.fillStyle = 'black';
-    }
-    ctxM.beginPath();
-    ctxM.arc(12 + lookX, -5, pupilSize, 0, Math.PI * 2);
-    ctxM.fill();
-    
-    // Brilho
-    if (mood !== 'sleepy') {
-        ctxM.fillStyle = 'white';
-        ctxM.beginPath();
-        ctxM.arc(10 + lookX, -7, 2, 0, Math.PI * 2);
-        ctxM.fill();
-    }
-    
-    // Sobrancelha (muda com mood)
+            } else if (mood === 'sleepy') {
+                pupilSize = 3;
+                ctxM.fillStyle = 'black';
+            } else {
+                ctxM.fillStyle = 'black';
+            }
+            ctxM.beginPath();
+            ctxM.arc(12 + lookX, -5, pupilSize, 0, Math.PI * 2);
+            ctxM.fill();
+            
+            // Brilho
+            if (mood !== 'sleepy') {
+                ctxM.fillStyle = 'white';
+                ctxM.beginPath();
+                ctxM.arc(10 + lookX, -7, 2, 0, Math.PI * 2);
+                ctxM.fill();
+            }
+            
+            // Sobrancelha (muda com mood)
     if (mood === 'angry') {
         // Sobrancelha muito franzida
         ctxM.strokeStyle = 'black';
@@ -5785,12 +7828,12 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
         ctxM.stroke();
     } else if (mood === 'impatient') {
         // Sobrancelha começando a franzir
-        ctxM.strokeStyle = 'black';
-        ctxM.lineWidth = 3;
-        ctxM.beginPath();
-        ctxM.moveTo(2, -18);
-        ctxM.lineTo(20, -12);
-        ctxM.stroke();
+                ctxM.strokeStyle = 'black';
+                ctxM.lineWidth = 3;
+                ctxM.beginPath();
+                ctxM.moveTo(2, -18);
+                ctxM.lineTo(20, -12);
+                ctxM.stroke();
     } else if (mood === 'calming') {
         // Sobrancelha relaxando gradualmente
         const calmProgress = (cyclePosition - 0.75) / 0.25;
@@ -5804,55 +7847,55 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
         ctxM.stroke();
     } else if (mood === 'calm') {
         // Sem sobrancelha franzida quando calmo
-    } else if (mood === 'sleepy') {
+            } else if (mood === 'sleepy') {
         // Sobrancelha caída
-        ctxM.strokeStyle = 'black';
-        ctxM.lineWidth = 2;
-        ctxM.beginPath();
-        ctxM.moveTo(2, -15);
-        ctxM.lineTo(18, -16);
-        ctxM.stroke();
-    }
-    
-    // Bico
-    ctxM.fillStyle = '#f39c12';
-    ctxM.beginPath();
-    
-    if (mood === 'sleepy' && Math.sin(time * 0.5) > 0.8) {
-        // Bocejando
-        ctxM.moveTo(30, -5);
-        ctxM.lineTo(45, 5);
-        ctxM.lineTo(30, 15);
-        ctxM.closePath();
-        ctxM.fill();
-        // Interior da boca
-        ctxM.fillStyle = '#e74c3c';
-        ctxM.beginPath();
-        ctxM.arc(35, 5, 5, 0, Math.PI * 2);
-        ctxM.fill();
-    } else if (mood === 'angry') {
-        // Bico aberto gritando
-        ctxM.moveTo(30, -3);
-        ctxM.lineTo(50, 0);
-        ctxM.lineTo(30, 3);
-        ctxM.closePath();
-        ctxM.fill();
-        ctxM.beginPath();
-        ctxM.moveTo(30, 5);
-        ctxM.lineTo(45, 8);
-        ctxM.lineTo(30, 12);
-        ctxM.closePath();
-        ctxM.fill();
-    } else {
-        ctxM.moveTo(30, 0);
-        ctxM.lineTo(48, 5);
-        ctxM.lineTo(30, 10);
-        ctxM.closePath();
-        ctxM.fill();
-    }
-    
-    // Asa batendo (velocidade muda com mood)
-    let wingSpeed = 4;
+                ctxM.strokeStyle = 'black';
+                ctxM.lineWidth = 2;
+                ctxM.beginPath();
+                ctxM.moveTo(2, -15);
+                ctxM.lineTo(18, -16);
+                ctxM.stroke();
+            }
+            
+            // Bico
+            ctxM.fillStyle = '#f39c12';
+            ctxM.beginPath();
+            
+            if (mood === 'sleepy' && Math.sin(time * 0.5) > 0.8) {
+                // Bocejando
+                ctxM.moveTo(30, -5);
+                ctxM.lineTo(45, 5);
+                ctxM.lineTo(30, 15);
+                ctxM.closePath();
+                ctxM.fill();
+                // Interior da boca
+                ctxM.fillStyle = '#e74c3c';
+                ctxM.beginPath();
+                ctxM.arc(35, 5, 5, 0, Math.PI * 2);
+                ctxM.fill();
+            } else if (mood === 'angry') {
+                // Bico aberto gritando
+                ctxM.moveTo(30, -3);
+                ctxM.lineTo(50, 0);
+                ctxM.lineTo(30, 3);
+                ctxM.closePath();
+                ctxM.fill();
+                ctxM.beginPath();
+                ctxM.moveTo(30, 5);
+                ctxM.lineTo(45, 8);
+                ctxM.lineTo(30, 12);
+                ctxM.closePath();
+                ctxM.fill();
+            } else {
+                ctxM.moveTo(30, 0);
+                ctxM.lineTo(48, 5);
+                ctxM.lineTo(30, 10);
+                ctxM.closePath();
+                ctxM.fill();
+            }
+            
+            // Asa batendo (velocidade muda com mood)
+            let wingSpeed = 4;
     if (mood === 'calm') wingSpeed = 3; // Movimento suave quando calmo
     else if (mood === 'impatient') wingSpeed = 8; // Mais rápido quando impaciente
     else if (mood === 'angry') wingSpeed = 12; // Muito rápido quando irritado
@@ -5861,21 +7904,21 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
         wingSpeed = 12 - calmProgress * 9; // Diminui gradualmente
     }
     else if (mood === 'warmup') wingSpeed = 8;
-    else if (mood === 'sleepy') wingSpeed = 1;
-    
-    const wingFlap = Math.sin(time * wingSpeed) * 0.4;
-    const wingY = 5 + Math.sin(time * wingSpeed) * 8;
-    ctxM.fillStyle = wingColor;
-    ctxM.beginPath();
-    ctxM.ellipse(-10, wingY, 20, 12 + Math.cos(time * wingSpeed) * 5, -0.3 + wingFlap, 0, Math.PI * 2);
-    ctxM.fill();
-    
-    ctxM.restore();
-    
+            else if (mood === 'sleepy') wingSpeed = 1;
+            
+            const wingFlap = Math.sin(time * wingSpeed) * 0.4;
+            const wingY = 5 + Math.sin(time * wingSpeed) * 8;
+            ctxM.fillStyle = wingColor;
+            ctxM.beginPath();
+            ctxM.ellipse(-10, wingY, 20, 12 + Math.cos(time * wingSpeed) * 5, -0.3 + wingFlap, 0, Math.PI * 2);
+            ctxM.fill();
+            
+            ctxM.restore();
+            
     // Símbolos extras (fora do save/restore para posição correta)
-    ctxM.font = '20px Arial';
-    ctxM.textAlign = 'center';
-    
+            ctxM.font = '20px Arial';
+            ctxM.textAlign = 'center';
+            
     if (mood === 'calm') {
         // Símbolo de calma/relaxamento (opcional, pode ficar sem símbolo)
         if (Math.sin(time * 0.5) > 0.7) {
@@ -5900,74 +7943,74 @@ function drawMenuBird(ctxM, x, y, color, wingColor, facingRight, time, waitTime)
             ctxM.globalAlpha = 1;
         }
     } else if (mood === 'sleepy') {
-        // Zzz
-        const zOffset = Math.sin(time * 2) * 5;
-        ctxM.fillStyle = 'white';
+                // Zzz
+                const zOffset = Math.sin(time * 2) * 5;
+                ctxM.fillStyle = 'white';
         ctxM.fillText('💤', x + 50, y - 30 + zOffset);
-    } else if (mood === 'bored') {
-        // Nota musical ou ...
-        if (Math.sin(time) > 0) {
+            } else if (mood === 'bored') {
+                // Nota musical ou ...
+                if (Math.sin(time) > 0) {
             ctxM.fillText('🎵', x + 45, y - 35 + Math.sin(time * 3) * 5);
-        }
-    } else if (mood === 'warmup') {
-        // Gotas de suor
-        if (Math.sin(time * 3) > 0.5) {
+                }
+            } else if (mood === 'warmup') {
+                // Gotas de suor
+                if (Math.sin(time * 3) > 0.5) {
             ctxM.fillText('💦', x + 40, y - 25);
+                }
+            }
         }
-    }
-}
 
 // Animação do menu
-let menuAnimFrame;
-let menuStartTime = Date.now() / 1000;
-
-function animateMenu() {
-    const menuCanvas = document.getElementById('menuCanvas');
-    if (!menuCanvas) return;
-    
-    const ctxM = menuCanvas.getContext('2d');
-    const time = Date.now() / 1000;
-    const waitTime = time - menuStartTime;
-    
-    ctxM.clearRect(0, 0, menuCanvas.width, menuCanvas.height);
-    
+        let menuAnimFrame;
+        let menuStartTime = Date.now() / 1000;
+        
+        function animateMenu() {
+            const menuCanvas = document.getElementById('menuCanvas');
+            if (!menuCanvas) return;
+            
+            const ctxM = menuCanvas.getContext('2d');
+            const time = Date.now() / 1000;
+            const waitTime = time - menuStartTime;
+            
+            ctxM.clearRect(0, 0, menuCanvas.width, menuCanvas.height);
+            
     // Desenhar apenas o pássaro do jogador centralizado (com reações de espera)
-    drawMenuBird(ctxM, 100, 75, selectedPlayerColor, selectedPlayerWing, true, time, waitTime);
-    
-    menuAnimFrame = requestAnimationFrame(animateMenu);
-}
+            drawMenuBird(ctxM, 100, 75, selectedPlayerColor, selectedPlayerWing, true, time, waitTime);
+            
+            menuAnimFrame = requestAnimationFrame(animateMenu);
+        }
+        
+        // Resetar tempo de espera
+        function resetMenuWaitTime() {
+            menuStartTime = Date.now() / 1000;
+        }
 
-// Resetar tempo de espera
-function resetMenuWaitTime() {
-    menuStartTime = Date.now() / 1000;
-}
-
-// Mostrar/esconder regras
-function toggleRules() {
-    const rulesOverlay = document.getElementById('rulesOverlay');
-    rulesOverlay.classList.toggle('active');
-}
+        // Mostrar/esconder regras
+        function toggleRules() {
+            const rulesOverlay = document.getElementById('rulesOverlay');
+            rulesOverlay.classList.toggle('active');
+        }
 
 // Mostrar/esconder créditos
-async function showCredits() {
-    const creditsOverlay = document.getElementById('creditsOverlay');
-    const creditsContent = document.getElementById('creditsContent');
-    
-    // Sempre recarregar cr�ditos para pegar atualiza��es
-    try {
-        const response = await fetch('sounds/audios.txt');
-        const text = await response.text();
-        
-        // Processar o texto mantendo os links HTML
-        let lines = text.split('\n').map(line => line.trim()).filter(line => line !== '');
-        let formattedText = '';
-        const seenAuthors = new Set(); // Para evitar autores duplicados
-        
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
+        async function showCredits() {
+            const creditsOverlay = document.getElementById('creditsOverlay');
+            const creditsContent = document.getElementById('creditsContent');
             
+    // Sempre recarregar cr�ditos para pegar atualiza��es
+            try {
+                const response = await fetch('sounds/audios.txt');
+                const text = await response.text();
+                
+                // Processar o texto mantendo os links HTML
+                let lines = text.split('\n').map(line => line.trim()).filter(line => line !== '');
+                let formattedText = '';
+        const seenAuthors = new Set(); // Para evitar autores duplicados
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    
             // Cada linha que cont�m "Sound Effect" ou "Music:" � um cr�dito completo
-            if (line.includes('Sound Effect') || line.includes('Music:')) {
+                    if (line.includes('Sound Effect') || line.includes('Music:')) {
                 // Extrair o nome do autor da linha
                 let authorName = '';
                 
@@ -5993,306 +8036,308 @@ async function showCredits() {
                     formattedText += '<p style="margin-bottom: 15px; line-height: 1.6;">' + line + '</p>';
                 } else if (!authorName) {
                     // Se n�o conseguir extrair o autor, adiciona mesmo assim (caso especial)
-                    formattedText += '<p style="margin-bottom: 15px; line-height: 1.6;">' + line + '</p>';
+                        formattedText += '<p style="margin-bottom: 15px; line-height: 1.6;">' + line + '</p>';
+                }
+                    }
+                }
+                
+                creditsContent.innerHTML = formattedText;
+            } catch (error) {
+        creditsContent.innerHTML = '<p style="color: #e74c3c;">Erro ao carregar cr�ditos. Verifique se o arquivo sounds/audios.txt existe.</p>';
+            }
+            
+            creditsOverlay.classList.add('active');
+        }
+        
+        function toggleCredits() {
+            const creditsOverlay = document.getElementById('creditsOverlay');
+            creditsOverlay.classList.remove('active');
+        }
+
+// Animação do preview de cor
+        let previewAnimFrame;
+        
+        function animateColorPreview() {
+            const previewCanvas = document.getElementById('colorPreviewCanvas');
+            if (!previewCanvas) return;
+            
+            const ctxP = previewCanvas.getContext('2d');
+            const time = Date.now() / 1000;
+            
+            ctxP.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            
+    // Desenhar pássaro preview (centralizado)
+            const centerX = previewCanvas.width / 2;
+            const centerY = previewCanvas.height / 2;
+            drawPreviewBird(ctxP, centerX, centerY, selectedPlayerColor, selectedPlayerWing, time);
+            
+            previewAnimFrame = requestAnimationFrame(animateColorPreview);
+        }
+        
+        function drawPreviewBird(ctxP, x, y, color, wingColor, time) {
+            ctxP.save();
+            
+            const hover = Math.sin(time * 3) * 3;
+            const scale = 1.2;
+            
+            ctxP.translate(x, y + hover);
+            ctxP.scale(scale, scale);
+            
+            // Aura
+            ctxP.shadowColor = color;
+            ctxP.shadowBlur = 15 + Math.sin(time * 3) * 5;
+            
+            // Corpo
+            ctxP.fillStyle = color;
+            ctxP.beginPath();
+            ctxP.arc(0, 0, 30, 0, Math.PI * 2);
+            ctxP.fill();
+            
+            ctxP.shadowBlur = 0;
+            
+            // Olho
+            ctxP.fillStyle = 'white';
+            ctxP.beginPath();
+            ctxP.arc(8, -4, 8, 0, Math.PI * 2);
+            ctxP.fill();
+            
+            // Pupila
+            const lookX = Math.sin(time * 2) * 2;
+            ctxP.fillStyle = 'black';
+            ctxP.beginPath();
+            ctxP.arc(10 + lookX, -4, 4, 0, Math.PI * 2);
+            ctxP.fill();
+            
+            // Brilho
+            ctxP.fillStyle = 'white';
+            ctxP.beginPath();
+            ctxP.arc(8 + lookX, -6, 1.5, 0, Math.PI * 2);
+            ctxP.fill();
+            
+            // Bico
+            ctxP.fillStyle = '#f39c12';
+            ctxP.beginPath();
+            ctxP.moveTo(25, 0);
+            ctxP.lineTo(40, 4);
+            ctxP.lineTo(25, 8);
+            ctxP.closePath();
+            ctxP.fill();
+            
+            // Asa
+            const wingFlap = Math.sin(time * 5) * 0.4;
+            const wingY = 4 + Math.sin(time * 5) * 6;
+            ctxP.fillStyle = wingColor;
+            ctxP.beginPath();
+            ctxP.ellipse(-8, wingY, 16, 10 + Math.cos(time * 5) * 4, -0.3 + wingFlap, 0, Math.PI * 2);
+            ctxP.fill();
+            
+            ctxP.restore();
+        }
+        
+// Mostrar/esconder opções
+        function toggleOptions() {
+            const optionsOverlay = document.getElementById('optionsOverlay');
+            const isActive = optionsOverlay.classList.contains('active');
+            
+            optionsOverlay.classList.toggle('active');
+            
+            if (!isActive) {
+        // Abriu - iniciar animação
+                animateColorPreview();
+            } else {
+        // Fechou - parar animação
+                if (previewAnimFrame) {
+                    cancelAnimationFrame(previewAnimFrame);
+                }
+            }
+        }
+
+// Cores disponíveis para CPU
+        const cpuColors = [
+            { color: '#e74c3c', wing: '#c0392b' },
+            { color: '#2ecc71', wing: '#27ae60' },
+            { color: '#3498db', wing: '#2980b9' },
+            { color: '#9b59b6', wing: '#8e44ad' },
+            { color: '#f1c40f', wing: '#d4ac0d' },
+            { color: '#e91e63', wing: '#c2185b' },
+            { color: '#00bcd4', wing: '#0097a7' },
+            { color: '#ff5722', wing: '#e64a19' },
+            { color: '#795548', wing: '#5d4037' }
+        ];
+
+        // Cor selecionada pelo jogador
+        let selectedPlayerColor = '#2ecc71';
+        let selectedPlayerWing = '#27ae60';
+
+        // Sistema de dificuldade
+        let gameDifficulty = localStorage.getItem('birdGameDifficulty') || 'normal';
+        
+        const difficultyModifiers = {
+            easy: {
+                cpuSpeedMultiplier: 0.7,
+                timeMultiplier: 1.3,
+                cpuReactionDelay: 90,
+                cpuErrorChance: 0.3,
+                description: 'CPU mais lenta e com mais erros. Mais tempo para jogar!'
+            },
+            normal: {
+                cpuSpeedMultiplier: 1.0,
+                timeMultiplier: 1.0,
+                cpuReactionDelay: 60,
+                cpuErrorChance: 0.15,
+        description: 'CPU com velocidade e inteligência normais.'
+            },
+            hard: {
+                cpuSpeedMultiplier: 1.3,
+                timeMultiplier: 0.8,
+                cpuReactionDelay: 30,
+                cpuErrorChance: 0.05,
+        description: 'CPU mais rápida e inteligente. Menos tempo!'
+            }
+        };
+        
+        // Selecionar dificuldade
+        function selectDifficulty(difficulty) {
+            gameDifficulty = difficulty;
+            localStorage.setItem('birdGameDifficulty', difficulty);
+            
+    // Atualizar visual dos botões
+            document.querySelectorAll('.difficulty-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                if (btn.dataset.difficulty === difficulty) {
+                    btn.classList.add('selected');
+                }
+            });
+            
+    // Atualizar descrição
+            document.getElementById('difficultyDesc').textContent = difficultyModifiers[difficulty].description;
+        }
+        
+// Aplicar dificuldade à configuração de fase
+        function applyDifficultyToConfig(config) {
+            const mod = difficultyModifiers[gameDifficulty];
+            return {
+                ...config,
+                time: Math.floor(config.time * mod.timeMultiplier),
+                cpuSpeed: config.cpuSpeed * mod.cpuSpeedMultiplier
+            };
+        }
+        
+        // Confirmar reset de progresso
+        function confirmResetProgress() {
+    if (confirm('⚠️ Tem certeza que deseja ZERAR todo o seu progresso?\n\nIsso irá:\n- Resetar todas as fases desbloqueadas\n- Apagar todas as estrelas conquistadas\n- Voltar ao início do jogo\n\nEssa ação não pode ser desfeita!')) {
+                resetProgress();
+            }
+        }
+        
+        // Resetar progresso do jogador
+        function resetProgress() {
+            gameProgress = {
+                unlockedAreas: [1],
+                unlockedStages: { 1: [1] },
+                completedStages: {},
+                stageStars: {}
+            };
+            
+            localStorage.setItem('birdGameProgress', JSON.stringify(gameProgress));
+            
+    alert('✅ Progresso resetado com sucesso!\n\nVocê voltou ao início do jogo.');
+            
+    // Fechar opções
+            toggleOptions();
+        }
+        
+        // Inicializar dificuldade na UI
+        function initDifficultyUI() {
+            document.querySelectorAll('.difficulty-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                if (btn.dataset.difficulty === gameDifficulty) {
+                    btn.classList.add('selected');
+                }
+            });
+            document.getElementById('difficultyDesc').textContent = difficultyModifiers[gameDifficulty].description;
+        }
+
+        // Atualizar cor da CPU para ser diferente do jogador
+        function updateCpuColor() {
+            // Filtrar cores diferentes da do jogador
+            const availableColors = cpuColors.filter(c => c.color !== selectedPlayerColor);
+            
+            // Escolher aleatoriamente
+            const randomColor = availableColors[Math.floor(Math.random() * availableColors.length)];
+            
+            cpu.color = randomColor.color;
+            cpu.wingColor = randomColor.wing;
+        }
+
+        // Inicializar cor da CPU
+        updateCpuColor();
+
+        // Selecionar cor
+        function selectColor(element) {
+    // Remover seleção anterior
+            document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
+            
+    // Adicionar seleção
+            element.classList.add('selected');
+            
+            // Guardar cor
+            selectedPlayerColor = element.dataset.color;
+            selectedPlayerWing = element.dataset.wing;
+            
+            // Atualizar cor do jogador
+            player.color = selectedPlayerColor;
+            
+            // Atualizar CPU para cor diferente
+            updateCpuColor();
+            
+            // Atualizar canvas do menu
+            animateMenu();
+        }
+
+// Iniciar animação do menu
+        animateMenu();
+        
+// Inicializar botões de áudio
+        setTimeout(() => {
+            updateAudioButtons();
+        }, 100);
+        
+// Tocar música de introdução quando a página carregar
+        // Usar setTimeout para garantir que o DOM esteja pronto
+        setTimeout(() => {
+            playIntroMusic();
+        }, 100);
+        
+// Tentar tocar música quando houver interação do usuário (para contornar políticas de autoplay)
+        let introMusicAttempted = false;
+        function attemptPlayIntroOnInteraction() {
+            if (sounds.introSound && sounds.introSound.paused) {
+                const menuOverlay = document.getElementById('menuOverlay');
+                if (menuOverlay && menuOverlay.style.display !== 'none') {
+                    playIntroMusic();
+                    introMusicAttempted = true;
                 }
             }
         }
         
-        creditsContent.innerHTML = formattedText;
-    } catch (error) {
-        creditsContent.innerHTML = '<p style="color: #e74c3c;">Erro ao carregar cr�ditos. Verifique se o arquivo sounds/audios.txt existe.</p>';
-    }
-    
-    creditsOverlay.classList.add('active');
-}
-
-function toggleCredits() {
-    const creditsOverlay = document.getElementById('creditsOverlay');
-    creditsOverlay.classList.remove('active');
-}
-
-// Animação do preview de cor
-let previewAnimFrame;
-
-function animateColorPreview() {
-    const previewCanvas = document.getElementById('colorPreviewCanvas');
-    if (!previewCanvas) return;
-    
-    const ctxP = previewCanvas.getContext('2d');
-    const time = Date.now() / 1000;
-    
-    ctxP.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-    
-    // Desenhar pássaro preview
-    drawPreviewBird(ctxP, 75, 60, selectedPlayerColor, selectedPlayerWing, time);
-    
-    previewAnimFrame = requestAnimationFrame(animateColorPreview);
-}
-
-function drawPreviewBird(ctxP, x, y, color, wingColor, time) {
-    ctxP.save();
-    
-    const hover = Math.sin(time * 3) * 3;
-    const scale = 1.2;
-    
-    ctxP.translate(x, y + hover);
-    ctxP.scale(scale, scale);
-    
-    // Aura
-    ctxP.shadowColor = color;
-    ctxP.shadowBlur = 15 + Math.sin(time * 3) * 5;
-    
-    // Corpo
-    ctxP.fillStyle = color;
-    ctxP.beginPath();
-    ctxP.arc(0, 0, 30, 0, Math.PI * 2);
-    ctxP.fill();
-    
-    ctxP.shadowBlur = 0;
-    
-    // Olho
-    ctxP.fillStyle = 'white';
-    ctxP.beginPath();
-    ctxP.arc(8, -4, 8, 0, Math.PI * 2);
-    ctxP.fill();
-    
-    // Pupila
-    const lookX = Math.sin(time * 2) * 2;
-    ctxP.fillStyle = 'black';
-    ctxP.beginPath();
-    ctxP.arc(10 + lookX, -4, 4, 0, Math.PI * 2);
-    ctxP.fill();
-    
-    // Brilho
-    ctxP.fillStyle = 'white';
-    ctxP.beginPath();
-    ctxP.arc(8 + lookX, -6, 1.5, 0, Math.PI * 2);
-    ctxP.fill();
-    
-    // Bico
-    ctxP.fillStyle = '#f39c12';
-    ctxP.beginPath();
-    ctxP.moveTo(25, 0);
-    ctxP.lineTo(40, 4);
-    ctxP.lineTo(25, 8);
-    ctxP.closePath();
-    ctxP.fill();
-    
-    // Asa
-    const wingFlap = Math.sin(time * 5) * 0.4;
-    const wingY = 4 + Math.sin(time * 5) * 6;
-    ctxP.fillStyle = wingColor;
-    ctxP.beginPath();
-    ctxP.ellipse(-8, wingY, 16, 10 + Math.cos(time * 5) * 4, -0.3 + wingFlap, 0, Math.PI * 2);
-    ctxP.fill();
-    
-    ctxP.restore();
-}
-
-// Mostrar/esconder opções
-function toggleOptions() {
-    const optionsOverlay = document.getElementById('optionsOverlay');
-    const isActive = optionsOverlay.classList.contains('active');
-    
-    optionsOverlay.classList.toggle('active');
-    
-    if (!isActive) {
-        // Abriu - iniciar animação
-        animateColorPreview();
-    } else {
-        // Fechou - parar animação
-        if (previewAnimFrame) {
-            cancelAnimationFrame(previewAnimFrame);
-        }
-    }
-}
-
-// Cores disponíveis para CPU
-const cpuColors = [
-    { color: '#e74c3c', wing: '#c0392b' },
-    { color: '#2ecc71', wing: '#27ae60' },
-    { color: '#3498db', wing: '#2980b9' },
-    { color: '#9b59b6', wing: '#8e44ad' },
-    { color: '#f1c40f', wing: '#d4ac0d' },
-    { color: '#e91e63', wing: '#c2185b' },
-    { color: '#00bcd4', wing: '#0097a7' },
-    { color: '#ff5722', wing: '#e64a19' },
-    { color: '#795548', wing: '#5d4037' }
-];
-
-// Cor selecionada pelo jogador
-let selectedPlayerColor = '#2ecc71';
-let selectedPlayerWing = '#27ae60';
-
-// Sistema de dificuldade
-let gameDifficulty = localStorage.getItem('birdGameDifficulty') || 'normal';
-
-const difficultyModifiers = {
-    easy: {
-        cpuSpeedMultiplier: 0.7,
-        timeMultiplier: 1.3,
-        cpuReactionDelay: 90,
-        cpuErrorChance: 0.3,
-        description: 'CPU mais lenta e com mais erros. Mais tempo para jogar!'
-    },
-    normal: {
-        cpuSpeedMultiplier: 1.0,
-        timeMultiplier: 1.0,
-        cpuReactionDelay: 60,
-        cpuErrorChance: 0.15,
-        description: 'CPU com velocidade e inteligência normais.'
-    },
-    hard: {
-        cpuSpeedMultiplier: 1.3,
-        timeMultiplier: 0.8,
-        cpuReactionDelay: 30,
-        cpuErrorChance: 0.05,
-        description: 'CPU mais rápida e inteligente. Menos tempo!'
-    }
-};
-
-// Selecionar dificuldade
-function selectDifficulty(difficulty) {
-    gameDifficulty = difficulty;
-    localStorage.setItem('birdGameDifficulty', difficulty);
-    
-    // Atualizar visual dos botões
-    document.querySelectorAll('.difficulty-btn').forEach(btn => {
-        btn.classList.remove('selected');
-        if (btn.dataset.difficulty === difficulty) {
-            btn.classList.add('selected');
-        }
-    });
-    
-    // Atualizar descrição
-    document.getElementById('difficultyDesc').textContent = difficultyModifiers[difficulty].description;
-}
-
-// Aplicar dificuldade à configuração de fase
-function applyDifficultyToConfig(config) {
-    const mod = difficultyModifiers[gameDifficulty];
-    return {
-        ...config,
-        time: Math.floor(config.time * mod.timeMultiplier),
-        cpuSpeed: config.cpuSpeed * mod.cpuSpeedMultiplier
-    };
-}
-
-// Confirmar reset de progresso
-function confirmResetProgress() {
-    if (confirm('⚠️ Tem certeza que deseja ZERAR todo o seu progresso?\n\nIsso irá:\n- Resetar todas as fases desbloqueadas\n- Apagar todas as estrelas conquistadas\n- Voltar ao início do jogo\n\nEssa ação não pode ser desfeita!')) {
-        resetProgress();
-    }
-}
-
-// Resetar progresso do jogador
-function resetProgress() {
-    gameProgress = {
-        unlockedAreas: [1],
-        unlockedStages: { 1: [1] },
-        completedStages: {},
-        stageStars: {}
-    };
-    
-    localStorage.setItem('birdGameProgress', JSON.stringify(gameProgress));
-    
-    alert('✅ Progresso resetado com sucesso!\n\nVocê voltou ao início do jogo.');
-    
-    // Fechar opções
-    toggleOptions();
-}
-
-// Inicializar dificuldade na UI
-function initDifficultyUI() {
-    document.querySelectorAll('.difficulty-btn').forEach(btn => {
-        btn.classList.remove('selected');
-        if (btn.dataset.difficulty === gameDifficulty) {
-            btn.classList.add('selected');
-        }
-    });
-    document.getElementById('difficultyDesc').textContent = difficultyModifiers[gameDifficulty].description;
-}
-
-// Atualizar cor da CPU para ser diferente do jogador
-function updateCpuColor() {
-    // Filtrar cores diferentes da do jogador
-    const availableColors = cpuColors.filter(c => c.color !== selectedPlayerColor);
-    
-    // Escolher aleatoriamente
-    const randomColor = availableColors[Math.floor(Math.random() * availableColors.length)];
-    
-    cpu.color = randomColor.color;
-    cpu.wingColor = randomColor.wing;
-}
-
-// Inicializar cor da CPU
-updateCpuColor();
-
-// Selecionar cor
-function selectColor(element) {
-    // Remover seleção anterior
-    document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
-    
-    // Adicionar seleção
-    element.classList.add('selected');
-    
-    // Guardar cor
-    selectedPlayerColor = element.dataset.color;
-    selectedPlayerWing = element.dataset.wing;
-    
-    // Atualizar cor do jogador
-    player.color = selectedPlayerColor;
-    
-    // Atualizar CPU para cor diferente
-    updateCpuColor();
-    
-    // Atualizar canvas do menu
-    animateMenu();
-}
-
-// Iniciar animação do menu
-animateMenu();
-
-// Inicializar botões de áudio
-setTimeout(() => {
-    updateAudioButtons();
-}, 100);
-
-// Tocar música de introdução quando a página carregar
-// Usar setTimeout para garantir que o DOM esteja pronto
-setTimeout(() => {
-    playIntroMusic();
-}, 100);
-
-// Tentar tocar música quando houver interação do usuário (para contornar políticas de autoplay)
-let introMusicAttempted = false;
-function attemptPlayIntroOnInteraction() {
-    if (sounds.introSound && sounds.introSound.paused) {
-        const menuOverlay = document.getElementById('menuOverlay');
-        if (menuOverlay && menuOverlay.style.display !== 'none') {
-            playIntroMusic();
-            introMusicAttempted = true;
-        }
-    }
-}
-
 // Adicionar listeners para interações do usuário
-document.addEventListener('click', attemptPlayIntroOnInteraction, { once: true });
-document.addEventListener('keydown', attemptPlayIntroOnInteraction, { once: true });
-document.addEventListener('touchstart', attemptPlayIntroOnInteraction, { once: true });
-
+        document.addEventListener('click', attemptPlayIntroOnInteraction, { once: true });
+        document.addEventListener('keydown', attemptPlayIntroOnInteraction, { once: true });
+        document.addEventListener('touchstart', attemptPlayIntroOnInteraction, { once: true });
+        
 // Verificar periodicamente se a música deve tocar (para casos de recarregar página)
-setInterval(() => {
-    const menuOverlay = document.getElementById('menuOverlay');
-    if (menuOverlay && menuOverlay.style.display !== 'none') {
-        if (sounds.introSound && sounds.introSound.paused) {
-            playIntroMusic();
-        }
-    }
-}, 2000); // Verificar a cada 2 segundos
-
-// Inicializar UI de dificuldade
-initDifficultyUI();
+        setInterval(() => {
+            const menuOverlay = document.getElementById('menuOverlay');
+            if (menuOverlay && menuOverlay.style.display !== 'none') {
+                if (sounds.introSound && sounds.introSound.paused) {
+                    playIntroMusic();
+                }
+            }
+        }, 2000); // Verificar a cada 2 segundos
+        
+        // Inicializar UI de dificuldade
+        initDifficultyUI();
 
 // ========== FUNÇÕES DE CHUVA NA FLORESTA ==========
 
@@ -6429,6 +8474,115 @@ function updateSweatDrops() {
             sweatDrops.splice(i, 1);
         }
     }
+}
+
+// Criar efeito de frio (vapor/fumaça branca)
+function createColdEffect(bird, isPlayer) {
+    const birdId = isPlayer ? 'player' : 'cpu';
+    const angle = Math.random() * Math.PI * 2;
+    const distance = bird.size + 5 + Math.random() * 10;
+    
+    coldEffects.push({
+        birdId: birdId,
+        x: bird.x + Math.cos(angle) * distance,
+        y: bird.y - bird.size * 0.5 + Math.sin(angle) * distance * 0.3, // Mais acima do pássaro
+        vx: (Math.random() - 0.5) * 0.3, // Movimento horizontal suave
+        vy: -0.5 - Math.random() * 0.5, // Movimento para cima
+        size: 2 + Math.random() * 2.5, // Tamanho intermediário
+        life: 50 + Math.random() * 25, // Duração intermediária
+        maxLife: 50 + Math.random() * 25,
+        alpha: 0.6 + Math.random() * 0.25 // Transparência intermediária
+    });
+}
+
+// Atualizar efeitos de frio
+function updateColdEffects() {
+    if (currentArea !== 3) {
+        coldEffects = [];
+        return;
+    }
+    
+    const coldProgress = getColdProgress();
+    
+    // Limitar número máximo de efeitos por pássaro (aumenta com o frio)
+    const playerEffects = coldEffects.filter(d => d.birdId === 'player').length;
+    const cpuEffects = coldEffects.filter(d => d.birdId === 'cpu').length;
+    const maxEffectsPerBird = 3 + Math.floor(coldProgress * 4); // 3 a 7 efeitos conforme o frio
+    
+    // Criar novos efeitos periodicamente (probabilidade aumenta com o frio)
+    const spawnChance = 0.05 + coldProgress * 0.08; // 5% a 13% conforme o frio
+    if (!player.stunned && playerEffects < maxEffectsPerBird && Math.random() < spawnChance) {
+        createColdEffect(player, true);
+    }
+    if (!cpu.stunned && cpuEffects < maxEffectsPerBird && Math.random() < spawnChance) {
+        createColdEffect(cpu, false);
+    }
+    
+    // Atualizar efeitos existentes
+    for (let i = coldEffects.length - 1; i >= 0; i--) {
+        const effect = coldEffects[i];
+        
+        // Mover efeito (vapor sobe e se dispersa)
+        effect.x += effect.vx;
+        effect.y += effect.vy;
+        
+        // Dispersão (movimento horizontal aumenta)
+        effect.vx += (Math.random() - 0.5) * 0.05;
+        
+        // Efeito sobe e se expande
+        effect.size += 0.05;
+        effect.vy -= 0.02; // Desacelera conforme sobe
+        
+        // Reduzir vida
+        effect.life--;
+        
+        // Remover se saiu da tela ou acabou a vida
+        if (effect.life <= 0 || effect.y < -20 || effect.x < -20 || effect.x > canvas.width + 20) {
+            coldEffects.splice(i, 1);
+        }
+    }
+}
+
+// Desenhar efeitos de frio ao redor do pássaro
+function drawColdEffects(bird, isPlayer) {
+    const birdId = isPlayer ? 'player' : 'cpu';
+    
+    // Desenhar apenas os efeitos deste pássaro
+    coldEffects.forEach(effect => {
+        if (effect.birdId === birdId) {
+            const alpha = (effect.life / effect.maxLife) * effect.alpha;
+            
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            
+            // Vapor branco/fumegante
+            const gradient = ctx.createRadialGradient(
+                effect.x, effect.y, 0,
+                effect.x, effect.y, effect.size
+            );
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+            gradient.addColorStop(0.5, 'rgba(200, 220, 255, 0.4)');
+            gradient.addColorStop(1, 'rgba(150, 180, 255, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Partículas menores de gelo ao redor
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            for (let i = 0; i < 3; i++) {
+                const angle = (Math.PI * 2 / 3) * i + effect.life * 0.1;
+                const px = effect.x + Math.cos(angle) * effect.size * 0.6;
+                const py = effect.y + Math.sin(angle) * effect.size * 0.6;
+                ctx.beginPath();
+                ctx.arc(px, py, 1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
+    });
 }
 
 // Desenhar gotas de suor ao redor do pássaro
