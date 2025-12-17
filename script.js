@@ -9376,6 +9376,20 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
         setTimeout(() => {
             updateColorSelection();
         }, 100);
+        
+        // Versão do jogo (pode ser atualizada manualmente ou via build script)
+        const GAME_VERSION = '1.0.0';
+        
+        // Atualizar versão do jogo na UI
+        function updateGameVersion() {
+            const versionEl = document.getElementById('gameVersion');
+            if (versionEl) {
+                versionEl.textContent = `v${GAME_VERSION}`;
+            }
+        }
+        
+        // Atualizar versão ao carregar
+        updateGameVersion();
 
 // Iniciar animação do menu
         animateMenu();
