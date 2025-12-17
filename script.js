@@ -2785,7 +2785,8 @@ function drawFrozenFruits() {
             }
             
     // Corpo do pássaro
-            let bodyColor = bird.color;
+            // Usar cor selecionada para o jogador, cor do objeto para CPU
+            let bodyColor = isPlayer ? (selectedPlayerColor || bird.color) : bird.color;
             if (bird.stunned) {
                 bodyColor = '#9b59b6'; // Roxo quando stunnado
             } else if (hasStunReady) {
@@ -6880,6 +6881,9 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 return;
             }
             
+            // Atualizar cor do jogador com a cor selecionada
+            player.color = selectedPlayerColor;
+            
             playerScore = 0;
             cpuScore = 0;
             const baseConfig = substageConfig[currentSubstage] || substageConfig[1];
@@ -7821,6 +7825,9 @@ function drawScoreBird(x, y, color, wingColor, facingRight, scale = 1) {
                 alert('Você não tem vidas disponíveis! Aguarde a regeneração ou compre uma vida com moedas.');
                 return;
             }
+            
+            // Atualizar cor do jogador com a cor selecionada
+            player.color = selectedPlayerColor;
             
             currentArea = area;
             currentSubstage = substage;
