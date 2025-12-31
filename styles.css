@@ -1811,7 +1811,7 @@
 
         /* Controles Touch (apenas mobile) */
         .touch-controls {
-            display: none !important; /* Escondido por padrão */
+            display: none; /* Escondido por padrão, JS controla visibilidade */
             position: fixed;
             bottom: 0;
             left: 0;
@@ -1824,16 +1824,16 @@
         /* Mobile - Portrait ou Landscape */
         @media screen and (max-width: 750px), screen and (max-height: 750px) {
             .touch-controls {
-                display: none !important; /* Escondido por padrão */
+                display: none; /* Escondido por padrão, mas pode ser sobrescrito por JS */
                 justify-content: flex-start;
                 align-items: flex-end;
                 padding: 20px;
                 pointer-events: none;
             }
 
-            /* Mostrar apenas quando o jogo estiver ativo */
+            /* Mostrar apenas quando o jogo estiver ativo - removido !important para permitir JS sobrescrever */
             .game-container.active .touch-controls {
-                display: flex !important;
+                display: flex;
                 pointer-events: auto;
             }
 

@@ -3383,7 +3383,23 @@ function initTouchControls() {
 
     // Inicializar posição
     getJoystickBasePosition();
-    window.addEventListener('resize', getJoystickBasePosition);
+    window.addEventListener('resize', function() {
+        getJoystickBasePosition();
+        // Atualizar visibilidade dos controles quando redimensionar
+        if (gameRunning) {
+            setTimeout(showTouchControls, 50);
+        }
+    });
+    
+    // Atualizar posição quando orientação mudar
+    window.addEventListener('orientationchange', function() {
+        setTimeout(function() {
+            getJoystickBasePosition();
+            if (gameRunning) {
+                showTouchControls();
+            }
+        }, 200);
+    });
 
     // Touch Start
     function handleTouchStart(e) {
@@ -16105,16 +16121,52 @@ function hideTouchControls() {
     }
 }
 
+// Função auxiliar para detectar se é mobile
+function isMobileDevice() {
+    // Verificar por largura, altura ou user agent
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const isSmallScreen = width <= 750 || height <= 750;
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    // É mobile se: tela pequena E (tem touch OU user agent mobile)
+    return isSmallScreen && (isTouchDevice || isMobileUserAgent);
+}
+
 // Função auxiliar para mostrar controles touch (apenas em mobile e quando jogo está rodando)
 function showTouchControls() {
     const touchControls = document.getElementById('touchControls');
-    // Verificar se é mobile (por largura OU altura)
-    const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
-    if (touchControls && isMobile && gameRunning) {
-        touchControls.style.display = 'flex';
-        touchControls.style.pointerEvents = 'auto';
+    if (!touchControls) return;
+    
+    const isMobile = isMobileDevice();
+    
+    if (isMobile && gameRunning) {
+        // Forçar visibilidade usando setProperty com important
+        touchControls.style.setProperty('display', 'flex', 'important');
+        touchControls.style.setProperty('pointer-events', 'auto', 'important');
+        touchControls.style.setProperty('visibility', 'visible', 'important');
+        touchControls.style.setProperty('opacity', '1', 'important');
+    } else {
+        touchControls.style.setProperty('display', 'none', 'important');
+        touchControls.style.setProperty('pointer-events', 'none', 'important');
     }
 }
+
+// Atualizar controles quando a orientação mudar
+window.addEventListener('resize', function() {
+    if (gameRunning) {
+        // Pequeno delay para garantir que a orientação mudou
+        setTimeout(showTouchControls, 100);
+    }
+});
+
+window.addEventListener('orientationchange', function() {
+    if (gameRunning) {
+        // Delay maior para orientationchange
+        setTimeout(showTouchControls, 200);
+    }
+});
 
 function closeRoadmap() {
     // Esconder controles touch ao fechar roadmap
@@ -19236,8 +19288,15 @@ function showCountdown() {
             // Agora inicia o jogo de verdade
             gameStarted = true;
             gameRunning = true;
-            // Mostrar controles touch quando o jogo começar
+            
+            // Mostrar controles touch imediatamente quando o jogo começar
             showTouchControls();
+            
+            // Forçar múltiplas tentativas para garantir que apareça (especialmente em landscape)
+            setTimeout(showTouchControls, 50);
+            setTimeout(showTouchControls, 150);
+            setTimeout(showTouchControls, 300);
+            setTimeout(showTouchControls, 500);
 
             // Recriar intervals de spawn (podem ter sido limpos em endGame anterior)
             if (!foodSpawnInterval) {
@@ -20210,6 +20269,25 @@ function updateFullscreenButton() {
     }
 }
 
+// Garantir que controles sejam atualizados quando necessário
+// Verificar periodicamente se os controles devem estar visíveis (para casos de mudança de orientação)
+setInterval(function() {
+    if (gameRunning) {
+        const touchControls = document.getElementById('touchControls');
+        if (touchControls) {
+            const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
+            const shouldBeVisible = isMobile && gameRunning;
+            const isVisible = touchControls.style.display === 'flex';
+            
+            if (shouldBeVisible && !isVisible) {
+                showTouchControls();
+            } else if (!shouldBeVisible && isVisible) {
+                hideTouchControls();
+            }
+        }
+    }
+}, 500); // Verificar a cada 500ms
+
 // Iniciar animação do menu
 animateMenu();
 
@@ -20656,3 +20734,4 @@ function drawWaterDrops(bird, isPlayer) {
         }
     });
 }
+
