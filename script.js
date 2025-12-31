@@ -19,36 +19,47 @@ function resizeCanvasForMobile() {
         let newWidth, newHeight;
         
         if (isLandscape) {
-            // Em landscape, considerar altura disponível (descontando controles touch e UI)
-            // Espaço para UI superior (~60px) + controles touch inferiores (~140px)
-            const uiSpace = 200;
-            const availableHeight = Math.max(window.innerHeight - uiSpace, 200);
-            const maxWidth = window.innerWidth - 10; // Margem mínima
+            // Em landscape, usar toda a tela disponível
+            const availableWidth = window.innerWidth;
+            const availableHeight = window.innerHeight;
             
-            // Calcular baseado na altura disponível primeiro
-            newHeight = Math.min(availableHeight, CANVAS_BASE_HEIGHT);
-            newWidth = newHeight / aspectRatio;
+            // Calcular para ocupar o máximo de espaço possível mantendo proporção
+            // Tentar usar toda a largura primeiro
+            newWidth = availableWidth;
+            newHeight = newWidth * aspectRatio;
             
-            // Se a largura calculada for maior que a disponível, ajustar pela largura
-            if (newWidth > maxWidth) {
-                newWidth = maxWidth;
-                newHeight = newWidth * aspectRatio;
-            }
-            
-            // Garantir que não ultrapasse a altura disponível
+            // Se a altura calculada for maior que a disponível, ajustar pela altura
             if (newHeight > availableHeight) {
                 newHeight = availableHeight;
                 newWidth = newHeight / aspectRatio;
             }
         } else {
-            // Em portrait, usar largura disponível
-            const maxWidth = window.innerWidth - 20;
-            newWidth = Math.min(maxWidth, CANVAS_BASE_WIDTH);
-            newHeight = newWidth * aspectRatio;
+            // Em portrait, usar toda a largura disponível
+            const availableWidth = window.innerWidth;
+            const availableHeight = window.innerHeight;
+            
+            newWidth = availableWidth;
+            newHeight = newWidth / aspectRatio;
+            
+            // Se a altura calculada for maior que a disponível, ajustar pela altura
+            if (newHeight > availableHeight) {
+                newHeight = availableHeight;
+                newWidth = newHeight * aspectRatio;
+            }
         }
         
-        canvas.style.width = newWidth + 'px';
-        canvas.style.height = newHeight + 'px';
+        // No mobile, usar CSS para ocupar toda a tela
+        // O JavaScript apenas mantém a proporção correta
+        if (isMobile) {
+            // Usar viewport completo
+            canvas.style.width = '100vw';
+            canvas.style.height = '100vh';
+            canvas.style.maxWidth = '100vw';
+            canvas.style.maxHeight = '100vh';
+        } else {
+            canvas.style.width = newWidth + 'px';
+            canvas.style.height = newHeight + 'px';
+        }
     } else {
         // Desktop: tamanho fixo
         canvas.style.width = CANVAS_BASE_WIDTH + 'px';
@@ -3328,6 +3339,7 @@ function drawWormHoles() {
 const keys = {};
 
 // Controles Touch (mobile)
+// O modo será carregado do gameProgress em initControlUI()
 let touchControls = {
     active: false,
     joystickActive: false,
@@ -3335,8 +3347,14 @@ let touchControls = {
     joystickY: 0,
     joystickBaseX: 0,
     joystickBaseY: 0,
-    joystickRadius: 50
+    joystickRadius: 50,
+    // Novo modo: arrastar pássaro diretamente
+    dragMode: true, // Padrão: arrastar pássaro (será sobrescrito por initControlUI)
+    dragActive: false,
+    dragTargetX: 0,
+    dragTargetY: 0
 };
+
 
 // Modo Debug (ativar no console: window.debugMode = true)
 let debugMode = false;
@@ -3441,42 +3459,95 @@ function initTouchControls() {
     function handleTouchStart(e) {
         if (!gameRunning) return;
         
-        // SEMPRE recalcular posição do joystick antes de verificar (crítico para landscape)
-        const rect = joystickBase.getBoundingClientRect();
-        touchControls.joystickBaseX = rect.left + rect.width / 2;
-        touchControls.joystickBaseY = rect.top + rect.height / 2;
-        touchControls.joystickRadius = rect.width / 2;
-        
         const touch = e.touches[0];
         const touchX = touch.clientX;
         const touchY = touch.clientY;
         
-        // Verificar se tocou no joystick (usar posição recalculada)
-        const centerX = touchControls.joystickBaseX;
-        const centerY = touchControls.joystickBaseY;
-        const distance = Math.sqrt(
-            Math.pow(touchX - centerX, 2) + Math.pow(touchY - centerY, 2)
-        );
+        // Se estiver em modo de arrasto, verificar se tocou no canvas
+        if (touchControls.dragMode) {
+            const canvasRect = canvas.getBoundingClientRect();
+            
+            // Verificar se tocou dentro do canvas
+            if (touchX >= canvasRect.left && touchX <= canvasRect.right &&
+                touchY >= canvasRect.top && touchY <= canvasRect.bottom) {
+                
+                // Converter coordenadas do toque para coordenadas do canvas
+                const canvasX = ((touchX - canvasRect.left) / canvasRect.width) * canvas.width;
+                const canvasY = ((touchY - canvasRect.top) / canvasRect.height) * canvas.height;
+                
+                // Verificar se tocou próximo ao player (raio de 80 pixels)
+                const distanceToPlayer = Math.sqrt(
+                    Math.pow(canvasX - player.x, 2) + Math.pow(canvasY - player.y, 2)
+                );
+                
+                if (distanceToPlayer <= 80) {
+                    touchControls.dragActive = true;
+                    touchControls.dragTargetX = canvasX;
+                    touchControls.dragTargetY = canvasY;
+                    e.preventDefault();
+                    return;
+                }
+            }
+        }
         
-        // Área de toque maior (3x o raio) para facilitar em landscape
-        if (distance <= touchControls.joystickRadius * 3) {
-            touchControls.joystickActive = true;
-            updateJoystick(touchX, touchY);
-            e.preventDefault();
+        // Modo joystick (se não estiver em drag mode ou não tocou no player)
+        if (!touchControls.dragMode) {
+            // SEMPRE recalcular posição do joystick antes de verificar (crítico para landscape)
+            const rect = joystickBase.getBoundingClientRect();
+            touchControls.joystickBaseX = rect.left + rect.width / 2;
+            touchControls.joystickBaseY = rect.top + rect.height / 2;
+            touchControls.joystickRadius = rect.width / 2;
+            
+            // Verificar se tocou no joystick (usar posição recalculada)
+            const centerX = touchControls.joystickBaseX;
+            const centerY = touchControls.joystickBaseY;
+            const distance = Math.sqrt(
+                Math.pow(touchX - centerX, 2) + Math.pow(touchY - centerY, 2)
+            );
+            
+            // Área de toque maior (3x o raio) para facilitar em landscape
+            if (distance <= touchControls.joystickRadius * 3) {
+                touchControls.joystickActive = true;
+                updateJoystick(touchX, touchY);
+                e.preventDefault();
+            }
         }
     }
 
     // Touch Move
     function handleTouchMove(e) {
-        if (!touchControls.joystickActive) return;
-        
         const touch = e.touches[0];
-        updateJoystick(touch.clientX, touch.clientY);
-        e.preventDefault();
+        
+        // Modo arrasto
+        if (touchControls.dragActive && touchControls.dragMode) {
+            const canvasRect = canvas.getBoundingClientRect();
+            
+            // Converter coordenadas do toque para coordenadas do canvas
+            const canvasX = ((touch.clientX - canvasRect.left) / canvasRect.width) * canvas.width;
+            const canvasY = ((touch.clientY - canvasRect.top) / canvasRect.height) * canvas.height;
+            
+            // Limitar dentro dos limites do canvas
+            touchControls.dragTargetX = Math.max(player.size, Math.min(canvas.width - player.size, canvasX));
+            touchControls.dragTargetY = Math.max(player.size, Math.min(canvas.height - player.size, canvasY));
+            
+            e.preventDefault();
+            return;
+        }
+        
+        // Modo joystick
+        if (touchControls.joystickActive && !touchControls.dragMode) {
+            updateJoystick(touch.clientX, touch.clientY);
+            e.preventDefault();
+        }
     }
 
     // Touch End
     function handleTouchEnd(e) {
+        if (touchControls.dragActive) {
+            touchControls.dragActive = false;
+            e.preventDefault();
+        }
+        
         if (touchControls.joystickActive) {
             touchControls.joystickActive = false;
             touchControls.joystickX = 0;
@@ -3523,9 +3594,16 @@ function initTouchControls() {
     document.addEventListener('touchend', handleTouchEnd, { passive: false, capture: true });
     document.addEventListener('touchcancel', handleTouchEnd, { passive: false, capture: true });
     
+    // Listener adicional no canvas para modo de arrasto
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    
     // Também adicionar listener no document para capturar toques na área do joystick
+    // (apenas se não estiver em modo de arrasto)
     document.addEventListener('touchstart', function(e) {
-        if (!gameRunning) return;
+        if (!gameRunning || touchControls.dragMode) return;
         
         const touch = e.touches[0];
         if (!touch) return;
@@ -5602,20 +5680,28 @@ function updatePlayer() {
     let moveX = 0;
     let moveY = 0;
 
-    // Teclado (WASD e Setas)
-    if (keys['w'] || keys['arrowup'] || keys['ArrowUp']) moveY = -player.speed;
-    else if (keys['s'] || keys['arrowdown'] || keys['ArrowDown']) moveY = player.speed;
-
-    if (keys['a'] || keys['arrowleft'] || keys['ArrowLeft']) {
-        moveX = -player.speed;
-        player.facingRight = false;
-    } else if (keys['d'] || keys['arrowright'] || keys['ArrowRight']) {
-        moveX = player.speed;
-        player.facingRight = true;
+    // Touch (Modo Arrasto - move diretamente para o toque)
+    if (touchControls.dragActive && touchControls.dragMode) {
+        const dx = touchControls.dragTargetX - player.x;
+        const dy = touchControls.dragTargetY - player.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance > 2) { // Dead zone pequena
+            // Mover em direção ao alvo com velocidade suave
+            const speed = Math.min(player.speed * 1.5, distance * 0.15); // Movimento mais suave e rápido
+            const normalizedX = dx / distance;
+            const normalizedY = dy / distance;
+            
+            moveX = normalizedX * speed;
+            moveY = normalizedY * speed;
+            
+            // Atualizar direção
+            if (normalizedX > 0) player.facingRight = true;
+            else if (normalizedX < 0) player.facingRight = false;
+        }
     }
-
-    // Touch (Joystick)
-    if (touchControls.joystickActive) {
+    // Touch (Joystick - modo antigo)
+    else if (touchControls.joystickActive && !touchControls.dragMode) {
         const joystickX = touchControls.joystickX;
         const joystickY = touchControls.joystickY;
         const distance = Math.sqrt(joystickX * joystickX + joystickY * joystickY);
@@ -5629,6 +5715,19 @@ function updatePlayer() {
             // Atualizar direção
             if (normalizedX > 0) player.facingRight = true;
             else if (normalizedX < 0) player.facingRight = false;
+        }
+    }
+    // Teclado (WASD e Setas) - só funciona se não estiver usando touch
+    else if (!touchControls.dragActive && !touchControls.joystickActive) {
+        if (keys['w'] || keys['arrowup'] || keys['ArrowUp']) moveY = -player.speed;
+        else if (keys['s'] || keys['arrowdown'] || keys['ArrowDown']) moveY = player.speed;
+
+        if (keys['a'] || keys['arrowleft'] || keys['ArrowLeft']) {
+            moveX = -player.speed;
+            player.facingRight = false;
+        } else if (keys['d'] || keys['arrowright'] || keys['ArrowRight']) {
+            moveX = player.speed;
+            player.facingRight = true;
         }
     }
 
@@ -16202,10 +16301,10 @@ function openRoadmap() {
 // Fechar roadmap (mantém menu visível ao fundo)
 // Função auxiliar para esconder controles touch
 function hideTouchControls() {
-    const touchControls = document.getElementById('touchControls');
-    if (touchControls) {
-        touchControls.style.display = 'none';
-        touchControls.style.pointerEvents = 'none';
+    const touchControlsElement = document.getElementById('touchControls');
+    if (touchControlsElement) {
+        touchControlsElement.style.display = 'none';
+        touchControlsElement.style.pointerEvents = 'none';
     }
 }
 
@@ -16224,20 +16323,26 @@ function isMobileDevice() {
 
 // Função auxiliar para mostrar controles touch (apenas em mobile e quando jogo está rodando)
 function showTouchControls() {
-    const touchControls = document.getElementById('touchControls');
-    if (!touchControls) return;
+    const touchControlsElement = document.getElementById('touchControls');
+    if (!touchControlsElement) return;
     
     const isMobile = isMobileDevice();
     
     if (isMobile && gameRunning) {
-        // Forçar visibilidade usando setProperty com important
-        touchControls.style.setProperty('display', 'flex', 'important');
-        touchControls.style.setProperty('pointer-events', 'auto', 'important');
-        touchControls.style.setProperty('visibility', 'visible', 'important');
-        touchControls.style.setProperty('opacity', '1', 'important');
+        // Se estiver em modo de arrasto, esconder o joystick
+        if (touchControls.dragMode) {
+            touchControlsElement.style.setProperty('display', 'none', 'important');
+            touchControlsElement.style.setProperty('pointer-events', 'none', 'important');
+        } else {
+            // Forçar visibilidade usando setProperty com important
+            touchControlsElement.style.setProperty('display', 'flex', 'important');
+            touchControlsElement.style.setProperty('pointer-events', 'auto', 'important');
+            touchControlsElement.style.setProperty('visibility', 'visible', 'important');
+            touchControlsElement.style.setProperty('opacity', '1', 'important');
+        }
     } else {
-        touchControls.style.setProperty('display', 'none', 'important');
-        touchControls.style.setProperty('pointer-events', 'none', 'important');
+        touchControlsElement.style.setProperty('display', 'none', 'important');
+        touchControlsElement.style.setProperty('pointer-events', 'none', 'important');
     }
 }
 
@@ -20109,6 +20214,41 @@ function selectDifficulty(difficulty) {
     document.getElementById('difficultyDesc').textContent = difficultyModifiers[difficulty].description;
 }
 
+// Selecionar modo de controle mobile
+function selectControlMode(mode) {
+    touchControls.dragMode = (mode === 'drag');
+    
+    // Salvar preferência
+    if (!gameProgress.settings) {
+        gameProgress.settings = {};
+    }
+    gameProgress.settings.controlMode = mode;
+    localStorage.setItem('birdGameProgress', JSON.stringify(gameProgress));
+
+    // Atualizar visual dos botões
+    document.querySelectorAll('.control-btn').forEach(btn => {
+        btn.classList.remove('selected');
+        if (btn.dataset.control === mode) {
+            btn.classList.add('selected');
+        }
+    });
+
+    // Atualizar descrição
+    const controlDesc = document.getElementById('controlDesc');
+    if (controlDesc) {
+        if (mode === 'drag') {
+            controlDesc.textContent = 'Toque e arraste o pássaro diretamente pela tela.';
+        } else {
+            controlDesc.textContent = 'Use o joystick virtual para controlar o pássaro.';
+        }
+    }
+    
+    // Atualizar visibilidade do joystick
+    if (gameRunning) {
+        showTouchControls();
+    }
+}
+
 // Aplicar dificuldade à configuração de fase
 function applyDifficultyToConfig(config) {
     const mod = difficultyModifiers[gameDifficulty];
@@ -20163,6 +20303,31 @@ function initDifficultyUI() {
         }
     });
     document.getElementById('difficultyDesc').textContent = difficultyModifiers[gameDifficulty].description;
+}
+
+// Inicializar UI de controle mobile
+function initControlUI() {
+    // Carregar preferência salva
+    const savedMode = (gameProgress.settings && gameProgress.settings.controlMode) || 'drag';
+    touchControls.dragMode = (savedMode === 'drag');
+    
+    // Atualizar visual dos botões
+    document.querySelectorAll('.control-btn').forEach(btn => {
+        btn.classList.remove('selected');
+        if (btn.dataset.control === savedMode) {
+            btn.classList.add('selected');
+        }
+    });
+    
+    // Atualizar descrição
+    const controlDesc = document.getElementById('controlDesc');
+    if (controlDesc) {
+        if (savedMode === 'drag') {
+            controlDesc.textContent = 'Toque e arraste o pássaro diretamente pela tela.';
+        } else {
+            controlDesc.textContent = 'Use o joystick virtual para controlar o pássaro.';
+        }
+    }
 }
 
 // Atualizar cor da CPU para ser diferente do jogador
@@ -20439,6 +20604,7 @@ setInterval(() => {
 
 // Inicializar UI de dificuldade
 initDifficultyUI();
+initControlUI();
 
 // ========== FUNÇÕES DE CHUVA NA FLORESTA ==========
 
