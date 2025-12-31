@@ -303,60 +303,6 @@
             margin-bottom: 15px;
         }
         
-        .backup-section-menu {
-            margin-top: 15px;
-            display: flex;
-            justify-content: center;
-        }
-        
-        .backup-buttons-menu {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        
-        .backup-btn-menu {
-            padding: 8px 16px;
-            font-size: 0.85rem;
-            background: linear-gradient(135deg, #3498db, #2980b9);
-            border: 2px solid #2980b9;
-            color: white;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
-            font-weight: bold;
-        }
-        
-        .backup-btn-menu:hover {
-            transform: scale(1.05);
-            background: linear-gradient(135deg, #5dade2, #3498db);
-            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
-        }
-        
-        .backup-btn-menu:active {
-            transform: scale(0.98);
-        }
-        
-        .backup-btn-menu.export {
-            background: linear-gradient(135deg, #27ae60, #229954);
-            border-color: #229954;
-        }
-        
-        .backup-btn-menu.export:hover {
-            background: linear-gradient(135deg, #2ecc71, #27ae60);
-            box-shadow: 0 4px 12px rgba(46, 204, 113, 0.4);
-        }
-        
-        .backup-btn-menu.import {
-            background: linear-gradient(135deg, #3498db, #2980b9);
-            border-color: #2980b9;
-        }
-        
-        .backup-btn-menu.import:hover {
-            background: linear-gradient(135deg, #5dade2, #3498db);
-            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
-        }
         
         /* Sistema de Vidas e Moedas */
         .lives-coins-container {
@@ -497,6 +443,7 @@
 
         .rules-overlay {
             position: fixed;
+            overflow-y: auto;
             top: 0;
             left: 0;
             width: 100%;
@@ -514,11 +461,31 @@
 
         .rules-box {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            padding: 30px 50px;
+            padding: 20px 40px;
             border-radius: 20px;
             border: 3px solid #3498db;
             max-width: 500px;
+            max-height: 85vh;
+            overflow-y: auto;
             animation: rulesPopIn 0.3s ease-out;
+        }
+        
+        .rules-box::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .rules-box::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        
+        .rules-box::-webkit-scrollbar-thumb {
+            background: #3498db;
+            border-radius: 10px;
+        }
+        
+        .rules-box::-webkit-scrollbar-thumb:hover {
+            background: #2980b9;
         }
 
         @keyframes rulesPopIn {
@@ -528,8 +495,8 @@
 
         .rules-box h3 {
             text-align: center;
-            font-size: 2rem;
-            margin-bottom: 20px;
+            font-size: 1.6rem;
+            margin-bottom: 15px;
             color: #f1c40f;
         }
 
@@ -539,26 +506,29 @@
         }
 
         .rules-box li {
-            margin: 12px 0;
-            font-size: 1.1rem;
+            margin: 8px 0;
+            font-size: 0.95rem;
             padding-left: 10px;
+            line-height: 1.4;
         }
 
         .close-rules-btn {
             display: block;
-            margin: 25px auto 0;
-            padding: 12px 40px;
-            font-size: 1.2rem;
-            background: #e74c3c;
+            margin: 15px auto 0;
+            padding: 10px 35px;
+            font-size: 1rem;
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
             border: none;
             color: white;
             border-radius: 10px;
             cursor: pointer;
             transition: transform 0.2s, background 0.2s;
+            position: sticky;
+            bottom: 0;
         }
 
         .close-rules-btn:hover {
-            background: #c0392b;
+            background: linear-gradient(135deg, #c0392b, #a93226);
             transform: scale(1.05);
         }
 
@@ -822,52 +792,6 @@
             padding: 0 3px;
         }
 
-        .backup-section {
-            flex: 1;
-            margin-bottom: 0;
-            padding-top: 0;
-            border-top: none;
-        }
-
-        .backup-section h4 {
-            margin-bottom: 8px;
-            font-size: 0.95rem;
-            color: #ecf0f1;
-        }
-
-        .backup-buttons {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            align-items: center;
-        }
-
-        .backup-btn {
-            padding: 6px 12px;
-            font-size: 0.85rem;
-            border: 2px solid #3498db;
-            background: rgba(52, 152, 219, 0.2);
-            color: #3498db;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-            width: 100%;
-        }
-
-        .backup-btn:hover {
-            background: #3498db;
-            color: white;
-            transform: scale(1.05);
-        }
-
-        .backup-btn.import {
-            border-color: #2ecc71;
-            background: rgba(46, 204, 113, 0.2);
-            color: #2ecc71;
-        }
-
-        .backup-btn.import:hover {
-            background: #2ecc71;
             color: white;
         }
 
@@ -1205,18 +1129,46 @@
 
         .substage-card.boss {
             grid-column: span 3;
-            height: 100px;
+            height: 110px;
             background: linear-gradient(135deg, #e74c3c, #c0392b);
-            border-color: #f1948a;
+            border: 3px solid #f1948a;
+            box-shadow: 0 0 15px rgba(231, 76, 60, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .substage-card.boss::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            animation: bossShine 3s infinite;
+        }
+
+        @keyframes bossShine {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
         }
 
         .substage-card.boss.unlocked:hover {
-            box-shadow: 0 0 25px rgba(231, 76, 60, 0.6);
+            box-shadow: 0 0 30px rgba(231, 76, 60, 0.8);
+            transform: scale(1.05);
         }
 
         .substage-card.boss.completed {
             background: linear-gradient(135deg, #f1c40f, #f39c12);
             border-color: #f7dc6f;
+            box-shadow: 0 0 20px rgba(241, 196, 15, 0.6);
+        }
+
+        .substage-card.boss .substage-number {
+            font-size: 1.5rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            position: relative;
+            z-index: 1;
         }
 
         .substage-card.bonus {
@@ -1241,17 +1193,36 @@
 
         .substage-stars {
             display: flex;
-            gap: 2px;
-            margin-top: 5px;
+            gap: 4px;
+            margin-top: 8px;
+            justify-content: center;
+            align-items: center;
         }
 
         .substage-stars span {
-            font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.7);
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.4);
+            transition: all 0.3s ease;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.5);
         }
 
         .substage-stars span.filled {
             color: #f1c40f;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), 0 0 8px #f39c12, 0 0 12px #f1c40f, 0 0 16px rgba(241, 196, 15, 0.5);
+            filter: drop-shadow(0 0 3px rgba(241, 196, 15, 0.8));
+            transform: scale(1.1);
+            animation: starGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes starGlow {
+            0%, 100% {
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), 0 0 8px #f39c12, 0 0 12px #f1c40f, 0 0 16px rgba(241, 196, 15, 0.5);
+                transform: scale(1.1);
+            }
+            50% {
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), 0 0 12px #f39c12, 0 0 18px #f1c40f, 0 0 24px rgba(241, 196, 15, 0.8);
+                transform: scale(1.15);
+            }
         }
 
         .substage-difficulty {

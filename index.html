@@ -46,15 +46,6 @@
             <button class="menu-btn credits-btn" onclick="showCredits()">🙏 CRÉDITOS</button>
         </div>
         
-        <!-- Sistema de Backup -->
-        <div class="backup-section-menu">
-            <div class="backup-buttons-menu">
-                <button class="backup-btn-menu export" onclick="exportProgress()">💾 Exportar Save</button>
-                <button class="backup-btn-menu import" onclick="document.getElementById('importFileInput').click()">📂 Importar Save</button>
-                <input type="file" id="importFileInput" accept=".json" style="display: none;" onchange="importProgress(event)">
-            </div>
-        </div>
-        
         <div class="roadmap-overlay" id="roadmapOverlay">
             <div class="roadmap-box">
                 <h3>🗺️ Selecione a Área</h3>
@@ -68,25 +59,25 @@
                     
                     <div class="area-card locked" id="area2">
                         <div class="area-lock">🔒</div>
-                        <div class="area-name">Deserto</div>
+                        <div class="area-name">Pântano</div>
                         <div class="area-progress" id="areaProgress2">0/7</div>
                     </div>
                     
                     <div class="area-card locked" id="area3">
                         <div class="area-lock">🔒</div>
-                        <div class="area-name">Gelo</div>
+                        <div class="area-name">Ilha Tropical</div>
                         <div class="area-progress" id="areaProgress3">0/7</div>
                     </div>
                     
                     <div class="area-card locked" id="area4">
                         <div class="area-lock">🔒</div>
-                        <div class="area-name">Vulcão</div>
+                        <div class="area-name">Deserto</div>
                         <div class="area-progress" id="areaProgress4">0/7</div>
                     </div>
                     
                     <div class="area-card locked" id="area5">
                         <div class="area-lock">🔒</div>
-                        <div class="area-name">Castelo</div>
+                        <div class="area-name">Metrópole</div>
                         <div class="area-progress" id="areaProgress5">0/7</div>
                     </div>
                 </div>
@@ -161,6 +152,14 @@
                     <li>🌟 Comidas <strong>douradas no céu</strong> valem 5 pts e +5 stun!</li>
                     <li>⚡ Pegue o <strong>item azul</strong> para ganhar velocidade!</li>
                     <li>⚠️ <strong>Cuidado!</strong> A CPU também pode te stunnar!</li>
+                    <li>⭐ Ganhe <strong>5 estrelas</strong> baseadas na sua pontuação!</li>
+                    <li>🪙 Ganhe <strong>moedas</strong> ao vencer fases (mais na primeira vitória)!</li>
+                    <li>❤️ Você tem <strong>5 vidas</strong> - perde uma ao ser derrotado!</li>
+                    <li>⏰ Vidas regeneram automaticamente a cada <strong>5 minutos</strong></li>
+                    <li>🦇 <strong>Morcego</strong> aparece na floresta (fase 6) - cuidado!</li>
+                    <li>🦅 <strong>Gavião</strong> aparece no deserto (fase 6) - cuidado!</li>
+                    <li>🌟 <strong>Fases Bônus:</strong> Colete minhocas, frutas congeladas ou frutos de cactos!</li>
+                    <li>🎨 Mude sua cor por <strong>25 moedas</strong> nas opções!</li>
                 </ul>
                 <button class="close-rules-btn" onclick="toggleRules()">✖ FECHAR</button>
             </div>
