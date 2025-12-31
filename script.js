@@ -3405,19 +3405,25 @@ function initTouchControls() {
     function handleTouchStart(e) {
         if (!gameRunning) return;
         
+        // SEMPRE recalcular posição do joystick antes de verificar (crítico para landscape)
+        const rect = joystickBase.getBoundingClientRect();
+        touchControls.joystickBaseX = rect.left + rect.width / 2;
+        touchControls.joystickBaseY = rect.top + rect.height / 2;
+        touchControls.joystickRadius = rect.width / 2;
+        
         const touch = e.touches[0];
         const touchX = touch.clientX;
         const touchY = touch.clientY;
         
-        // Verificar se tocou no joystick
-        const rect = joystickBase.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
+        // Verificar se tocou no joystick (usar posição recalculada)
+        const centerX = touchControls.joystickBaseX;
+        const centerY = touchControls.joystickBaseY;
         const distance = Math.sqrt(
             Math.pow(touchX - centerX, 2) + Math.pow(touchY - centerY, 2)
         );
         
-        if (distance <= touchControls.joystickRadius * 2) {
+        // Área de toque maior (3x o raio) para facilitar em landscape
+        if (distance <= touchControls.joystickRadius * 3) {
             touchControls.joystickActive = true;
             updateJoystick(touchX, touchY);
             e.preventDefault();
@@ -3446,9 +3452,16 @@ function initTouchControls() {
 
     // Atualizar posição do joystick
     function updateJoystick(touchX, touchY) {
-        const baseX = touchControls.joystickBaseX;
-        const baseY = touchControls.joystickBaseY;
-        const radius = touchControls.joystickRadius;
+        // Recalcular posição base antes de atualizar (importante para landscape)
+        const rect = joystickBase.getBoundingClientRect();
+        const baseX = rect.left + rect.width / 2;
+        const baseY = rect.top + rect.height / 2;
+        const radius = rect.width / 2;
+        
+        // Atualizar valores globais
+        touchControls.joystickBaseX = baseX;
+        touchControls.joystickBaseY = baseY;
+        touchControls.joystickRadius = radius;
         
         let deltaX = touchX - baseX;
         let deltaY = touchY - baseY;
@@ -3468,10 +3481,46 @@ function initTouchControls() {
     }
 
     // Event listeners para joystick
-    joystickBase.addEventListener('touchstart', handleTouchStart, { passive: false });
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleTouchEnd, { passive: false });
-    document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    // Usar capture phase para garantir que funcione mesmo se o elemento não estiver visível
+    joystickBase.addEventListener('touchstart', handleTouchStart, { passive: false, capture: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false, capture: true });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: false, capture: true });
+    
+    // Também adicionar listener no document para capturar toques na área do joystick
+    document.addEventListener('touchstart', function(e) {
+        if (!gameRunning) return;
+        
+        const touch = e.touches[0];
+        if (!touch) return;
+        
+        // Verificar se tocou na área do joystick (mesmo que não seja exatamente no elemento)
+        const rect = joystickBase.getBoundingClientRect();
+        const touchX = touch.clientX;
+        const touchY = touch.clientY;
+        
+        // Verificar se está dentro da área do joystick (com margem maior)
+        if (touchX >= rect.left - 50 && touchX <= rect.right + 50 &&
+            touchY >= rect.top - 50 && touchY <= rect.bottom + 50) {
+            // Recalcular posição e ativar joystick
+            touchControls.joystickBaseX = rect.left + rect.width / 2;
+            touchControls.joystickBaseY = rect.top + rect.height / 2;
+            touchControls.joystickRadius = rect.width / 2;
+            
+            const centerX = touchControls.joystickBaseX;
+            const centerY = touchControls.joystickBaseY;
+            const distance = Math.sqrt(
+                Math.pow(touchX - centerX, 2) + Math.pow(touchY - centerY, 2)
+            );
+            
+            if (distance <= touchControls.joystickRadius * 3) {
+                touchControls.joystickActive = true;
+                updateJoystick(touchX, touchY);
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }
+    }, { passive: false, capture: true });
 
 }
 
@@ -19289,14 +19338,31 @@ function showCountdown() {
             gameStarted = true;
             gameRunning = true;
             
-            // Mostrar controles touch imediatamente quando o jogo começar
-            showTouchControls();
+            // Reinicializar controles touch quando o jogo começar (importante para landscape)
+            // Chamar imediatamente e depois com delays
+            function reinitTouchControls() {
+                const joystickBase = document.getElementById('joystickBase');
+                const joystickStick = document.getElementById('joystickStick');
+                if (joystickBase && joystickStick) {
+                    // Recalcular posição do joystick
+                    const rect = joystickBase.getBoundingClientRect();
+                    touchControls.joystickBaseX = rect.left + rect.width / 2;
+                    touchControls.joystickBaseY = rect.top + rect.height / 2;
+                    touchControls.joystickRadius = rect.width / 2;
+                }
+                // Mostrar controles
+                showTouchControls();
+            }
+            
+            // Chamar imediatamente
+            reinitTouchControls();
             
             // Forçar múltiplas tentativas para garantir que apareça (especialmente em landscape)
-            setTimeout(showTouchControls, 50);
-            setTimeout(showTouchControls, 150);
-            setTimeout(showTouchControls, 300);
-            setTimeout(showTouchControls, 500);
+            setTimeout(reinitTouchControls, 50);
+            setTimeout(reinitTouchControls, 150);
+            setTimeout(reinitTouchControls, 300);
+            setTimeout(reinitTouchControls, 500);
+            setTimeout(reinitTouchControls, 800);
 
             // Recriar intervals de spawn (podem ter sido limpos em endGame anterior)
             if (!foodSpawnInterval) {
