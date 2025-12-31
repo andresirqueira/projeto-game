@@ -152,13 +152,19 @@
                     <p class="difficulty-desc" id="difficultyDesc">CPU com velocidade e inteligência normais.</p>
                 </div>
                 
-                <div class="control-selection">
+                <div class="control-selection" id="controlSelection">
                     <h4>📱 Controle Mobile:</h4>
                     <div class="control-options">
                         <button class="control-btn" data-control="drag" id="controlDrag" onclick="selectControlMode('drag')">👆 Arrastar Pássaro</button>
                         <button class="control-btn" data-control="joystick" id="controlJoystick" onclick="selectControlMode('joystick')">🎮 Joystick</button>
                     </div>
                     <p class="control-desc" id="controlDesc">Toque e arraste o pássaro diretamente pela tela.</p>
+                </div>
+                
+                <div class="fullscreen-selection">
+                    <h4>🖥️ Tela Cheia:</h4>
+                    <button class="fullscreen-option-btn" id="fullscreenOptionBtn" onclick="toggleFullscreen()">⛶ Ativar Tela Cheia</button>
+                    <p class="fullscreen-desc">Use toda a tela para uma experiência imersiva.</p>
                 </div>
                 
                 <div class="reset-section">

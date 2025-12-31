@@ -9,12 +9,36 @@ const CANVAS_BASE_HEIGHT = 500;
 function resizeCanvasForMobile() {
     const isMobile = window.innerWidth <= 750;
     const isLandscape = window.innerHeight < window.innerWidth && window.innerHeight <= 600;
+    const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || 
+                            document.mozFullScreenElement || document.msFullscreenElement);
     
     // Sempre manter tamanho interno fixo para não quebrar cálculos
     canvas.width = CANVAS_BASE_WIDTH;
     canvas.height = CANVAS_BASE_HEIGHT;
     
-    if (isMobile) {
+    // Em tela cheia (desktop ou mobile), ajustar para caber na viewport
+    if (isFullscreen) {
+        const aspectRatio = CANVAS_BASE_HEIGHT / CANVAS_BASE_WIDTH;
+        const availableWidth = window.innerWidth;
+        const availableHeight = window.innerHeight;
+        
+        let newWidth, newHeight;
+        
+        // Calcular para caber na viewport mantendo proporção
+        newWidth = availableWidth;
+        newHeight = newWidth * aspectRatio;
+        
+        // Se a altura calculada for maior que a disponível, ajustar pela altura
+        if (newHeight > availableHeight) {
+            newHeight = availableHeight;
+            newWidth = newHeight / aspectRatio;
+        }
+        
+        canvas.style.width = newWidth + 'px';
+        canvas.style.height = newHeight + 'px';
+        canvas.style.maxWidth = newWidth + 'px';
+        canvas.style.maxHeight = newHeight + 'px';
+    } else if (isMobile) {
         const aspectRatio = CANVAS_BASE_HEIGHT / CANVAS_BASE_WIDTH;
         let newWidth, newHeight;
         
@@ -3395,6 +3419,17 @@ document.addEventListener('keydown', (e) => {
     keys[e.key.toLowerCase()] = true;
     keys[e.code] = true;
 
+    // Prevenir scroll quando usar setas ou WASD em tela cheia
+    const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || 
+                            document.mozFullScreenElement || document.msFullscreenElement);
+    if (isFullscreen && gameRunning) {
+        const arrowKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+        const wasdKeys = ['w', 'a', 's', 'd'];
+        if (arrowKeys.includes(e.key) || wasdKeys.includes(e.key.toLowerCase())) {
+            e.preventDefault();
+        }
+    }
+
     // Atalhos de debug (só funcionam se debugMode estiver ativo)
     if (debugMode && gameRunning) {
         // Pressionar 'D' + 'B' para simular vitória do boss
@@ -3458,6 +3493,10 @@ function initTouchControls() {
     // Touch Start
     function handleTouchStart(e) {
         if (!gameRunning) return;
+        
+        // Só permitir controles touch no mobile
+        const isMobile = isMobileDevice();
+        if (!isMobile) return;
         
         const touch = e.touches[0];
         const touchX = touch.clientX;
@@ -5680,8 +5719,9 @@ function updatePlayer() {
     let moveX = 0;
     let moveY = 0;
 
-    // Touch (Modo Arrasto - move diretamente para o toque)
-    if (touchControls.dragActive && touchControls.dragMode) {
+    // Touch (Modo Arrasto - move diretamente para o toque) - apenas no mobile
+    const isMobile = isMobileDevice();
+    if (touchControls.dragActive && touchControls.dragMode && isMobile) {
         const dx = touchControls.dragTargetX - player.x;
         const dy = touchControls.dragTargetY - player.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -5700,8 +5740,8 @@ function updatePlayer() {
             else if (normalizedX < 0) player.facingRight = false;
         }
     }
-    // Touch (Joystick - modo antigo)
-    else if (touchControls.joystickActive && !touchControls.dragMode) {
+    // Touch (Joystick - modo antigo) - apenas no mobile
+    else if (touchControls.joystickActive && !touchControls.dragMode && isMobile) {
         const joystickX = touchControls.joystickX;
         const joystickY = touchControls.joystickY;
         const distance = Math.sqrt(joystickX * joystickX + joystickY * joystickY);
@@ -20311,6 +20351,13 @@ function initControlUI() {
     const savedMode = (gameProgress.settings && gameProgress.settings.controlMode) || 'drag';
     touchControls.dragMode = (savedMode === 'drag');
     
+    // Esconder seção de controle mobile no desktop
+    const controlSelection = document.getElementById('controlSelection');
+    if (controlSelection) {
+        const isMobile = isMobileDevice();
+        controlSelection.style.display = isMobile ? 'block' : 'none';
+    }
+    
     // Atualizar visual dos botões
     document.querySelectorAll('.control-btn').forEach(btn => {
         btn.classList.remove('selected');
@@ -20328,6 +20375,9 @@ function initControlUI() {
             controlDesc.textContent = 'Use o joystick virtual para controlar o pássaro.';
         }
     }
+    
+    // Atualizar botão de tela cheia
+    updateFullscreenOptionButton();
 }
 
 // Atualizar cor da CPU para ser diferente do jogador
@@ -20527,11 +20577,44 @@ function toggleFullscreen() {
     }
 }
 
+// Função para ajustar layout quando entrar/sair de tela cheia
+function handleFullscreenChange() {
+    const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || 
+                           document.mozFullScreenElement || document.msFullscreenElement);
+    
+    if (isFullscreen) {
+        // Desabilitar scroll quando em tela cheia
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+        
+        // Redimensionar canvas para tela cheia
+        resizeCanvasForMobile();
+    } else {
+        // Restaurar scroll quando sair de tela cheia
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
+        
+        // Redimensionar canvas normalmente
+        resizeCanvasForMobile();
+    }
+    
+    updateFullscreenButton();
+}
+
 // Detectar mudanças de tela cheia
-document.addEventListener('fullscreenchange', updateFullscreenButton);
-document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
-document.addEventListener('mozfullscreenchange', updateFullscreenButton);
-document.addEventListener('MSFullscreenChange', updateFullscreenButton);
+document.addEventListener('fullscreenchange', handleFullscreenChange);
+document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+// Atualizar visibilidade da seção de controle mobile quando redimensionar
+window.addEventListener('resize', function() {
+    const controlSelection = document.getElementById('controlSelection');
+    if (controlSelection) {
+        const isMobile = isMobileDevice();
+        controlSelection.style.display = isMobile ? 'block' : 'none';
+    }
+});
 
 function updateFullscreenButton() {
     const fullscreenBtn = document.getElementById('fullscreenBtn');
@@ -20539,6 +20622,16 @@ function updateFullscreenButton() {
         const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
         fullscreenBtn.textContent = isFullscreen ? '⛶' : '⛶';
         fullscreenBtn.title = isFullscreen ? 'Sair da Tela Cheia' : 'Tela Cheia';
+    }
+    updateFullscreenOptionButton();
+}
+
+// Atualizar botão de tela cheia nas opções
+function updateFullscreenOptionButton() {
+    const fullscreenOptionBtn = document.getElementById('fullscreenOptionBtn');
+    if (fullscreenOptionBtn) {
+        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+        fullscreenOptionBtn.textContent = isFullscreen ? '⛶ Sair da Tela Cheia' : '⛶ Ativar Tela Cheia';
     }
 }
 
