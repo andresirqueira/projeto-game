@@ -16108,7 +16108,9 @@ function hideTouchControls() {
 // Função auxiliar para mostrar controles touch (apenas em mobile e quando jogo está rodando)
 function showTouchControls() {
     const touchControls = document.getElementById('touchControls');
-    if (touchControls && window.innerWidth <= 750 && gameRunning) {
+    // Verificar se é mobile (por largura OU altura)
+    const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
+    if (touchControls && isMobile && gameRunning) {
         touchControls.style.display = 'flex';
         touchControls.style.pointerEvents = 'auto';
     }
@@ -20135,6 +20137,78 @@ function updateGameVersion() {
 
 // Atualizar versão ao carregar
 updateGameVersion();
+
+// Prevenir zoom no mobile (double-tap, pinch)
+document.addEventListener('touchstart', function(e) {
+    if (e.touches.length > 1) {
+        e.preventDefault(); // Prevenir pinch zoom
+    }
+}, { passive: false });
+
+let lastTouchEnd = 0;
+document.addEventListener('touchend', function(e) {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+        e.preventDefault(); // Prevenir double-tap zoom
+    }
+    lastTouchEnd = now;
+}, { passive: false });
+
+// Prevenir zoom com gestos
+document.addEventListener('gesturestart', function(e) {
+    e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('gesturechange', function(e) {
+    e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('gestureend', function(e) {
+    e.preventDefault();
+}, { passive: false });
+
+// Função para tela cheia
+function toggleFullscreen() {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
+        // Entrar em tela cheia
+        const element = document.documentElement;
+        if (element.requestFullscreen) {
+            element.requestFullscreen();
+        } else if (element.webkitRequestFullscreen) {
+            element.webkitRequestFullscreen();
+        } else if (element.mozRequestFullScreen) {
+            element.mozRequestFullScreen();
+        } else if (element.msRequestFullscreen) {
+            element.msRequestFullscreen();
+        }
+    } else {
+        // Sair de tela cheia
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.mozCancelFullScreen) {
+            document.mozCancelFullScreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+    }
+}
+
+// Detectar mudanças de tela cheia
+document.addEventListener('fullscreenchange', updateFullscreenButton);
+document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+document.addEventListener('mozfullscreenchange', updateFullscreenButton);
+document.addEventListener('MSFullscreenChange', updateFullscreenButton);
+
+function updateFullscreenButton() {
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    if (fullscreenBtn) {
+        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+        fullscreenBtn.textContent = isFullscreen ? '⛶' : '⛶';
+        fullscreenBtn.title = isFullscreen ? 'Sair da Tela Cheia' : 'Tela Cheia';
+    }
+}
 
 // Iniciar animação do menu
 animateMenu();

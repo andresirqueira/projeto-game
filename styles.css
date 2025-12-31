@@ -4,6 +4,21 @@
             box-sizing: border-box;
         }
 
+        /* Prevenir zoom e seleção de texto no mobile */
+        html, body {
+            touch-action: manipulation;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Permitir seleção apenas em inputs e textareas */
+        input, textarea {
+            -webkit-user-select: text;
+            user-select: text;
+        }
+
         body {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             min-height: 100vh;
@@ -1768,6 +1783,17 @@
         .audio-btn.muted:hover {
             background: rgba(231, 76, 60, 0.7);
         }
+
+        .audio-btn.fullscreen-btn {
+            display: none; /* Escondido por padrão (desktop) */
+        }
+
+        /* Mostrar botão de tela cheia apenas em mobile */
+        @media screen and (max-width: 750px), screen and (max-height: 750px) {
+            .audio-btn.fullscreen-btn {
+                display: flex !important;
+            }
+        }
         
         @media screen and (max-width: 750px) {
             .audio-controls {
@@ -1795,7 +1821,8 @@
             user-select: none;
         }
 
-        @media screen and (max-width: 750px) {
+        /* Mobile - Portrait ou Landscape */
+        @media screen and (max-width: 750px), screen and (max-height: 750px) {
             .touch-controls {
                 display: none !important; /* Escondido por padrão */
                 justify-content: flex-start;
