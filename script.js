@@ -56,13 +56,49 @@ function resizeCanvasForMobile() {
     }
 }
 
+// Função para verificar orientação e mostrar/esconder overlay de rotação
+function checkOrientation() {
+    const rotateOverlay = document.getElementById('rotateOverlay');
+    const menuOverlay = document.getElementById('menuOverlay');
+    if (!rotateOverlay) return;
+    
+    const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
+    const isPortrait = window.innerHeight > window.innerWidth;
+    
+    // Verificar se o menu está visível
+    const isMenuVisible = !menuOverlay || 
+        (menuOverlay.style.display !== 'none' && 
+         window.getComputedStyle(menuOverlay).display !== 'none');
+    
+    // Mostrar overlay apenas em mobile portrait quando o menu estiver visível
+    if (isMobile && isPortrait && isMenuVisible) {
+        rotateOverlay.classList.add('active');
+    } else {
+        rotateOverlay.classList.remove('active');
+    }
+}
+
 // Redimensionar ao carregar e ao redimensionar janela
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', resizeCanvasForMobile);
+    document.addEventListener('DOMContentLoaded', () => {
+        resizeCanvasForMobile();
+        checkOrientation();
+    });
 } else {
     resizeCanvasForMobile();
+    checkOrientation();
 }
-window.addEventListener('resize', resizeCanvasForMobile);
+window.addEventListener('resize', () => {
+    resizeCanvasForMobile();
+    checkOrientation();
+});
+window.addEventListener('orientationchange', () => {
+    // Pequeno delay para garantir que a orientação foi atualizada
+    setTimeout(() => {
+        resizeCanvasForMobile();
+        checkOrientation();
+    }, 100);
+});
 
 // Estado do jogo
 let gameRunning = false;
@@ -15422,6 +15458,9 @@ function goToRoadmap() {
         // Remover estilo inline se houver, para que o CSS padrão funcione
         menuOverlay.style.removeProperty('display');
     }
+    
+    // Verificar orientação ao voltar ao menu
+    checkOrientation();
 
     // Fechar sub-fases se estiver aberta
     const substagesOverlay = document.getElementById('substagesOverlay');
@@ -16734,6 +16773,9 @@ function selectSubstage(area, substage) {
 
     document.getElementById('menuOverlay').style.display = 'none';
     document.getElementById('gameContainer').classList.add('active');
+    
+    // Esconder overlay de rotação quando o jogo iniciar
+    checkOrientation();
 
     if (menuAnimFrame) {
         cancelAnimationFrame(menuAnimFrame);
