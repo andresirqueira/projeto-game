@@ -1,6 +1,69 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+// Tamanho base do canvas (mantido fixo internamente)
+const CANVAS_BASE_WIDTH = 800;
+const CANVAS_BASE_HEIGHT = 500;
+
+// Função para redimensionar canvas visualmente em mobile (mantém tamanho interno fixo)
+function resizeCanvasForMobile() {
+    const isMobile = window.innerWidth <= 750;
+    const isLandscape = window.innerHeight < window.innerWidth && window.innerHeight <= 600;
+    
+    // Sempre manter tamanho interno fixo para não quebrar cálculos
+    canvas.width = CANVAS_BASE_WIDTH;
+    canvas.height = CANVAS_BASE_HEIGHT;
+    
+    if (isMobile) {
+        const aspectRatio = CANVAS_BASE_HEIGHT / CANVAS_BASE_WIDTH;
+        let newWidth, newHeight;
+        
+        if (isLandscape) {
+            // Em landscape, considerar altura disponível (descontando controles touch e UI)
+            // Espaço para UI superior (~60px) + controles touch inferiores (~140px)
+            const uiSpace = 200;
+            const availableHeight = Math.max(window.innerHeight - uiSpace, 200);
+            const maxWidth = window.innerWidth - 10; // Margem mínima
+            
+            // Calcular baseado na altura disponível primeiro
+            newHeight = Math.min(availableHeight, CANVAS_BASE_HEIGHT);
+            newWidth = newHeight / aspectRatio;
+            
+            // Se a largura calculada for maior que a disponível, ajustar pela largura
+            if (newWidth > maxWidth) {
+                newWidth = maxWidth;
+                newHeight = newWidth * aspectRatio;
+            }
+            
+            // Garantir que não ultrapasse a altura disponível
+            if (newHeight > availableHeight) {
+                newHeight = availableHeight;
+                newWidth = newHeight / aspectRatio;
+            }
+        } else {
+            // Em portrait, usar largura disponível
+            const maxWidth = window.innerWidth - 20;
+            newWidth = Math.min(maxWidth, CANVAS_BASE_WIDTH);
+            newHeight = newWidth * aspectRatio;
+        }
+        
+        canvas.style.width = newWidth + 'px';
+        canvas.style.height = newHeight + 'px';
+    } else {
+        // Desktop: tamanho fixo
+        canvas.style.width = CANVAS_BASE_WIDTH + 'px';
+        canvas.style.height = CANVAS_BASE_HEIGHT + 'px';
+    }
+}
+
+// Redimensionar ao carregar e ao redimensionar janela
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', resizeCanvasForMobile);
+} else {
+    resizeCanvasForMobile();
+}
+window.addEventListener('resize', resizeCanvasForMobile);
+
 // Estado do jogo
 let gameRunning = false;
 let gameStarted = false;
@@ -3228,6 +3291,17 @@ function drawWormHoles() {
 // Controles
 const keys = {};
 
+// Controles Touch (mobile)
+let touchControls = {
+    active: false,
+    joystickActive: false,
+    joystickX: 0,
+    joystickY: 0,
+    joystickBaseX: 0,
+    joystickBaseY: 0,
+    joystickRadius: 50
+};
+
 // Modo Debug (ativar no console: window.debugMode = true)
 let debugMode = false;
 window.debugMode = false; // Pode ser ativado no console do navegador
@@ -3291,6 +3365,106 @@ document.addEventListener('keyup', (e) => {
     keys[e.key.toLowerCase()] = false;
     keys[e.code] = false;
 });
+
+// Controles Touch (Mobile)
+function initTouchControls() {
+    const joystickBase = document.getElementById('joystickBase');
+    const joystickStick = document.getElementById('joystickStick');
+    
+    if (!joystickBase || !joystickStick) return;
+
+    // Obter posição do joystick base
+    function getJoystickBasePosition() {
+        const rect = joystickBase.getBoundingClientRect();
+        touchControls.joystickBaseX = rect.left + rect.width / 2;
+        touchControls.joystickBaseY = rect.top + rect.height / 2;
+        touchControls.joystickRadius = rect.width / 2;
+    }
+
+    // Inicializar posição
+    getJoystickBasePosition();
+    window.addEventListener('resize', getJoystickBasePosition);
+
+    // Touch Start
+    function handleTouchStart(e) {
+        if (!gameRunning) return;
+        
+        const touch = e.touches[0];
+        const touchX = touch.clientX;
+        const touchY = touch.clientY;
+        
+        // Verificar se tocou no joystick
+        const rect = joystickBase.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const distance = Math.sqrt(
+            Math.pow(touchX - centerX, 2) + Math.pow(touchY - centerY, 2)
+        );
+        
+        if (distance <= touchControls.joystickRadius * 2) {
+            touchControls.joystickActive = true;
+            updateJoystick(touchX, touchY);
+            e.preventDefault();
+        }
+    }
+
+    // Touch Move
+    function handleTouchMove(e) {
+        if (!touchControls.joystickActive) return;
+        
+        const touch = e.touches[0];
+        updateJoystick(touch.clientX, touch.clientY);
+        e.preventDefault();
+    }
+
+    // Touch End
+    function handleTouchEnd(e) {
+        if (touchControls.joystickActive) {
+            touchControls.joystickActive = false;
+            touchControls.joystickX = 0;
+            touchControls.joystickY = 0;
+            joystickStick.style.transform = 'translate(0, 0)';
+            e.preventDefault();
+        }
+    }
+
+    // Atualizar posição do joystick
+    function updateJoystick(touchX, touchY) {
+        const baseX = touchControls.joystickBaseX;
+        const baseY = touchControls.joystickBaseY;
+        const radius = touchControls.joystickRadius;
+        
+        let deltaX = touchX - baseX;
+        let deltaY = touchY - baseY;
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        // Limitar ao raio do joystick
+        if (distance > radius) {
+            deltaX = (deltaX / distance) * radius;
+            deltaY = (deltaY / distance) * radius;
+        }
+        
+        touchControls.joystickX = deltaX;
+        touchControls.joystickY = deltaY;
+        
+        // Atualizar visual
+        joystickStick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+    }
+
+    // Event listeners para joystick
+    joystickBase.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+}
+
+// Inicializar controles touch quando a página carregar
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTouchControls);
+} else {
+    initTouchControls();
+}
 
 // Criar comida normal (cai do céu)
 function spawnFood() {
@@ -5323,20 +5497,42 @@ function updatePlayer() {
         return;
     }
 
-    // WASD e Setas
-    if (keys['w'] || keys['arrowup'] || keys['ArrowUp']) player.dy = -player.speed;
-    else if (keys['s'] || keys['arrowdown'] || keys['ArrowDown']) player.dy = player.speed;
-    else player.dy = 0;
+    // Controles: Teclado OU Touch
+    let moveX = 0;
+    let moveY = 0;
+
+    // Teclado (WASD e Setas)
+    if (keys['w'] || keys['arrowup'] || keys['ArrowUp']) moveY = -player.speed;
+    else if (keys['s'] || keys['arrowdown'] || keys['ArrowDown']) moveY = player.speed;
 
     if (keys['a'] || keys['arrowleft'] || keys['ArrowLeft']) {
-        player.dx = -player.speed;
+        moveX = -player.speed;
         player.facingRight = false;
     } else if (keys['d'] || keys['arrowright'] || keys['ArrowRight']) {
-        player.dx = player.speed;
+        moveX = player.speed;
         player.facingRight = true;
-    } else {
-        player.dx = 0;
     }
+
+    // Touch (Joystick)
+    if (touchControls.joystickActive) {
+        const joystickX = touchControls.joystickX;
+        const joystickY = touchControls.joystickY;
+        const distance = Math.sqrt(joystickX * joystickX + joystickY * joystickY);
+        
+        if (distance > 5) { // Dead zone
+            const normalizedX = joystickX / distance;
+            const normalizedY = joystickY / distance;
+            moveX = normalizedX * player.speed;
+            moveY = normalizedY * player.speed;
+            
+            // Atualizar direção
+            if (normalizedX > 0) player.facingRight = true;
+            else if (normalizedX < 0) player.facingRight = false;
+        }
+    }
+
+    player.dx = moveX;
+    player.dy = moveY;
 
     player.x += player.dx;
     player.y += player.dy;
@@ -14765,6 +14961,8 @@ function simulateDefeat() {
 // Fim do jogo
 function endGame() {
     gameRunning = false;
+    // Esconder controles touch quando o jogo parar
+    hideTouchControls();
 
     // OTIMIZAÇÃO: Limpar todos os intervals para evitar memory leaks
     if (foodSpawnInterval) {
@@ -15149,6 +15347,9 @@ function goToRoadmap() {
     // Fechar tela de game over e jogo
     document.getElementById('gameOver').style.display = 'none';
     document.getElementById('gameContainer').classList.remove('active');
+    
+    // Esconder controles touch ao voltar ao menu
+    hideTouchControls();
 
     // NÃO esconder o menu - ele deve ficar visível ao fundo
     const menuOverlay = document.getElementById('menuOverlay');
@@ -15895,7 +16096,28 @@ function openRoadmap() {
 }
 
 // Fechar roadmap (mantém menu visível ao fundo)
+// Função auxiliar para esconder controles touch
+function hideTouchControls() {
+    const touchControls = document.getElementById('touchControls');
+    if (touchControls) {
+        touchControls.style.display = 'none';
+        touchControls.style.pointerEvents = 'none';
+    }
+}
+
+// Função auxiliar para mostrar controles touch (apenas em mobile e quando jogo está rodando)
+function showTouchControls() {
+    const touchControls = document.getElementById('touchControls');
+    if (touchControls && window.innerWidth <= 750 && gameRunning) {
+        touchControls.style.display = 'flex';
+        touchControls.style.pointerEvents = 'auto';
+    }
+}
+
 function closeRoadmap() {
+    // Esconder controles touch ao fechar roadmap
+    hideTouchControls();
+    
     const roadmapOverlay = document.getElementById('roadmapOverlay');
     if (roadmapOverlay) {
         roadmapOverlay.classList.remove('active');
@@ -19012,6 +19234,8 @@ function showCountdown() {
             // Agora inicia o jogo de verdade
             gameStarted = true;
             gameRunning = true;
+            // Mostrar controles touch quando o jogo começar
+            showTouchControls();
 
             // Recriar intervals de spawn (podem ter sido limpos em endGame anterior)
             if (!foodSpawnInterval) {
@@ -19115,6 +19339,8 @@ function goToMenu() {
 
     // Reset completo
     gameRunning = false;
+    // Esconder controles touch quando o jogo parar
+    hideTouchControls();
     gameStarted = false;
     playerScore = 0;
     cpuScore = 0;
