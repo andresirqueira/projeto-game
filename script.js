@@ -9496,6 +9496,7 @@ function updateIceDecorations() {
 // Desenhar cenário do pântano
 function drawSwampBackground() {
     const mistProgress = getMistProgress(); // Progresso da névoa baseado na sub-fase
+    const isMobile = isMobileDevice(); // Verificar se é mobile para otimização
 
     // Céu do pântano (sempre nublado - verde-azulado)
     const skyTop = interpolateColor('#2C5F5F', '#1E4A4A', mistProgress); // Verde-azulado escuro
@@ -9520,8 +9521,9 @@ function drawSwampBackground() {
         ctx.globalAlpha = 1;
     }
 
-    // Nuvens extras para céu mais nublado
-    for (let i = 0; i < 3; i++) {
+    // Nuvens extras para céu mais nublado (reduzir no mobile)
+    const extraCloudsCount = isMobile ? 1 : 3;
+    for (let i = 0; i < extraCloudsCount; i++) {
         const extraCloudX = (i * 300 + Date.now() / 50) % (canvas.width + 200) - 100;
         const extraCloudY = 40 + i * 30;
         ctx.globalAlpha = 0.75;
@@ -9534,7 +9536,10 @@ function drawSwampBackground() {
     updateSwampDecorations();
 
     // Desenhar névoa no background (apenas nas bordas, não na área central onde frutas estarão)
-    for (let mist of swampMist) {
+    // Reduzir névoa no mobile
+    const mistCount = isMobile ? Math.min(swampMist.length, 2) : swampMist.length;
+    for (let i = 0; i < mistCount; i++) {
+        const mist = swampMist[i];
         // Verificar se a névoa está completamente FORA da área central (onde frutas estarão)
         const fruitAreaTop = 100;
         const fruitAreaBottom = canvas.height - 100;
@@ -9551,52 +9556,74 @@ function drawSwampBackground() {
     }
 
     // Mata fechada - muitas árvores em camadas (uma à frente da outra)
-    // Camada 1: Árvores mais ao fundo (maiores, mais escuras, mais transparentes)
-    ctx.globalAlpha = 0.4 - mistProgress * 0.2;
-    drawSwampTree(-30, 140, 12, mistProgress);
-    drawSwampTree(80, 130, 11, mistProgress);
-    drawSwampTree(200, 150, 13, mistProgress);
-    drawSwampTree(320, 135, 12, mistProgress);
-    drawSwampTree(450, 145, 11, mistProgress);
-    drawSwampTree(580, 140, 13, mistProgress);
-    drawSwampTree(700, 135, 12, mistProgress);
-    drawSwampTree(830, 150, 11, mistProgress);
+    // Reduzir número de árvores no mobile para melhor performance
+    if (isMobile) {
+        // Mobile: apenas árvores essenciais (reduzir de 23 para ~8)
+        ctx.globalAlpha = 0.4 - mistProgress * 0.2;
+        drawSwampTree(80, 130, 11, mistProgress);
+        drawSwampTree(320, 135, 12, mistProgress);
+        drawSwampTree(580, 140, 13, mistProgress);
+        
+        ctx.globalAlpha = 0.6 - mistProgress * 0.2;
+        drawSwampTree(150, 170, 16, mistProgress);
+        drawSwampTree(410, 175, 17, mistProgress);
+        drawSwampTree(670, 170, 16, mistProgress);
+        
+        ctx.globalAlpha = 0.8 - mistProgress * 0.3;
+        drawSwampTree(250, 230, 21, mistProgress);
+        drawSwampTree(510, 225, 19, mistProgress);
+    } else {
+        // Desktop: todas as árvores
+        // Camada 1: Árvores mais ao fundo (maiores, mais escuras, mais transparentes)
+        ctx.globalAlpha = 0.4 - mistProgress * 0.2;
+        drawSwampTree(-30, 140, 12, mistProgress);
+        drawSwampTree(80, 130, 11, mistProgress);
+        drawSwampTree(200, 150, 13, mistProgress);
+        drawSwampTree(320, 135, 12, mistProgress);
+        drawSwampTree(450, 145, 11, mistProgress);
+        drawSwampTree(580, 140, 13, mistProgress);
+        drawSwampTree(700, 135, 12, mistProgress);
+        drawSwampTree(830, 150, 11, mistProgress);
 
-    // Camada 2: Árvores do meio (tamanho médio-grande)
-    ctx.globalAlpha = 0.6 - mistProgress * 0.2;
-    drawSwampTree(20, 180, 15, mistProgress);
-    drawSwampTree(150, 170, 16, mistProgress);
-    drawSwampTree(280, 185, 14, mistProgress);
-    drawSwampTree(410, 175, 17, mistProgress);
-    drawSwampTree(540, 180, 15, mistProgress);
-    drawSwampTree(670, 170, 16, mistProgress);
-    drawSwampTree(800, 185, 14, mistProgress);
+        // Camada 2: Árvores do meio (tamanho médio-grande)
+        ctx.globalAlpha = 0.6 - mistProgress * 0.2;
+        drawSwampTree(20, 180, 15, mistProgress);
+        drawSwampTree(150, 170, 16, mistProgress);
+        drawSwampTree(280, 185, 14, mistProgress);
+        drawSwampTree(410, 175, 17, mistProgress);
+        drawSwampTree(540, 180, 15, mistProgress);
+        drawSwampTree(670, 170, 16, mistProgress);
+        drawSwampTree(800, 185, 14, mistProgress);
 
-    // Camada 3: Árvores da frente (muito maiores, mais visíveis)
-    ctx.globalAlpha = 0.8 - mistProgress * 0.3;
-    drawSwampTree(-10, 220, 20, mistProgress);
-    drawSwampTree(120, 215, 19, mistProgress);
-    drawSwampTree(250, 230, 21, mistProgress);
-    drawSwampTree(380, 220, 20, mistProgress);
-    drawSwampTree(510, 225, 19, mistProgress);
-    drawSwampTree(640, 215, 21, mistProgress);
-    drawSwampTree(770, 230, 20, mistProgress);
+        // Camada 3: Árvores da frente (muito maiores, mais visíveis)
+        ctx.globalAlpha = 0.8 - mistProgress * 0.3;
+        drawSwampTree(-10, 220, 20, mistProgress);
+        drawSwampTree(120, 215, 19, mistProgress);
+        drawSwampTree(250, 230, 21, mistProgress);
+        drawSwampTree(380, 220, 20, mistProgress);
+        drawSwampTree(510, 225, 19, mistProgress);
+        drawSwampTree(640, 215, 21, mistProgress);
+        drawSwampTree(770, 230, 20, mistProgress);
+    }
 
     ctx.globalAlpha = 1;
 
-    // Desenhar juncos (antes da água)
-    for (let reed of reeds) {
-        drawReed(reed);
+    // Desenhar juncos (antes da água) - reduzir no mobile
+    const reedDrawCount = isMobile ? Math.min(reeds.length, 4) : reeds.length;
+    for (let i = 0; i < reedDrawCount; i++) {
+        drawReed(reeds[i]);
     }
 
-    // Desenhar flores de lótus
-    for (let lotus of lotusFlowers) {
-        drawLotusFlower(lotus);
+    // Desenhar flores de lótus - reduzir no mobile
+    const lotusDrawCount = isMobile ? Math.min(lotusFlowers.length, 3) : lotusFlowers.length;
+    for (let i = 0; i < lotusDrawCount; i++) {
+        drawLotusFlower(lotusFlowers[i]);
     }
 
-    // Desenhar pássaros do pântano
-    for (let bird of swampBirds) {
-        drawSwampBird(bird);
+    // Desenhar pássaros do pântano - reduzir no mobile
+    const birdDrawCount = isMobile ? Math.min(swampBirds.length, 2) : swampBirds.length;
+    for (let i = 0; i < birdDrawCount; i++) {
+        drawSwampBird(swampBirds[i]);
     }
 
     // Água do pântano - RESTAURADA com garantia de que não afeta as frutas
@@ -10007,8 +10034,12 @@ function drawExtremeSwampBackground() {
 
 // Atualizar elementos decorativos do pântano
 function updateSwampDecorations() {
-    // Atualizar pássaros do pântano
-    for (let bird of swampBirds) {
+    const isMobile = isMobileDevice(); // Verificar se é mobile para otimização
+    
+    // Atualizar pássaros do pântano (reduzir no mobile)
+    const birdUpdateCount = isMobile ? Math.min(swampBirds.length, 2) : swampBirds.length;
+    for (let i = 0; i < birdUpdateCount; i++) {
+        const bird = swampBirds[i];
         bird.x += bird.speed;
         bird.wingFlap += 0.1;
         if (bird.x > canvas.width + 50) {
@@ -10017,19 +10048,25 @@ function updateSwampDecorations() {
         }
     }
 
-    // Atualizar flores de lótus
-    for (let lotus of lotusFlowers) {
+    // Atualizar flores de lótus (reduzir no mobile)
+    const lotusUpdateCount = isMobile ? Math.min(lotusFlowers.length, 3) : lotusFlowers.length;
+    for (let i = 0; i < lotusUpdateCount; i++) {
+        const lotus = lotusFlowers[i];
         lotus.rotation += lotus.rotationSpeed;
         lotus.y += Math.sin(lotus.rotation) * 0.1;
     }
 
-    // Atualizar juncos (balanço)
-    for (let reed of reeds) {
+    // Atualizar juncos (balanço) - reduzir no mobile
+    const reedUpdateCount = isMobile ? Math.min(reeds.length, 4) : reeds.length;
+    for (let i = 0; i < reedUpdateCount; i++) {
+        const reed = reeds[i];
         reed.sway += reed.swaySpeed;
     }
 
-    // Atualizar névoa
-    for (let mist of swampMist) {
+    // Atualizar névoa (reduzir no mobile)
+    const mistUpdateCount = isMobile ? Math.min(swampMist.length, 2) : swampMist.length;
+    for (let i = 0; i < mistUpdateCount; i++) {
+        const mist = swampMist[i];
         mist.x += mist.speedX;
         mist.y += mist.speedY;
         mist.time += 0.5;
@@ -10039,8 +10076,10 @@ function updateSwampDecorations() {
         if (mist.y > canvas.height + 100) mist.y = -100;
     }
 
-    // Atualizar ondulações
-    for (let ripple of waterRipples) {
+    // Atualizar ondulações (reduzir no mobile)
+    const rippleUpdateCount = isMobile ? Math.min(waterRipples.length, 2) : waterRipples.length;
+    for (let i = 0; i < rippleUpdateCount; i++) {
+        const ripple = waterRipples[i];
         ripple.radius += ripple.speed;
         ripple.time += 0.5;
         if (ripple.radius > 100) {
@@ -21029,10 +21068,11 @@ function updateWaterDrops() {
         return;
     }
 
-    // Limitar número máximo de gotas por pássaro
+    // Limitar número máximo de gotas por pássaro (reduzir no mobile)
+    const isMobile = isMobileDevice();
     const playerDrops = waterDrops.filter(d => d.birdId === 'player').length;
     const cpuDrops = waterDrops.filter(d => d.birdId === 'cpu').length;
-    const maxDropsPerBird = 8; // Máximo de 8 gotas por pássaro (mais que suor, pois é chuva)
+    const maxDropsPerBird = isMobile ? 4 : 8; // Menos gotas no mobile para melhor performance
 
     // Criar novas gotas periodicamente para cada pássaro (mais frequente que suor)
     if (!player.stunned && playerDrops < maxDropsPerBird && Math.random() < 0.12) {
@@ -21062,9 +21102,11 @@ function updateWaterDrops() {
         }
     }
 
-    // OTIMIZAÇÃO: Limitar número total de gotas (evitar memory leak)
-    if (waterDrops.length > 20) {
-        waterDrops.splice(0, waterDrops.length - 20);
+    // OTIMIZAÇÃO: Limitar número total de gotas (evitar memory leak) - reduzir no mobile
+    const isMobile = isMobileDevice();
+    const maxDrops = isMobile ? 10 : 20;
+    if (waterDrops.length > maxDrops) {
+        waterDrops.splice(0, waterDrops.length - maxDrops);
     }
 }
 
