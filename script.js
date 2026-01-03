@@ -9597,6 +9597,9 @@ function updateIceDecorations() {
 // Desenhar cenário do pântano
 function drawSwampBackground() {
     const mistProgress = getMistProgress(); // Progresso da névoa baseado na sub-fase
+    
+    // Detectar mobile para aplicar otimizações
+    const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
 
     // Céu do pântano (sempre nublado - verde-azulado)
     const skyTop = interpolateColor('#2C5F5F', '#1E4A4A', mistProgress); // Verde-azulado escuro
@@ -9622,8 +9625,10 @@ function drawSwampBackground() {
     }
 
     // Nuvens extras para céu mais nublado
-    for (let i = 0; i < 3; i++) {
-        const extraCloudX = (i * 300 + Date.now() / 50) % (canvas.width + 200) - 100;
+    // OTIMIZAÇÃO MOBILE: Reduzir nuvens extras no mobile
+    const extraCloudCount = isMobile ? 1 : 3; // Mobile: apenas 1 nuvem extra (vs 3 no desktop)
+    for (let i = 0; i < extraCloudCount; i++) {
+        const extraCloudX = (i * (300 * (3 / extraCloudCount)) + Date.now() / 50) % (canvas.width + 200) - 100;
         const extraCloudY = 40 + i * 30;
         ctx.globalAlpha = 0.75;
         ctx.fillStyle = 'rgba(35, 70, 80, 0.85)';
@@ -9652,36 +9657,57 @@ function drawSwampBackground() {
     }
 
     // Mata fechada - muitas árvores em camadas (uma à frente da outra)
-    // Camada 1: Árvores mais ao fundo (maiores, mais escuras, mais transparentes)
-    ctx.globalAlpha = 0.4 - mistProgress * 0.2;
-    drawSwampTree(-30, 140, 12, mistProgress);
-    drawSwampTree(80, 130, 11, mistProgress);
-    drawSwampTree(200, 150, 13, mistProgress);
-    drawSwampTree(320, 135, 12, mistProgress);
-    drawSwampTree(450, 145, 11, mistProgress);
-    drawSwampTree(580, 140, 13, mistProgress);
-    drawSwampTree(700, 135, 12, mistProgress);
-    drawSwampTree(830, 150, 11, mistProgress);
+    // OTIMIZAÇÃO MOBILE: Reduzir árvores no mobile para melhorar performance
+    if (isMobile) {
+        // Mobile: Apenas 2 camadas com menos árvores (total: ~10 árvores)
+        // Camada 1: Árvores mais ao fundo (reduzidas)
+        ctx.globalAlpha = 0.4 - mistProgress * 0.2;
+        drawSwampTree(100, 140, 12, mistProgress);
+        drawSwampTree(250, 150, 13, mistProgress);
+        drawSwampTree(400, 135, 12, mistProgress);
+        drawSwampTree(550, 145, 11, mistProgress);
+        drawSwampTree(700, 140, 13, mistProgress);
 
-    // Camada 2: Árvores do meio (tamanho médio-grande)
-    ctx.globalAlpha = 0.6 - mistProgress * 0.2;
-    drawSwampTree(20, 180, 15, mistProgress);
-    drawSwampTree(150, 170, 16, mistProgress);
-    drawSwampTree(280, 185, 14, mistProgress);
-    drawSwampTree(410, 175, 17, mistProgress);
-    drawSwampTree(540, 180, 15, mistProgress);
-    drawSwampTree(670, 170, 16, mistProgress);
-    drawSwampTree(800, 185, 14, mistProgress);
+        // Camada 2: Árvores da frente (reduzidas)
+        ctx.globalAlpha = 0.8 - mistProgress * 0.3;
+        drawSwampTree(50, 220, 20, mistProgress);
+        drawSwampTree(200, 215, 19, mistProgress);
+        drawSwampTree(400, 230, 21, mistProgress);
+        drawSwampTree(600, 220, 20, mistProgress);
+        drawSwampTree(750, 225, 19, mistProgress);
+    } else {
+        // Desktop: Todas as árvores (3 camadas, total: 22)
+        // Camada 1: Árvores mais ao fundo (maiores, mais escuras, mais transparentes)
+        ctx.globalAlpha = 0.4 - mistProgress * 0.2;
+        drawSwampTree(-30, 140, 12, mistProgress);
+        drawSwampTree(80, 130, 11, mistProgress);
+        drawSwampTree(200, 150, 13, mistProgress);
+        drawSwampTree(320, 135, 12, mistProgress);
+        drawSwampTree(450, 145, 11, mistProgress);
+        drawSwampTree(580, 140, 13, mistProgress);
+        drawSwampTree(700, 135, 12, mistProgress);
+        drawSwampTree(830, 150, 11, mistProgress);
 
-    // Camada 3: Árvores da frente (muito maiores, mais visíveis)
-    ctx.globalAlpha = 0.8 - mistProgress * 0.3;
-    drawSwampTree(-10, 220, 20, mistProgress);
-    drawSwampTree(120, 215, 19, mistProgress);
-    drawSwampTree(250, 230, 21, mistProgress);
-    drawSwampTree(380, 220, 20, mistProgress);
-    drawSwampTree(510, 225, 19, mistProgress);
-    drawSwampTree(640, 215, 21, mistProgress);
-    drawSwampTree(770, 230, 20, mistProgress);
+        // Camada 2: Árvores do meio (tamanho médio-grande)
+        ctx.globalAlpha = 0.6 - mistProgress * 0.2;
+        drawSwampTree(20, 180, 15, mistProgress);
+        drawSwampTree(150, 170, 16, mistProgress);
+        drawSwampTree(280, 185, 14, mistProgress);
+        drawSwampTree(410, 175, 17, mistProgress);
+        drawSwampTree(540, 180, 15, mistProgress);
+        drawSwampTree(670, 170, 16, mistProgress);
+        drawSwampTree(800, 185, 14, mistProgress);
+
+        // Camada 3: Árvores da frente (muito maiores, mais visíveis)
+        ctx.globalAlpha = 0.8 - mistProgress * 0.3;
+        drawSwampTree(-10, 220, 20, mistProgress);
+        drawSwampTree(120, 215, 19, mistProgress);
+        drawSwampTree(250, 230, 21, mistProgress);
+        drawSwampTree(380, 220, 20, mistProgress);
+        drawSwampTree(510, 225, 19, mistProgress);
+        drawSwampTree(640, 215, 21, mistProgress);
+        drawSwampTree(770, 230, 20, mistProgress);
+    }
 
     ctx.globalAlpha = 1;
 
@@ -9742,12 +9768,14 @@ function drawSwampBackground() {
     ctx.stroke();
 
     // Reflexos de luz INTENSOS na superfície da água (mais visíveis)
+    // OTIMIZAÇÃO MOBILE: Reduzir reflexos no mobile
     const time = Date.now() / 1000;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'; // Mais opaco
     ctx.shadowColor = 'rgba(46, 204, 113, 0.6)';
     ctx.shadowBlur = 10;
-    for (let i = 0; i < 6; i++) {
-        const x = (i * 180 + time * 30) % (canvas.width + 100) - 50;
+    const reflectionCount = isMobile ? 3 : 6; // Mobile: metade dos reflexos
+    for (let i = 0; i < reflectionCount; i++) {
+        const x = (i * (180 * (6 / reflectionCount)) + time * 30) % (canvas.width + 100) - 50;
         const y = canvas.height - 38;
         const width = 100 + Math.sin(time + i) * 30;
         const height = 10;
@@ -9758,18 +9786,22 @@ function drawSwampBackground() {
     ctx.shadowBlur = 0;
 
     // Ondulações animadas na superfície (mais visíveis e brilhantes)
+    // OTIMIZAÇÃO MOBILE: Reduzir ondulações no mobile
     ctx.strokeStyle = 'rgba(88, 214, 141, 0.7)'; // Verde mais claro e brilhante
     ctx.lineWidth = 2.5;
     ctx.shadowColor = 'rgba(46, 204, 113, 0.4)';
     ctx.shadowBlur = 5;
-    for (let i = 0; i < canvas.width; i += 25) {
-        const waveOffset = Math.sin(time * 2 + i / 25) * 4;
+    const waveStep = isMobile ? 50 : 25; // Mobile: menos ondulações (metade)
+    const waveStart = isMobile ? 0 : 0;
+    const waveEnd = isMobile ? canvas.width : canvas.width;
+    for (let i = waveStart; i < waveEnd; i += waveStep) {
+        const waveOffset = Math.sin(time * 2 + i / waveStep) * 4;
         ctx.beginPath();
         ctx.moveTo(i, canvas.height - 37 + waveOffset);
         ctx.quadraticCurveTo(
-            i + 12.5,
-            canvas.height - 40 + waveOffset + Math.sin(time * 3 + i / 18) * 3,
-            i + 25,
+            i + waveStep / 2,
+            canvas.height - 40 + waveOffset + Math.sin(time * 3 + i / (waveStep * 0.72)) * 3,
+            i + waveStep,
             canvas.height - 37 + waveOffset
         );
         ctx.stroke();
@@ -9782,11 +9814,13 @@ function drawSwampBackground() {
     }
 
     // Partículas flutuantes na água (bolhas/reflexos mais visíveis)
+    // OTIMIZAÇÃO MOBILE: Reduzir bolhas no mobile
     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; // Mais opaco
     ctx.shadowColor = 'rgba(46, 204, 113, 0.5)';
     ctx.shadowBlur = 6;
-    for (let i = 0; i < 10; i++) {
-        const bubbleX = (i * 100 + time * 20) % canvas.width;
+    const bubbleCount = isMobile ? 5 : 10; // Mobile: metade das bolhas
+    for (let i = 0; i < bubbleCount; i++) {
+        const bubbleX = (i * (100 * (10 / bubbleCount)) + time * 20) % canvas.width;
         const bubbleY = canvas.height - 28 + Math.sin(time * 1.5 + i) * 4;
         const bubbleSize = 3 + Math.sin(time * 2 + i) * 1.5;
         ctx.beginPath();
@@ -9796,9 +9830,11 @@ function drawSwampBackground() {
     ctx.shadowBlur = 0;
 
     // Sombra/reflexo das árvores na água (mais visível)
+    // OTIMIZAÇÃO MOBILE: Reduzir reflexos de árvores no mobile
     ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-    for (let i = 0; i < 6; i++) {
-        const treeX = 40 + i * 150;
+    const treeReflectionCount = isMobile ? 3 : 6; // Mobile: metade dos reflexos
+    for (let i = 0; i < treeReflectionCount; i++) {
+        const treeX = 40 + i * (150 * (6 / treeReflectionCount));
         const reflectionY = canvas.height - 18;
         ctx.beginPath();
         ctx.ellipse(treeX, reflectionY, 35, 6, 0, 0, Math.PI * 2);
@@ -21088,9 +21124,16 @@ function createRainDrop() {
 function updateRain() {
     // Ativar na subfase 1-3 da floresta OU em todas as sub-fases do pântano
     if ((currentArea === 1 && currentSubstage === 3) || (currentArea === 2 && currentSubstage >= 1 && currentSubstage <= 7)) {
-        // Criar novas gotas periodicamente (mais intensa no pântano)
-        const rainIntensity = currentArea === 2 ? 0.4 : 0.3;
-        if (Math.random() < rainIntensity) {
+        // OTIMIZAÇÃO MOBILE: Reduzir intensidade e limite de gotas no mobile
+        const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
+        const maxRainDrops = isMobile ? 60 : 150; // Mobile: 60 gotas máximo (vs 150 no desktop)
+        
+        // Criar novas gotas periodicamente (mais intensa no pântano, mas reduzida no mobile)
+        let rainIntensity = currentArea === 2 ? 0.4 : 0.3;
+        if (isMobile) {
+            rainIntensity *= 0.5; // Reduzir intensidade pela metade no mobile
+        }
+        if (Math.random() < rainIntensity && rainDrops.length < maxRainDrops) {
             createRainDrop();
         }
 
@@ -21108,8 +21151,11 @@ function updateRain() {
         }
 
         // Limitar número máximo de gotas (performance)
-        if (rainDrops.length > 150) {
-            rainDrops.splice(0, rainDrops.length - 150);
+        // OTIMIZAÇÃO MOBILE: Limite reduzido no mobile
+        const isMobileLimit = window.innerWidth <= 750 || window.innerHeight <= 750;
+        const maxRainDropsLimit = isMobileLimit ? 60 : 150;
+        if (rainDrops.length > maxRainDropsLimit) {
+            rainDrops.splice(0, rainDrops.length - maxRainDropsLimit);
         }
     } else {
         // Limpar chuva se não estiver na área correta
