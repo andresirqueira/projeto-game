@@ -9621,14 +9621,22 @@ function drawSwampBackground() {
     const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
 
     // Céu do pântano (sempre nublado - verde-azulado)
-    const skyTop = interpolateColor('#2C5F5F', '#1E4A4A', mistProgress); // Verde-azulado escuro
-    const skyBottom = interpolateColor('#3D7A7A', '#2E5F5F', mistProgress); // Verde-azulado médio
-
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
-    skyGradient.addColorStop(0, skyTop);
-    skyGradient.addColorStop(1, skyBottom);
-    ctx.fillStyle = skyGradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // OTIMIZAÇÃO MOBILE: No mobile, usar cor sólida ao invés de gradiente
+    if (isMobile) {
+        // Mobile: cor sólida (muito mais rápido)
+        const skyColor = interpolateColor('#2C5F5F', '#1E4A4A', mistProgress);
+        ctx.fillStyle = skyColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+        // Desktop: gradiente (melhor qualidade)
+        const skyTop = interpolateColor('#2C5F5F', '#1E4A4A', mistProgress);
+        const skyBottom = interpolateColor('#3D7A7A', '#2E5F5F', mistProgress);
+        const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
+        skyGradient.addColorStop(0, skyTop);
+        skyGradient.addColorStop(1, skyBottom);
+        ctx.fillStyle = skyGradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
     // Muitas nuvens escuras (céu sempre nublado)
     for (let cloud of clouds) {
@@ -9731,47 +9739,82 @@ function drawSwampBackground() {
     ctx.globalAlpha = 1;
 
     // Desenhar juncos (antes da água)
-    for (let reed of reeds) {
-        drawReed(reed);
+    // OTIMIZAÇÃO MOBILE: Reduzir elementos decorativos no mobile
+    if (!isMobile || reeds.length <= 5) {
+        for (let reed of reeds) {
+            drawReed(reed);
+        }
+    } else {
+        // Mobile: desenhar apenas metade dos juncos
+        for (let i = 0; i < reeds.length; i += 2) {
+            drawReed(reeds[i]);
+        }
     }
 
     // Desenhar flores de lótus
-    for (let lotus of lotusFlowers) {
-        drawLotusFlower(lotus);
+    // OTIMIZAÇÃO MOBILE: Reduzir flores no mobile
+    if (!isMobile || lotusFlowers.length <= 3) {
+        for (let lotus of lotusFlowers) {
+            drawLotusFlower(lotus);
+        }
+    } else {
+        // Mobile: desenhar apenas metade das flores
+        for (let i = 0; i < lotusFlowers.length; i += 2) {
+            drawLotusFlower(lotusFlowers[i]);
+        }
     }
 
     // Desenhar pássaros do pântano
-    for (let bird of swampBirds) {
-        drawSwampBird(bird);
+    // OTIMIZAÇÃO MOBILE: Reduzir pássaros no mobile
+    if (!isMobile || swampBirds.length <= 1) {
+        for (let bird of swampBirds) {
+            drawSwampBird(bird);
+        }
+    } else {
+        // Mobile: desenhar apenas metade dos pássaros
+        for (let i = 0; i < swampBirds.length; i += 2) {
+            drawSwampBird(swampBirds[i]);
+        }
     }
 
     // Água do pântano - RESTAURADA com garantia de que não afeta as frutas
     ctx.save(); // Salvar estado do canvas antes de desenhar água
 
     // Base da água (verde muito mais saturado e brilhante)
-    const waterTop = '#2ecc71'; // Verde muito mais claro e vibrante
-    const waterMiddle = '#27ae60'; // Verde médio brilhante
-    const waterBottom = '#1e8449'; // Verde escuro mas ainda visível
-    const waterGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
-    waterGradient.addColorStop(0, waterTop);
-    waterGradient.addColorStop(0.3, waterMiddle);
-    waterGradient.addColorStop(0.7, '#229954');
-    waterGradient.addColorStop(1, waterBottom);
-    ctx.fillStyle = waterGradient;
-    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+    // OTIMIZAÇÃO MOBILE: No mobile, usar cor sólida ao invés de gradiente
+    if (isMobile) {
+        // Mobile: cor sólida (muito mais rápido)
+        ctx.fillStyle = '#27ae60';
+        ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+    } else {
+        // Desktop: gradiente (melhor qualidade)
+        const waterTop = '#2ecc71';
+        const waterMiddle = '#27ae60';
+        const waterBottom = '#1e8449';
+        const waterGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
+        waterGradient.addColorStop(0, waterTop);
+        waterGradient.addColorStop(0.3, waterMiddle);
+        waterGradient.addColorStop(0.7, '#229954');
+        waterGradient.addColorStop(1, waterBottom);
+        ctx.fillStyle = waterGradient;
+        ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
 
-    // Brilho intenso na superfície da água (efeito de luz)
-    const glowGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height - 20);
-    glowGradient.addColorStop(0, 'rgba(46, 204, 113, 0.4)');
-    glowGradient.addColorStop(1, 'rgba(46, 204, 113, 0)');
-    ctx.fillStyle = glowGradient;
-    ctx.fillRect(0, canvas.height - 40, canvas.width, 20);
+        // Brilho intenso na superfície da água (efeito de luz)
+        const glowGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height - 20);
+        glowGradient.addColorStop(0, 'rgba(46, 204, 113, 0.4)');
+        glowGradient.addColorStop(1, 'rgba(46, 204, 113, 0)');
+        ctx.fillStyle = glowGradient;
+        ctx.fillRect(0, canvas.height - 40, canvas.width, 20);
+    }
 
     // Linha de borda superior da água (destaque BRILHANTE)
+    // OTIMIZAÇÃO MOBILE: Reduzir sombras no mobile
     ctx.strokeStyle = '#58d68d'; // Verde muito claro e brilhante
     ctx.lineWidth = 3;
-    ctx.shadowColor = '#2ecc71';
-    ctx.shadowBlur = 8;
+    if (!isMobile) {
+        ctx.shadowColor = '#2ecc71';
+        ctx.shadowBlur = 8;
+    }
     ctx.beginPath();
     ctx.moveTo(0, canvas.height - 40);
     ctx.lineTo(canvas.width, canvas.height - 40);
@@ -9787,12 +9830,14 @@ function drawSwampBackground() {
     ctx.stroke();
 
     // Reflexos de luz INTENSOS na superfície da água (mais visíveis)
-    // OTIMIZAÇÃO MOBILE: Reduzir reflexos no mobile
+    // OTIMIZAÇÃO MOBILE: Reduzir reflexos e sombras no mobile
     const time = Date.now() / 1000;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'; // Mais opaco
-    ctx.shadowColor = 'rgba(46, 204, 113, 0.6)';
-    ctx.shadowBlur = 10;
-    const reflectionCount = isMobile ? 3 : 6; // Mobile: metade dos reflexos
+    if (!isMobile) {
+        ctx.shadowColor = 'rgba(46, 204, 113, 0.6)';
+        ctx.shadowBlur = 10;
+    }
+    const reflectionCount = isMobile ? 2 : 6; // Mobile: reduzir ainda mais
     for (let i = 0; i < reflectionCount; i++) {
         const x = (i * (180 * (6 / reflectionCount)) + time * 30) % (canvas.width + 100) - 50;
         const y = canvas.height - 38;
@@ -9805,12 +9850,14 @@ function drawSwampBackground() {
     ctx.shadowBlur = 0;
 
     // Ondulações animadas na superfície (mais visíveis e brilhantes)
-    // OTIMIZAÇÃO MOBILE: Reduzir ondulações no mobile
+    // OTIMIZAÇÃO MOBILE: Reduzir ondulações e sombras no mobile
     ctx.strokeStyle = 'rgba(88, 214, 141, 0.7)'; // Verde mais claro e brilhante
     ctx.lineWidth = 2.5;
-    ctx.shadowColor = 'rgba(46, 204, 113, 0.4)';
-    ctx.shadowBlur = 5;
-    const waveStep = isMobile ? 50 : 25; // Mobile: menos ondulações (metade)
+    if (!isMobile) {
+        ctx.shadowColor = 'rgba(46, 204, 113, 0.4)';
+        ctx.shadowBlur = 5;
+    }
+    const waveStep = isMobile ? 75 : 25; // Mobile: ainda menos ondulações
     const waveStart = isMobile ? 0 : 0;
     const waveEnd = isMobile ? canvas.width : canvas.width;
     for (let i = waveStart; i < waveEnd; i += waveStep) {
@@ -9828,16 +9875,26 @@ function drawSwampBackground() {
     ctx.shadowBlur = 0;
 
     // Desenhar ondulações na água (ripples)
-    for (let ripple of waterRipples) {
-        drawWaterRipple(ripple);
+    // OTIMIZAÇÃO MOBILE: Reduzir ondulações no mobile
+    if (!isMobile || waterRipples.length <= 3) {
+        for (let ripple of waterRipples) {
+            drawWaterRipple(ripple);
+        }
+    } else {
+        // Mobile: desenhar apenas metade das ondulações
+        for (let i = 0; i < waterRipples.length; i += 2) {
+            drawWaterRipple(waterRipples[i]);
+        }
     }
 
     // Partículas flutuantes na água (bolhas/reflexos mais visíveis)
-    // OTIMIZAÇÃO MOBILE: Reduzir bolhas no mobile
+    // OTIMIZAÇÃO MOBILE: Reduzir bolhas e sombras no mobile
     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; // Mais opaco
-    ctx.shadowColor = 'rgba(46, 204, 113, 0.5)';
-    ctx.shadowBlur = 6;
-    const bubbleCount = isMobile ? 5 : 10; // Mobile: metade das bolhas
+    if (!isMobile) {
+        ctx.shadowColor = 'rgba(46, 204, 113, 0.5)';
+        ctx.shadowBlur = 6;
+    }
+    const bubbleCount = isMobile ? 3 : 10; // Mobile: reduzir ainda mais
     for (let i = 0; i < bubbleCount; i++) {
         const bubbleX = (i * (100 * (10 / bubbleCount)) + time * 20) % canvas.width;
         const bubbleY = canvas.height - 28 + Math.sin(time * 1.5 + i) * 4;
@@ -9870,7 +9927,10 @@ function drawSwampBackground() {
     ctx.globalAlpha = 1.0; // Garantir opacidade total após desenhar água
 
     // Detalhes do pântano: plantas aquáticas, troncos, pedras molhadas
-    drawSwampDetails(mistProgress);
+    // OTIMIZAÇÃO MOBILE: Simplificar ou pular detalhes no mobile
+    if (!isMobile) {
+        drawSwampDetails(mistProgress);
+    }
 }
 
 // Desenhar detalhes do pântano (plantas, troncos, pedras) - otimizado
