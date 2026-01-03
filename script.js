@@ -50,7 +50,7 @@ function resizeCanvasForMobile() {
             // Calcular para ocupar o máximo de espaço possível mantendo proporção
             // Tentar usar toda a largura primeiro
             newWidth = availableWidth;
-            newHeight = newWidth * aspectRatio;
+                newHeight = newWidth * aspectRatio;
             
             // Se a altura calculada for maior que a disponível, ajustar pela altura
             if (newHeight > availableHeight) {
@@ -69,7 +69,7 @@ function resizeCanvasForMobile() {
             if (newHeight > availableHeight) {
                 newHeight = availableHeight;
                 newWidth = newHeight * aspectRatio;
-            }
+        }
         }
         
         // No mobile, usar CSS para ocupar toda a tela
@@ -81,8 +81,8 @@ function resizeCanvasForMobile() {
             canvas.style.maxWidth = '100vw';
             canvas.style.maxHeight = '100vh';
         } else {
-            canvas.style.width = newWidth + 'px';
-            canvas.style.height = newHeight + 'px';
+        canvas.style.width = newWidth + 'px';
+        canvas.style.height = newHeight + 'px';
         }
     } else {
         // Desktop: tamanho fixo
@@ -3384,97 +3384,93 @@ let touchControls = {
 let debugMode = false;
 window.debugMode = false; // Pode ser ativado no console do navegador
 
-// Função para alternar modo debug (pode ser chamada de qualquer lugar)
-function toggleDebugMode() {
-    debugMode = !debugMode;
-    window.debugMode = debugMode;
-    console.log('🔧 Modo Debug:', debugMode ? 'ATIVADO' : 'DESATIVADO');
-
-    // Mostrar/esconder indicador de debug
-    const debugIndicator = document.getElementById('debugIndicator');
-    if (debugIndicator) {
-        if (debugMode) {
-            debugIndicator.classList.add('active');
-        } else {
-            debugIndicator.classList.remove('active');
-        }
-    }
-
-    // Mostrar/esconder painel de debug
-    const debugPanel = document.getElementById('debugPanel');
-    if (debugPanel) {
-        if (debugMode && gameRunning) {
-            debugPanel.classList.add('active');
-        } else {
-            debugPanel.classList.remove('active');
-        }
-    }
-    
-    // Atualizar botão no menu de opções
-    updateDebugButton();
-}
-
-// Atualizar painel de debug (botão removido, apenas gesto de toque)
-function updateDebugButton() {
-    // Atualizar painel de debug se o jogo estiver rodando
-    const debugPanel = document.getElementById('debugPanel');
-    if (debugPanel && gameRunning) {
-        if (debugMode) {
-            debugPanel.classList.add('active');
-        } else {
-            debugPanel.classList.remove('active');
-        }
-    }
-}
-
-// Atalho para ativar/desativar debug: Ctrl+Shift+D (desktop)
+// Atalho para ativar/desativar debug: Ctrl+Shift+D
 document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
-        toggleDebugMode();
+        debugMode = !debugMode;
+        window.debugMode = debugMode;
+        console.log('🔧 Modo Debug:', debugMode ? 'ATIVADO' : 'DESATIVADO');
+
+        // Mostrar/esconder indicador de debug
+        const debugIndicator = document.getElementById('debugIndicator');
+        if (debugIndicator) {
+            if (debugMode) {
+                debugIndicator.classList.add('active');
+            } else {
+                debugIndicator.classList.remove('active');
+            }
+        }
+
+        // Mostrar/esconder painel de debug
+        const debugPanel = document.getElementById('debugPanel');
+        if (debugPanel) {
+            if (debugMode && gameRunning) {
+                debugPanel.classList.add('active');
+            } else {
+                debugPanel.classList.remove('active');
+            }
+        }
+
         e.preventDefault();
     }
 });
 
-// Gesto de toque para ativar debug no mobile (tocar 5 vezes rapidamente no título do menu)
-let debugTouchCount = 0;
-let debugTouchTimer = null;
-
-// Configurar gesto de toque quando o DOM estiver pronto
-function initDebugTouchGesture() {
-    const debugTouchTarget = document.querySelector('.menu-title') || document.querySelector('h1');
-    if (debugTouchTarget) {
-        debugTouchTarget.addEventListener('touchstart', function(e) {
-            debugTouchCount++;
+// Ativar modo debug no mobile: 5 toques no título do jogo
+(function() {
+    let tapCount = 0;
+    let tapTimeout = null;
+    const TAP_TIMEOUT = 2000; // Reset contador após 2 segundos
+    const TAPS_NEEDED = 5;
+    
+    const menuTitle = document.querySelector('.menu-title');
+    if (menuTitle) {
+        menuTitle.addEventListener('touchstart', (e) => {
+            e.preventDefault();
             
-            // Resetar contador após 2 segundos
-            if (debugTouchTimer) {
-                clearTimeout(debugTouchTimer);
+            // Limpar timeout anterior
+            if (tapTimeout) {
+                clearTimeout(tapTimeout);
             }
-            debugTouchTimer = setTimeout(() => {
-                debugTouchCount = 0;
-            }, 2000);
             
-            // Se tocou 5 vezes em 2 segundos, ativar debug
-            if (debugTouchCount >= 5) {
-                toggleDebugMode();
-                debugTouchCount = 0;
-                e.preventDefault();
-                // Feedback visual
-                debugTouchTarget.style.transform = 'scale(1.1)';
-                setTimeout(() => {
-                    debugTouchTarget.style.transform = '';
-                }, 200);
+            tapCount++;
+            
+            // Se chegou a 5 toques, ativar debug
+            if (tapCount >= TAPS_NEEDED) {
+                debugMode = !debugMode;
+                window.debugMode = debugMode;
+                console.log('🔧 Modo Debug:', debugMode ? 'ATIVADO' : 'DESATIVADO');
+                
+                // Mostrar/esconder indicador de debug
+                const debugIndicator = document.getElementById('debugIndicator');
+                if (debugIndicator) {
+                    if (debugMode) {
+                        debugIndicator.classList.add('active');
+                    } else {
+                        debugIndicator.classList.remove('active');
+                    }
+                }
+                
+                // Mostrar/esconder painel de debug
+                const debugPanel = document.getElementById('debugPanel');
+                if (debugPanel) {
+                    if (debugMode && gameRunning) {
+                        debugPanel.classList.add('active');
+                    } else {
+                        debugPanel.classList.remove('active');
+                    }
+                }
+                
+                // Reset contador
+                tapCount = 0;
+            } else {
+                // Reset contador após timeout
+                tapTimeout = setTimeout(() => {
+                    tapCount = 0;
+                }, TAP_TIMEOUT);
             }
-        });
+        }, { passive: false });
     }
-}
-
-// Inicializar quando o DOM estiver pronto
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initDebugTouchGesture);
-} else {
-    initDebugTouchGesture();
-}
+})();
 
 document.addEventListener('keydown', (e) => {
     keys[e.key.toLowerCase()] = true;
@@ -3592,24 +3588,24 @@ function initTouchControls() {
         
         // Modo joystick (se não estiver em drag mode ou não tocou no player)
         if (!touchControls.dragMode) {
-            // SEMPRE recalcular posição do joystick antes de verificar (crítico para landscape)
-            const rect = joystickBase.getBoundingClientRect();
-            touchControls.joystickBaseX = rect.left + rect.width / 2;
-            touchControls.joystickBaseY = rect.top + rect.height / 2;
-            touchControls.joystickRadius = rect.width / 2;
-            
-            // Verificar se tocou no joystick (usar posição recalculada)
-            const centerX = touchControls.joystickBaseX;
-            const centerY = touchControls.joystickBaseY;
-            const distance = Math.sqrt(
-                Math.pow(touchX - centerX, 2) + Math.pow(touchY - centerY, 2)
-            );
-            
-            // Área de toque maior (3x o raio) para facilitar em landscape
-            if (distance <= touchControls.joystickRadius * 3) {
-                touchControls.joystickActive = true;
-                updateJoystick(touchX, touchY);
-                e.preventDefault();
+        // SEMPRE recalcular posição do joystick antes de verificar (crítico para landscape)
+        const rect = joystickBase.getBoundingClientRect();
+        touchControls.joystickBaseX = rect.left + rect.width / 2;
+        touchControls.joystickBaseY = rect.top + rect.height / 2;
+        touchControls.joystickRadius = rect.width / 2;
+        
+        // Verificar se tocou no joystick (usar posição recalculada)
+        const centerX = touchControls.joystickBaseX;
+        const centerY = touchControls.joystickBaseY;
+        const distance = Math.sqrt(
+            Math.pow(touchX - centerX, 2) + Math.pow(touchY - centerY, 2)
+        );
+        
+        // Área de toque maior (3x o raio) para facilitar em landscape
+        if (distance <= touchControls.joystickRadius * 3) {
+            touchControls.joystickActive = true;
+            updateJoystick(touchX, touchY);
+            e.preventDefault();
             }
         }
     }
@@ -3636,8 +3632,8 @@ function initTouchControls() {
         
         // Modo joystick
         if (touchControls.joystickActive && !touchControls.dragMode) {
-            updateJoystick(touch.clientX, touch.clientY);
-            e.preventDefault();
+        updateJoystick(touch.clientX, touch.clientY);
+        e.preventDefault();
         }
     }
 
@@ -3747,11 +3743,7 @@ if (document.readyState === 'loading') {
 
 // Criar comida normal (cai do céu)
 function spawnFood() {
-    // Reduzir número máximo de frutas no mobile para melhor performance
-    const isMobile = isMobileDevice();
-    const maxFoods = isMobile ? 5 : 10; // Mobile: 5 frutas, Desktop: 10 frutas
-    
-    if (foods.length < maxFoods) {
+    if (foods.length < 10) { // Máximo de 10 comidas na tela
         foods.push({
             x: Math.random() * (canvas.width - 100) + 50,
             y: -30, // Começa acima da tela
@@ -5803,7 +5795,7 @@ function updatePlayer() {
             // Atualizar direção
             if (normalizedX > 0) player.facingRight = true;
             else if (normalizedX < 0) player.facingRight = false;
-        }
+    }
     }
     // Touch (Joystick - modo antigo) - apenas no mobile
     else if (touchControls.joystickActive && !touchControls.dragMode && isMobile) {
@@ -9561,7 +9553,6 @@ function updateIceDecorations() {
 // Desenhar cenário do pântano
 function drawSwampBackground() {
     const mistProgress = getMistProgress(); // Progresso da névoa baseado na sub-fase
-    const isMobile = isMobileDevice(); // Verificar se é mobile para otimização
 
     // Céu do pântano (sempre nublado - verde-azulado)
     const skyTop = interpolateColor('#2C5F5F', '#1E4A4A', mistProgress); // Verde-azulado escuro
@@ -9586,118 +9577,83 @@ function drawSwampBackground() {
         ctx.globalAlpha = 1;
     }
 
-    // Nuvens extras para céu mais nublado (desabilitar no mobile)
-    if (!isMobile) {
-        for (let i = 0; i < 3; i++) {
-            const extraCloudX = (i * 300 + Date.now() / 50) % (canvas.width + 200) - 100;
-            const extraCloudY = 40 + i * 30;
-            ctx.globalAlpha = 0.75;
-            ctx.fillStyle = 'rgba(35, 70, 80, 0.85)';
-            drawCloud(extraCloudX, extraCloudY, 0.9 + i * 0.1);
-            ctx.globalAlpha = 1;
-        }
+    // Nuvens extras para céu mais nublado
+    for (let i = 0; i < 3; i++) {
+        const extraCloudX = (i * 300 + Date.now() / 50) % (canvas.width + 200) - 100;
+        const extraCloudY = 40 + i * 30;
+        ctx.globalAlpha = 0.75;
+        ctx.fillStyle = 'rgba(35, 70, 80, 0.85)';
+        drawCloud(extraCloudX, extraCloudY, 0.9 + i * 0.1);
+        ctx.globalAlpha = 1;
     }
 
     // Atualizar elementos decorativos
     updateSwampDecorations();
 
     // Desenhar névoa no background (apenas nas bordas, não na área central onde frutas estarão)
-    // Desabilitar névoa completamente no mobile para melhor performance
-    if (!isMobile) {
-        for (let mist of swampMist) {
-            // Verificar se a névoa está completamente FORA da área central (onde frutas estarão)
-            const fruitAreaTop = 100;
-            const fruitAreaBottom = canvas.height - 100;
-            const mistTop = mist.y - mist.height / 2;
-            const mistBottom = mist.y + mist.height / 2;
+    for (let mist of swampMist) {
+        // Verificar se a névoa está completamente FORA da área central (onde frutas estarão)
+        const fruitAreaTop = 100;
+        const fruitAreaBottom = canvas.height - 100;
+        const mistTop = mist.y - mist.height / 2;
+        const mistBottom = mist.y + mist.height / 2;
 
-            // Só desenhar névoa se ela estiver completamente acima ou completamente abaixo da área das frutas
-            const mistIsAboveFruitArea = mistBottom < fruitAreaTop;
-            const mistIsBelowFruitArea = mistTop > fruitAreaBottom;
+        // Só desenhar névoa se ela estiver completamente acima ou completamente abaixo da área das frutas
+        const mistIsAboveFruitArea = mistBottom < fruitAreaTop;
+        const mistIsBelowFruitArea = mistTop > fruitAreaBottom;
 
-            if (mistIsAboveFruitArea || mistIsBelowFruitArea) {
-                drawSwampMist(mist);
-            }
+        if (mistIsAboveFruitArea || mistIsBelowFruitArea) {
+            drawSwampMist(mist);
         }
     }
 
     // Mata fechada - muitas árvores em camadas (uma à frente da outra)
-    // Reduzir número de árvores no mobile para melhor performance
-    if (isMobile) {
-        // Mobile: apenas árvores essenciais (reduzir de 23 para 4-5 para melhor performance)
-        ctx.globalAlpha = 0.5 - mistProgress * 0.2;
-        drawSwampTree(200, 150, 13, mistProgress);
-        drawSwampTree(500, 145, 12, mistProgress);
-        
-        ctx.globalAlpha = 0.7 - mistProgress * 0.2;
-        drawSwampTree(150, 180, 16, mistProgress);
-        drawSwampTree(450, 175, 17, mistProgress);
-        
-        ctx.globalAlpha = 0.8 - mistProgress * 0.3;
-        drawSwampTree(300, 230, 21, mistProgress);
-    } else {
-        // Desktop: todas as árvores
-        // Camada 1: Árvores mais ao fundo (maiores, mais escuras, mais transparentes)
-        ctx.globalAlpha = 0.4 - mistProgress * 0.2;
-        drawSwampTree(-30, 140, 12, mistProgress);
-        drawSwampTree(80, 130, 11, mistProgress);
-        drawSwampTree(200, 150, 13, mistProgress);
-        drawSwampTree(320, 135, 12, mistProgress);
-        drawSwampTree(450, 145, 11, mistProgress);
-        drawSwampTree(580, 140, 13, mistProgress);
-        drawSwampTree(700, 135, 12, mistProgress);
-        drawSwampTree(830, 150, 11, mistProgress);
+    // Camada 1: Árvores mais ao fundo (maiores, mais escuras, mais transparentes)
+    ctx.globalAlpha = 0.4 - mistProgress * 0.2;
+    drawSwampTree(-30, 140, 12, mistProgress);
+    drawSwampTree(80, 130, 11, mistProgress);
+    drawSwampTree(200, 150, 13, mistProgress);
+    drawSwampTree(320, 135, 12, mistProgress);
+    drawSwampTree(450, 145, 11, mistProgress);
+    drawSwampTree(580, 140, 13, mistProgress);
+    drawSwampTree(700, 135, 12, mistProgress);
+    drawSwampTree(830, 150, 11, mistProgress);
 
-        // Camada 2: Árvores do meio (tamanho médio-grande)
-        ctx.globalAlpha = 0.6 - mistProgress * 0.2;
-        drawSwampTree(20, 180, 15, mistProgress);
-        drawSwampTree(150, 170, 16, mistProgress);
-        drawSwampTree(280, 185, 14, mistProgress);
-        drawSwampTree(410, 175, 17, mistProgress);
-        drawSwampTree(540, 180, 15, mistProgress);
-        drawSwampTree(670, 170, 16, mistProgress);
-        drawSwampTree(800, 185, 14, mistProgress);
+    // Camada 2: Árvores do meio (tamanho médio-grande)
+    ctx.globalAlpha = 0.6 - mistProgress * 0.2;
+    drawSwampTree(20, 180, 15, mistProgress);
+    drawSwampTree(150, 170, 16, mistProgress);
+    drawSwampTree(280, 185, 14, mistProgress);
+    drawSwampTree(410, 175, 17, mistProgress);
+    drawSwampTree(540, 180, 15, mistProgress);
+    drawSwampTree(670, 170, 16, mistProgress);
+    drawSwampTree(800, 185, 14, mistProgress);
 
-        // Camada 3: Árvores da frente (muito maiores, mais visíveis)
-        ctx.globalAlpha = 0.8 - mistProgress * 0.3;
-        drawSwampTree(-10, 220, 20, mistProgress);
-        drawSwampTree(120, 215, 19, mistProgress);
-        drawSwampTree(250, 230, 21, mistProgress);
-        drawSwampTree(380, 220, 20, mistProgress);
-        drawSwampTree(510, 225, 19, mistProgress);
-        drawSwampTree(640, 215, 21, mistProgress);
-        drawSwampTree(770, 230, 20, mistProgress);
-    }
+    // Camada 3: Árvores da frente (muito maiores, mais visíveis)
+    ctx.globalAlpha = 0.8 - mistProgress * 0.3;
+    drawSwampTree(-10, 220, 20, mistProgress);
+    drawSwampTree(120, 215, 19, mistProgress);
+    drawSwampTree(250, 230, 21, mistProgress);
+    drawSwampTree(380, 220, 20, mistProgress);
+    drawSwampTree(510, 225, 19, mistProgress);
+    drawSwampTree(640, 215, 21, mistProgress);
+    drawSwampTree(770, 230, 20, mistProgress);
 
     ctx.globalAlpha = 1;
 
-    // Desenhar juncos (antes da água) - reduzir drasticamente no mobile
-    if (isMobile) {
-        // Mobile: apenas 2 juncos essenciais
-        if (reeds.length > 0) drawReed(reeds[0]);
-        if (reeds.length > 1) drawReed(reeds[1]);
-    } else {
-        for (let reed of reeds) {
-            drawReed(reed);
-        }
+    // Desenhar juncos (antes da água)
+    for (let reed of reeds) {
+        drawReed(reed);
     }
 
-    // Desenhar flores de lótus - reduzir no mobile
-    if (isMobile) {
-        // Mobile: apenas 1-2 flores
-        if (lotusFlowers.length > 0) drawLotusFlower(lotusFlowers[0]);
-        if (lotusFlowers.length > 1) drawLotusFlower(lotusFlowers[1]);
-    } else {
-        for (let lotus of lotusFlowers) {
-            drawLotusFlower(lotus);
-        }
+    // Desenhar flores de lótus
+    for (let lotus of lotusFlowers) {
+        drawLotusFlower(lotus);
     }
 
-    // Desenhar pássaros do pântano - desabilitar no mobile
-    if (!isMobile) {
-        for (let bird of swampBirds) {
-            drawSwampBird(bird);
-        }
+    // Desenhar pássaros do pântano
+    for (let bird of swampBirds) {
+        drawSwampBird(bird);
     }
 
     // Água do pântano - RESTAURADA com garantia de que não afeta as frutas
@@ -9776,19 +9732,16 @@ function drawSwampBackground() {
     }
     ctx.shadowBlur = 0;
 
-    // Desenhar ondulações na água (ripples) - reduzir no mobile
-    const rippleDrawCount = isMobile ? Math.min(waterRipples.length, 2) : waterRipples.length;
-    for (let i = 0; i < rippleDrawCount; i++) {
-        drawWaterRipple(waterRipples[i]);
+    // Desenhar ondulações na água (ripples)
+    for (let ripple of waterRipples) {
+        drawWaterRipple(ripple);
     }
 
     // Partículas flutuantes na água (bolhas/reflexos mais visíveis)
     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; // Mais opaco
-    // Bolhas na água - reduzir no mobile (isMobile já declarado no início da função)
-    const bubbleCount = isMobile ? 4 : 10;
     ctx.shadowColor = 'rgba(46, 204, 113, 0.5)';
-    ctx.shadowBlur = isMobile ? 3 : 6;
-    for (let i = 0; i < bubbleCount; i++) {
+    ctx.shadowBlur = 6;
+    for (let i = 0; i < 10; i++) {
         const bubbleX = (i * 100 + time * 20) % canvas.width;
         const bubbleY = canvas.height - 28 + Math.sin(time * 1.5 + i) * 4;
         const bubbleSize = 3 + Math.sin(time * 2 + i) * 1.5;
@@ -9798,16 +9751,14 @@ function drawSwampBackground() {
     }
     ctx.shadowBlur = 0;
 
-    // Sombra/reflexo das árvores na água (mais visível) - reduzir no mobile
-    if (!isMobile) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-        for (let i = 0; i < 6; i++) {
-            const treeX = 40 + i * 150;
-            const reflectionY = canvas.height - 18;
-            ctx.beginPath();
-            ctx.ellipse(treeX, reflectionY, 35, 6, 0, 0, Math.PI * 2);
-            ctx.fill();
-        }
+    // Sombra/reflexo das árvores na água (mais visível)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    for (let i = 0; i < 6; i++) {
+        const treeX = 40 + i * 150;
+        const reflectionY = canvas.height - 18;
+        ctx.beginPath();
+        ctx.ellipse(treeX, reflectionY, 35, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
     }
 
     // Efeito de "brilho" pulsante na água (destaque extra)
@@ -9819,10 +9770,8 @@ function drawSwampBackground() {
     ctx.restore();
     ctx.globalAlpha = 1.0; // Garantir opacidade total após desenhar água
 
-    // Detalhes do pântano: plantas aquáticas, troncos, pedras molhadas - desabilitar no mobile
-    if (!isMobile) {
-        drawSwampDetails(mistProgress);
-    }
+    // Detalhes do pântano: plantas aquáticas, troncos, pedras molhadas
+    drawSwampDetails(mistProgress);
 }
 
 // Desenhar detalhes do pântano (plantas, troncos, pedras) - otimizado
@@ -9906,8 +9855,6 @@ function drawSwampDetails(mistProgress) {
 
 // Desenhar cenário extremo do pântano (boss)
 function drawExtremeSwampBackground() {
-    const isMobile = isMobileDevice(); // Verificar se é mobile para otimização
-    
     // Céu extremamente nublado e escuro (verde-azulado)
     const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
     skyGradient.addColorStop(0, '#1E4A4A');
@@ -9916,10 +9863,8 @@ function drawExtremeSwampBackground() {
     ctx.fillStyle = skyGradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Muitas nuvens escuras (céu muito nublado) - reduzir no mobile
-    const cloudUpdateCount = isMobile ? Math.min(clouds.length, 2) : clouds.length;
-    for (let i = 0; i < cloudUpdateCount; i++) {
-        const cloud = clouds[i];
+    // Muitas nuvens escuras (céu muito nublado)
+    for (let cloud of clouds) {
         cloud.x += cloud.speed * 0.25;
         if (cloud.x > canvas.width + 100) {
             cloud.x = -100;
@@ -9930,117 +9875,87 @@ function drawExtremeSwampBackground() {
         ctx.globalAlpha = 1;
     }
 
-    // Nuvens extras muito escuras - desabilitar no mobile
-    if (!isMobile) {
-        for (let i = 0; i < 4; i++) {
-            const extraCloudX = (i * 250 + Date.now() / 40) % (canvas.width + 200) - 100;
-            const extraCloudY = 30 + i * 25;
-            ctx.globalAlpha = 0.85;
-            ctx.fillStyle = 'rgba(25, 55, 65, 0.9)';
-            drawCloud(extraCloudX, extraCloudY, 1.0 + i * 0.15);
-            ctx.globalAlpha = 1;
-        }
+    // Nuvens extras muito escuras
+    for (let i = 0; i < 4; i++) {
+        const extraCloudX = (i * 250 + Date.now() / 40) % (canvas.width + 200) - 100;
+        const extraCloudY = 30 + i * 25;
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = 'rgba(25, 55, 65, 0.9)';
+        drawCloud(extraCloudX, extraCloudY, 1.0 + i * 0.15);
+        ctx.globalAlpha = 1;
     }
 
     // Atualizar elementos decorativos
     updateSwampDecorations();
 
-    // Desenhar névoa no background - desabilitar no mobile
-    if (!isMobile) {
-        for (let mist of swampMist) {
-            // Verificar se a névoa está completamente FORA da área central (onde frutas estarão)
-            const fruitAreaTop = 100;
-            const fruitAreaBottom = canvas.height - 100;
-            const mistTop = mist.y - mist.height / 2;
-            const mistBottom = mist.y + mist.height / 2;
+    // Desenhar névoa no background (apenas nas bordas, não na área central onde frutas estarão)
+    for (let mist of swampMist) {
+        // Verificar se a névoa está completamente FORA da área central (onde frutas estarão)
+        const fruitAreaTop = 100;
+        const fruitAreaBottom = canvas.height - 100;
+        const mistTop = mist.y - mist.height / 2;
+        const mistBottom = mist.y + mist.height / 2;
 
-            // Só desenhar névoa se ela estiver completamente acima ou completamente abaixo da área das frutas
-            const mistIsAboveFruitArea = mistBottom < fruitAreaTop;
-            const mistIsBelowFruitArea = mistTop > fruitAreaBottom;
+        // Só desenhar névoa se ela estiver completamente acima ou completamente abaixo da área das frutas
+        const mistIsAboveFruitArea = mistBottom < fruitAreaTop;
+        const mistIsBelowFruitArea = mistTop > fruitAreaBottom;
 
-            if (mistIsAboveFruitArea || mistIsBelowFruitArea) {
-                drawSwampMist(mist);
-            }
+        if (mistIsAboveFruitArea || mistIsBelowFruitArea) {
+            drawSwampMist(mist);
         }
     }
 
     // Mata extremamente fechada e escura - muitas árvores em camadas
-    // Reduzir drasticamente no mobile
-    if (isMobile) {
-        // Mobile: apenas 4-5 árvores essenciais
-        ctx.globalAlpha = 0.4;
-        drawSwampTree(200, 150, 13, 1.0);
-        drawSwampTree(500, 145, 12, 1.0);
-        
-        ctx.globalAlpha = 0.6;
-        drawSwampTree(150, 180, 16, 1.0);
-        drawSwampTree(450, 175, 17, 1.0);
-        
-        ctx.globalAlpha = 0.8;
-        drawSwampTree(300, 230, 21, 1.0);
-        
-        // Mobile: apenas 2 juncos
-        if (reeds.length > 0) {
-            reeds[0].color = '#0e6655';
-            drawReed(reeds[0]);
-        }
-        if (reeds.length > 1) {
-            reeds[1].color = '#0e6655';
-            drawReed(reeds[1]);
-        }
-    } else {
-        // Desktop: todas as árvores
-        // Camada 1: Árvores mais ao fundo (muito escuras, maiores)
-        ctx.globalAlpha = 0.3;
-        drawSwampTree(-30, 140, 12, 1.0);
-        drawSwampTree(80, 130, 11, 1.0);
-        drawSwampTree(200, 150, 13, 1.0);
-        drawSwampTree(320, 135, 12, 1.0);
-        drawSwampTree(450, 145, 11, 1.0);
-        drawSwampTree(580, 140, 13, 1.0);
-        drawSwampTree(700, 135, 12, 1.0);
-        drawSwampTree(830, 150, 11, 1.0);
+    // Camada 1: Árvores mais ao fundo (muito escuras, maiores)
+    ctx.globalAlpha = 0.3;
+    drawSwampTree(-30, 140, 12, 1.0);
+    drawSwampTree(80, 130, 11, 1.0);
+    drawSwampTree(200, 150, 13, 1.0);
+    drawSwampTree(320, 135, 12, 1.0);
+    drawSwampTree(450, 145, 11, 1.0);
+    drawSwampTree(580, 140, 13, 1.0);
+    drawSwampTree(700, 135, 12, 1.0);
+    drawSwampTree(830, 150, 11, 1.0);
 
-        // Camada 2: Árvores do meio (escuras, maiores)
-        ctx.globalAlpha = 0.5;
-        drawSwampTree(20, 180, 15, 1.0);
-        drawSwampTree(150, 170, 16, 1.0);
-        drawSwampTree(280, 185, 14, 1.0);
-        drawSwampTree(410, 175, 17, 1.0);
-        drawSwampTree(540, 180, 15, 1.0);
-        drawSwampTree(670, 170, 16, 1.0);
-        drawSwampTree(800, 185, 14, 1.0);
+    // Camada 2: Árvores do meio (escuras, maiores)
+    ctx.globalAlpha = 0.5;
+    drawSwampTree(20, 180, 15, 1.0);
+    drawSwampTree(150, 170, 16, 1.0);
+    drawSwampTree(280, 185, 14, 1.0);
+    drawSwampTree(410, 175, 17, 1.0);
+    drawSwampTree(540, 180, 15, 1.0);
+    drawSwampTree(670, 170, 16, 1.0);
+    drawSwampTree(800, 185, 14, 1.0);
 
-        // Camada 3: Árvores da frente (mais visíveis mas ainda escuras, muito maiores)
-        ctx.globalAlpha = 0.7;
-        drawSwampTree(-10, 220, 20, 1.0);
-        drawSwampTree(120, 215, 19, 1.0);
-        drawSwampTree(250, 230, 21, 1.0);
-        drawSwampTree(380, 220, 20, 1.0);
-        drawSwampTree(510, 225, 19, 1.0);
-        drawSwampTree(640, 215, 21, 1.0);
-        drawSwampTree(770, 230, 20, 1.0);
+    // Camada 3: Árvores da frente (mais visíveis mas ainda escuras, muito maiores)
+    ctx.globalAlpha = 0.7;
+    drawSwampTree(-10, 220, 20, 1.0);
+    drawSwampTree(120, 215, 19, 1.0);
+    drawSwampTree(250, 230, 21, 1.0);
+    drawSwampTree(380, 220, 20, 1.0);
+    drawSwampTree(510, 225, 19, 1.0);
+    drawSwampTree(640, 215, 21, 1.0);
+    drawSwampTree(770, 230, 20, 1.0);
 
-        // Camada 4: Árvores muito próximas (silhuetas escuras, gigantes)
-        ctx.globalAlpha = 0.9;
-        drawSwampTree(50, 240, 24, 1.0);
-        drawSwampTree(300, 245, 25, 1.0);
-        drawSwampTree(550, 240, 24, 1.0);
-        drawSwampTree(750, 245, 25, 1.0);
-
-        // Juncos altos e escuros
-        for (let reed of reeds) {
-            reed.color = '#0e6655';
-            drawReed(reed);
-        }
-
-        // Pássaros do pântano
-        for (let bird of swampBirds) {
-            drawSwampBird(bird);
-        }
-    }
+    // Camada 4: Árvores muito próximas (silhuetas escuras, gigantes)
+    ctx.globalAlpha = 0.9;
+    drawSwampTree(50, 240, 24, 1.0);
+    drawSwampTree(300, 245, 25, 1.0);
+    drawSwampTree(550, 240, 24, 1.0);
+    drawSwampTree(750, 245, 25, 1.0);
 
     ctx.globalAlpha = 1;
+
+    // Juncos altos e escuros
+    for (let reed of reeds) {
+        reed.color = '#0e6655';
+        drawReed(reed);
+    }
+
+    // Pássaros do pântano
+    for (let bird of swampBirds) {
+        drawSwampBird(bird);
+    }
 
     // Água escura mas AINDA DESTACADA (boss) - RESTAURADA com garantia de que não afeta as frutas
     ctx.save(); // Salvar estado do canvas antes de desenhar água
@@ -10114,19 +10029,17 @@ function drawExtremeSwampBackground() {
     }
     ctx.shadowBlur = 0;
 
-    // Ondulações (ripples) mais intensas - reduzir no mobile (isMobile já declarado no início da função)
-    const rippleDrawCountBoss = isMobile ? Math.min(waterRipples.length, 2) : waterRipples.length;
-    for (let i = 0; i < rippleDrawCountBoss; i++) {
-        waterRipples[i].alpha = 0.6;
-        drawWaterRipple(waterRipples[i]);
+    // Ondulações (ripples) mais intensas
+    for (let ripple of waterRipples) {
+        ripple.alpha = 0.6;
+        drawWaterRipple(ripple);
     }
 
-    // Partículas flutuantes (mais visíveis no boss) - reduzir no mobile
-    const bubbleCountBoss = isMobile ? 4 : 12;
+    // Partículas flutuantes (mais visíveis no boss)
     ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
     ctx.shadowColor = 'rgba(39, 174, 96, 0.6)';
-    ctx.shadowBlur = isMobile ? 4 : 8;
-    for (let i = 0; i < bubbleCountBoss; i++) {
+    ctx.shadowBlur = 8;
+    for (let i = 0; i < 12; i++) {
         const bubbleX = (i * 90 + time * 25) % canvas.width;
         const bubbleY = canvas.height - 26 + Math.sin(time * 2 + i) * 5;
         const bubbleSize = 3.5 + Math.sin(time * 2.5 + i) * 2;
@@ -10145,41 +10058,12 @@ function drawExtremeSwampBackground() {
     ctx.restore();
     ctx.globalAlpha = 1.0; // Garantir opacidade total após desenhar água
 
-    // Detalhes do pântano extremo - desabilitar no mobile
-    if (!isMobile) {
-        drawSwampDetails(1.0);
-    }
+    // Detalhes do pântano extremo
+    drawSwampDetails(1.0);
 }
 
 // Atualizar elementos decorativos do pântano
 function updateSwampDecorations() {
-    const isMobile = isMobileDevice(); // Verificar se é mobile para otimização
-    
-    // No mobile, atualizar apenas elementos essenciais
-    if (isMobile) {
-        // Atualizar apenas 2 juncos essenciais
-        if (reeds.length > 0) {
-            reeds[0].sway += reeds[0].swaySpeed;
-        }
-        if (reeds.length > 1) {
-            reeds[1].sway += reeds[1].swaySpeed;
-        }
-        
-        // Atualizar apenas 1-2 flores de lótus
-        if (lotusFlowers.length > 0) {
-            lotusFlowers[0].rotation += lotusFlowers[0].rotationSpeed;
-            lotusFlowers[0].y += Math.sin(lotusFlowers[0].rotation) * 0.1;
-        }
-        if (lotusFlowers.length > 1) {
-            lotusFlowers[1].rotation += lotusFlowers[1].rotationSpeed;
-            lotusFlowers[1].y += Math.sin(lotusFlowers[1].rotation) * 0.1;
-        }
-        
-        // Não atualizar pássaros, névoa e ondulações no mobile
-        return;
-    }
-    
-    // Desktop: atualizar tudo normalmente
     // Atualizar pássaros do pântano
     for (let bird of swampBirds) {
         bird.x += bird.speed;
@@ -12609,89 +12493,56 @@ function draw() {
 
         // Desenhar névoa e chuva do pântano DEPOIS das frutas (mas não na área das frutas)
         if (currentArea === 2) {
-            const isMobile = isMobileDevice();
-            
-            // Desabilitar névoa completamente no mobile
-            if (!isMobile) {
-                // NÃO desenhar névoa na área central da tela onde as frutas estão
-                // Área proibida: y entre 50 e canvas.height - 50 (área muito grande para garantir que nenhuma névoa cubra as frutas)
-                const forbiddenAreaTop = 50;
-                const forbiddenAreaBottom = canvas.height - 50;
+            // NÃO desenhar névoa na área central da tela onde as frutas estão
+            // Área proibida: y entre 50 e canvas.height - 50 (área muito grande para garantir que nenhuma névoa cubra as frutas)
+            const forbiddenAreaTop = 50;
+            const forbiddenAreaBottom = canvas.height - 50;
 
-                for (let mist of swampMist) {
-                    // Verificar se a névoa está completamente FORA da área proibida
-                    const mistTop = mist.y - mist.height / 2;
-                    const mistBottom = mist.y + mist.height / 2;
+            for (let mist of swampMist) {
+                // Verificar se a névoa está completamente FORA da área proibida
+                const mistTop = mist.y - mist.height / 2;
+                const mistBottom = mist.y + mist.height / 2;
 
-                    // Só desenhar névoa se ela estiver completamente acima ou completamente abaixo da área proibida
-                    const mistIsAboveForbiddenArea = mistBottom < forbiddenAreaTop;
-                    const mistIsBelowForbiddenArea = mistTop > forbiddenAreaBottom;
+                // Só desenhar névoa se ela estiver completamente acima ou completamente abaixo da área proibida
+                const mistIsAboveForbiddenArea = mistBottom < forbiddenAreaTop;
+                const mistIsBelowForbiddenArea = mistTop > forbiddenAreaBottom;
 
-                    if (mistIsAboveForbiddenArea || mistIsBelowForbiddenArea) {
-                        // Garantir que globalAlpha está correto antes de desenhar névoa
-                        ctx.save();
-                        drawSwampMist(mist);
-                        ctx.restore();
-                    }
+                if (mistIsAboveForbiddenArea || mistIsBelowForbiddenArea) {
+                    // Garantir que globalAlpha está correto antes de desenhar névoa
+                    ctx.save();
+                    drawSwampMist(mist);
+                    ctx.restore();
                 }
             }
 
             // Desenhar chuva apenas nas bordas (não na área central onde frutas estão)
-            // Simplificar desenho no mobile para melhor performance (isMobile já declarado acima)
-            if (isMobile) {
-                // Mobile: desenho simplificado (sem brilho, menos operações)
-                ctx.strokeStyle = '#5F9EA0';
-                ctx.lineWidth = 1;
-                ctx.lineCap = 'round';
-                ctx.globalAlpha = 0.6;
-                
-                ctx.beginPath();
-                let drawnCount = 0;
-                const maxDrawn = 20; // Limitar gotas desenhadas no mobile
-                
-                for (let drop of rainDrops) {
-                    if (drawnCount >= maxDrawn) break;
-                    
-                    // Não desenhar chuva na área central onde as frutas estão
-                    const dropInFruitArea = drop.y > 80 && drop.y < canvas.height - 80;
-                    if (!dropInFruitArea) {
-                        ctx.moveTo(drop.x, drop.y);
-                        ctx.lineTo(drop.x - 2, drop.y + drop.length);
-                        drawnCount++;
-                    }
+            ctx.save();
+            for (let drop of rainDrops) {
+                // Não desenhar chuva na área central onde as frutas estão (y entre 80 e canvas.height - 80)
+                const dropInFruitArea = drop.y > 80 && drop.y < canvas.height - 80;
+                if (!dropInFruitArea) {
+                    ctx.globalAlpha = drop.opacity;
+
+                    // Cor da chuva para pântano
+                    ctx.strokeStyle = '#5F9EA0';
+                    ctx.lineWidth = 1.5;
+                    ctx.lineCap = 'round';
+
+                    // Desenhar linha de chuva (inclinada)
+                    ctx.beginPath();
+                    ctx.moveTo(drop.x, drop.y);
+                    ctx.lineTo(drop.x - 2, drop.y + drop.length);
+                    ctx.stroke();
+
+                    // Brilho na ponta da gota
+                    ctx.globalAlpha = drop.opacity * 0.5;
+                    ctx.fillStyle = '#7FB3B3';
+                    ctx.beginPath();
+                    ctx.arc(drop.x - 2, drop.y + drop.length, 2, 0, Math.PI * 2);
+                    ctx.fill();
                 }
-                ctx.stroke();
-                ctx.globalAlpha = 1.0;
-            } else {
-                // Desktop: desenho completo
-                ctx.save();
-                for (let drop of rainDrops) {
-                    // Não desenhar chuva na área central onde as frutas estão (y entre 80 e canvas.height - 80)
-                    const dropInFruitArea = drop.y > 80 && drop.y < canvas.height - 80;
-                    if (!dropInFruitArea) {
-                        ctx.globalAlpha = drop.opacity;
-
-                        // Cor da chuva para pântano
-                        ctx.strokeStyle = '#5F9EA0';
-                        ctx.lineWidth = 1.5;
-                        ctx.lineCap = 'round';
-
-                        // Desenhar linha de chuva (inclinada)
-                        ctx.beginPath();
-                        ctx.moveTo(drop.x, drop.y);
-                        ctx.lineTo(drop.x - 2, drop.y + drop.length);
-                        ctx.stroke();
-
-                        // Brilho na ponta da gota
-                        ctx.globalAlpha = drop.opacity * 0.5;
-                        ctx.fillStyle = '#7FB3B3';
-                        ctx.beginPath();
-                        ctx.arc(drop.x - 2, drop.y + drop.length, 2, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                }
-                ctx.restore();
             }
+            ctx.restore();
 
             // Garantir que globalAlpha está em 1.0 após desenhar névoa e chuva
             ctx.globalAlpha = 1.0;
@@ -16056,29 +15907,8 @@ wormSpawnInterval = setInterval(() => {
 }, 300 + Math.random() * 500);
 
 // Loop principal do jogo
-// Throttling de FPS no mobile para melhor performance
-let lastFrameTime = 0;
-const mobileFrameInterval = 1000 / 30; // 30 FPS no mobile (em vez de 60)
-const desktopFrameInterval = 1000 / 60; // 60 FPS no desktop
-
-function gameLoop(timestamp) {
+function gameLoop() {
     if (!gameRunning) return;
-
-    // Throttling de FPS no mobile
-    const isMobile = isMobileDevice();
-    const frameInterval = isMobile ? mobileFrameInterval : desktopFrameInterval;
-    
-    // Se lastFrameTime ainda não foi inicializado, usar timestamp atual
-    if (lastFrameTime === 0) {
-        lastFrameTime = timestamp;
-    }
-    
-    if (timestamp - lastFrameTime < frameInterval) {
-        requestAnimationFrame(gameLoop);
-        return;
-    }
-    
-    lastFrameTime = timestamp;
 
     // OTIMIZAÇÃO: Cachear Date.now() uma vez por frame (usado 40+ vezes)
     const currentTime = Date.now();
@@ -16179,9 +16009,6 @@ function gameLoop(timestamp) {
 
     requestAnimationFrame(gameLoop);
 }
-
-// Inicializar lastFrameTime quando o jogo começar
-let gameLoopInitialized = false;
 
 // Progresso do jogador
 let gameProgress = JSON.parse(localStorage.getItem('birdGameProgress')) || {};
@@ -16604,7 +16431,7 @@ function showTouchControls() {
             touchControlsElement.style.setProperty('display', 'none', 'important');
             touchControlsElement.style.setProperty('pointer-events', 'none', 'important');
         } else {
-            // Forçar visibilidade usando setProperty com important
+        // Forçar visibilidade usando setProperty com important
             touchControlsElement.style.setProperty('display', 'flex', 'important');
             touchControlsElement.style.setProperty('pointer-events', 'auto', 'important');
             touchControlsElement.style.setProperty('visibility', 'visible', 'important');
@@ -19825,8 +19652,7 @@ function showCountdown() {
             spawnFood();
             spawnFood();
             spawnFood();
-            lastFrameTime = performance.now();
-            requestAnimationFrame(gameLoop);
+            gameLoop();
             startTimer();
         }
     }, 800);
@@ -20929,7 +20755,6 @@ setInterval(() => {
 // Inicializar UI de dificuldade
 initDifficultyUI();
 initControlUI();
-updateDebugButton(); // Inicializar estado do botão de debug
 
 // ========== FUNÇÕES DE CHUVA NA FLORESTA ==========
 
@@ -20967,17 +20792,9 @@ function updateRain() {
             }
         }
 
-        // Limitar número máximo de gotas (performance) - reduzir drasticamente no mobile
-        const isMobile = isMobileDevice();
-        const maxRainDrops = isMobile ? 30 : 150; // Reduzir de 150 para 30 no mobile
-        if (rainDrops.length > maxRainDrops) {
-            rainDrops.splice(0, rainDrops.length - maxRainDrops);
-        }
-        
-        // Reduzir intensidade de criação de chuva no mobile
-        if (isMobile && rainDrops.length > 20) {
-            // Não criar mais gotas se já tiver muitas
-            return;
+        // Limitar número máximo de gotas (performance)
+        if (rainDrops.length > 150) {
+            rainDrops.splice(0, rainDrops.length - 150);
         }
     } else {
         // Limpar chuva se não estiver na área correta
@@ -21269,11 +21086,10 @@ function updateWaterDrops() {
         return;
     }
 
-    // Limitar número máximo de gotas por pássaro (reduzir no mobile)
-    const isMobile = isMobileDevice();
+    // Limitar número máximo de gotas por pássaro
     const playerDrops = waterDrops.filter(d => d.birdId === 'player').length;
     const cpuDrops = waterDrops.filter(d => d.birdId === 'cpu').length;
-    const maxDropsPerBird = isMobile ? 4 : 8; // Menos gotas no mobile para melhor performance
+    const maxDropsPerBird = 8; // Máximo de 8 gotas por pássaro (mais que suor, pois é chuva)
 
     // Criar novas gotas periodicamente para cada pássaro (mais frequente que suor)
     if (!player.stunned && playerDrops < maxDropsPerBird && Math.random() < 0.12) {
@@ -21303,10 +21119,9 @@ function updateWaterDrops() {
         }
     }
 
-    // OTIMIZAÇÃO: Limitar número total de gotas (evitar memory leak) - reduzir no mobile
-    const maxDrops = isMobile ? 10 : 20;
-    if (waterDrops.length > maxDrops) {
-        waterDrops.splice(0, waterDrops.length - maxDrops);
+    // OTIMIZAÇÃO: Limitar número total de gotas (evitar memory leak)
+    if (waterDrops.length > 20) {
+        waterDrops.splice(0, waterDrops.length - 20);
     }
 }
 
