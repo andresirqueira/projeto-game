@@ -8011,7 +8011,10 @@ function initBackgroundDecorations() {
             }
         } else if (currentSubstage === 3) {
             // 2-3: Névoa Matinal - Névoa densa
-            for (let i = 0; i < 12; i++) {
+            // OTIMIZAÇÃO MOBILE: Reduzir névoas no mobile (gradientes radiais são muito pesados)
+            const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
+            const mistCount = isMobile ? 4 : 12; // Mobile: 4 névoas (vs 12 no desktop)
+            for (let i = 0; i < mistCount; i++) {
                 swampMist.push({
                     x: Math.random() * canvas.width,
                     y: 150 + Math.random() * 200,
@@ -8072,7 +8075,10 @@ function initBackgroundDecorations() {
             }
         } else if (currentSubstage === 6) {
             // 2-6: Névoa Sombria - Pântano noturno com névoa
-            for (let i = 0; i < 15; i++) {
+            // OTIMIZAÇÃO MOBILE: Reduzir névoas no mobile
+            const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
+            const mistCount = isMobile ? 5 : 15; // Mobile: 5 névoas (vs 15 no desktop)
+            for (let i = 0; i < mistCount; i++) {
                 swampMist.push({
                     x: Math.random() * canvas.width,
                     y: 100 + Math.random() * 250,
@@ -8097,7 +8103,10 @@ function initBackgroundDecorations() {
             }
         } else if (currentSubstage === 7) {
             // 2-7: Boss - Ninho da Garça - Pântano extremo
-            for (let i = 0; i < 20; i++) {
+            // OTIMIZAÇÃO MOBILE: Reduzir névoas no mobile
+            const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
+            const mistCount = isMobile ? 6 : 20; // Mobile: 6 névoas (vs 20 no desktop)
+            for (let i = 0; i < mistCount; i++) {
                 swampMist.push({
                     x: Math.random() * canvas.width,
                     y: 80 + Math.random() * 280,
@@ -8508,7 +8517,15 @@ function getColdProgress() {
 }
 
 // Interpolar entre duas cores
+// Cache para interpolateColor (otimização de performance)
+const colorCache = {};
 function interpolateColor(color1, color2, t) {
+    // OTIMIZAÇÃO: Cachear resultados para evitar recálculos
+    const cacheKey = `${color1}-${color2}-${t.toFixed(2)}`;
+    if (colorCache[cacheKey]) {
+        return colorCache[cacheKey];
+    }
+    
     // Converter hex para RGB
     const hex1 = color1.replace('#', '');
     const hex2 = color2.replace('#', '');
@@ -8523,7 +8540,9 @@ function interpolateColor(color1, color2, t) {
     const g = Math.round(g1 + (g2 - g1) * t);
     const b = Math.round(b1 + (b2 - b1) * t);
 
-    return `rgb(${r}, ${g}, ${b})`;
+    const result = `rgb(${r}, ${g}, ${b})`;
+    colorCache[cacheKey] = result;
+    return result;
 }
 
 // Desenhar cenário da floresta
@@ -11367,15 +11386,26 @@ function drawSwampMist(mist) {
     ctx.save();
     ctx.globalAlpha = mist.alpha * (0.7 + Math.sin(mist.time / 20) * 0.3);
 
-    const gradient = ctx.createRadialGradient(mist.x, mist.y, 0, mist.x, mist.y, mist.width / 2);
-    gradient.addColorStop(0, 'rgba(200, 220, 220, 0.6)');
-    gradient.addColorStop(0.5, 'rgba(180, 200, 200, 0.4)');
-    gradient.addColorStop(1, 'rgba(160, 180, 180, 0)');
-
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.ellipse(mist.x, mist.y, mist.width / 2, mist.height / 2, 0, 0, Math.PI * 2);
-    ctx.fill();
+    // OTIMIZAÇÃO MOBILE: No mobile, usar cor sólida ao invés de gradiente radial (muito mais leve)
+    const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
+    
+    if (isMobile) {
+        // Mobile: Cor sólida com transparência (muito mais rápido que gradiente radial)
+        ctx.fillStyle = 'rgba(180, 200, 200, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(mist.x, mist.y, mist.width / 2, mist.height / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        // Desktop: Gradiente radial (melhor qualidade visual)
+        const gradient = ctx.createRadialGradient(mist.x, mist.y, 0, mist.x, mist.y, mist.width / 2);
+        gradient.addColorStop(0, 'rgba(200, 220, 220, 0.6)');
+        gradient.addColorStop(0.5, 'rgba(180, 200, 200, 0.4)');
+        gradient.addColorStop(1, 'rgba(160, 180, 180, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.ellipse(mist.x, mist.y, mist.width / 2, mist.height / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
 
     ctx.restore();
 }
