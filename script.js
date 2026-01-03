@@ -118,10 +118,14 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         resizeCanvasForMobile();
         checkOrientation();
+        // Pre-warm do canvas para melhorar performance na primeira execução (especialmente mobile)
+        preWarmCanvas();
     });
 } else {
     resizeCanvasForMobile();
     checkOrientation();
+    // Pre-warm do canvas para melhorar performance na primeira execução (especialmente mobile)
+    preWarmCanvas();
 }
 window.addEventListener('resize', () => {
     resizeCanvasForMobile();
@@ -15258,6 +15262,7 @@ function simulateDefeat() {
 // Fim do jogo
 function endGame() {
     gameRunning = false;
+    firstFrame = true; // Resetar flag para próxima execução
     // Esconder controles touch quando o jogo parar
     hideTouchControls();
 
@@ -15906,9 +15911,159 @@ wormSpawnInterval = setInterval(() => {
     }
 }, 300 + Math.random() * 500);
 
+// Pre-warm das funções de desenho específicas da fase (melhora performance na primeira execução)
+function preWarmStageFunctions() {
+    try {
+        // Pre-warm da função de background específica da fase
+        // Isso ajuda especialmente no mobile onde a primeira renderização pode ser lenta
+        ctx.save();
+        
+        // Chamar a função de background uma vez para "aquecer" o código
+        if (currentArea === 1) {
+            if (currentSubstage === 7) {
+                drawNightForestBackground();
+            } else {
+                drawForestBackground();
+            }
+        } else if (currentArea === 2) {
+            if (currentSubstage === 7) {
+                drawExtremeSwampBackground();
+            } else {
+                drawSwampBackground();
+            }
+        } else if (currentArea === 3) {
+            if (currentSubstage === 7) {
+                drawExtremeTropicalBackground();
+            } else {
+                drawTropicalBackground();
+            }
+        } else if (currentArea === 4) {
+            if (currentSubstage === 7) {
+                drawExtremeDesertBackground();
+            } else {
+                drawDesertBackground();
+            }
+        } else if (currentArea === 5) {
+            if (currentSubstage === 7) {
+                drawExtremeMetropolisBackground();
+            } else {
+                drawMetropolisBackground();
+            }
+        } else if (currentArea === 7) {
+            if (currentSubstage === 7) {
+                drawExtremeIceBackground();
+            } else {
+                drawIceBackground();
+            }
+        } else {
+            drawGenericBackground();
+        }
+        
+        // Pre-warm de funções de desenho de pássaros (usadas frequentemente)
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        drawBird(player, true);
+        drawBird(cpu, false);
+        ctx.restore();
+        
+        // Pre-warm de funções de desenho de comida (se não for fase bônus)
+        if (!isBonusStage) {
+            drawFood();
+        }
+        
+        // Limpar canvas após pre-warm
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+    } catch (e) {
+        // Ignorar erros no pre-warm (não é crítico)
+        console.log('Pre-warm stage functions: ', e);
+    }
+}
+
+// Pre-warm do canvas para melhorar performance na primeira execução (especialmente mobile)
+// Isso "aquece" o canvas fazendo uma renderização inicial simples
+function preWarmCanvas() {
+    // Fazer uma renderização simples para "aquecer" o canvas
+    // Isso ajuda especialmente no mobile onde a primeira renderização pode ser lenta
+    try {
+        // Limpar canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Desenhar um fundo simples
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Desenhar algumas formas simples para "aquecer" o contexto
+        ctx.fillStyle = '#2ecc71';
+        ctx.beginPath();
+        ctx.arc(canvas.width / 2, canvas.height / 2, 20, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath();
+        ctx.arc(canvas.width / 2 + 50, canvas.height / 2, 20, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Limpar novamente
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Pre-inicializar algumas operações comuns do canvas
+        ctx.save();
+        ctx.restore();
+        ctx.beginPath();
+        ctx.closePath();
+        
+        // Pre-inicializar gradientes (usados frequentemente)
+        const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        gradient.addColorStop(0, '#1a1a2e');
+        gradient.addColorStop(1, '#16213e');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 1, 1); // Desenhar um pixel minúsculo
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Pre-inicializar sombras (usadas em vários lugares)
+        ctx.shadowColor = '#000000';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.shadowBlur = 0; // Resetar
+        
+        // Pre-inicializar transformações (usadas frequentemente)
+        ctx.translate(0, 0);
+        ctx.rotate(0);
+        ctx.scale(1, 1);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        
+        // Limpar canvas final
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    } catch (e) {
+        // Ignorar erros no pre-warm (não é crítico)
+        console.log('Pre-warm canvas: ', e);
+    }
+}
+
 // Loop principal do jogo
+let firstFrame = true; // Flag para otimizar primeiro frame
 function gameLoop() {
     if (!gameRunning) return;
+
+    // OTIMIZAÇÃO: No primeiro frame, fazer uma renderização mais leve
+    // Isso ajuda especialmente no mobile onde a primeira renderização pode ser lenta
+    if (firstFrame) {
+        firstFrame = false;
+        // Primeiro frame: apenas limpar e desenhar o essencial
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Desenhar fundo básico
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Desenhar pássaros em posição inicial (mais leve)
+        drawBird(player, true);
+        drawBird(cpu, false);
+        // Desenhar UI básica
+        drawGameUI();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
 
     // OTIMIZAÇÃO: Cachear Date.now() uma vez por frame (usado 40+ vezes)
     const currentTime = Date.now();
@@ -16896,6 +17051,60 @@ function selectSubstage(area, substage) {
     cpu.stunTime = 0;
     updateStunUI();
 
+    // Resetar posições dos pássaros para posição inicial
+    player.x = 100;
+    player.y = canvas.height / 2;
+    player.speed = player.baseSpeed;
+    player.speedBoost = 0; // Resetar speed boost
+    player.facingRight = true;
+    player.eatAnimation = 0;
+    cpu.x = canvas.width - 100;
+    cpu.y = canvas.height / 2;
+    cpu.speed = cpu.baseSpeed;
+    cpu.speedBoost = 0; // Resetar speed boost
+    cpu.facingRight = false;
+    cpu.eatAnimation = 0;
+    cpu.reactionDelay = 60;
+    cpu.targetFood = null;
+    cpu.goingForSpecial = false;
+    cpu.goingForSpeed = false;
+
+    // Resetar frutas e itens (limpar arrays)
+    foods = [];
+    specialFoods = [];
+    speedItems = [];
+
+    // Resetar gavião e morcego
+    bat.active = false;
+    bat.cooldown = 0;
+    bat.warningTime = 0;
+    hawk.active = false;
+    hawk.cooldown = 0;
+    hawk.warningTime = 0;
+
+    // Limpar intervals de spawn (serão recriados quando o countdown terminar)
+    if (foodSpawnInterval) {
+        clearInterval(foodSpawnInterval);
+        foodSpawnInterval = null;
+    }
+    if (specialFoodSpawnInterval) {
+        clearInterval(specialFoodSpawnInterval);
+        specialFoodSpawnInterval = null;
+    }
+    if (speedItemSpawnInterval) {
+        clearInterval(speedItemSpawnInterval);
+        speedItemSpawnInterval = null;
+    }
+    if (wormSpawnInterval) {
+        clearInterval(wormSpawnInterval);
+        wormSpawnInterval = null;
+    }
+
+    // Garantir que o jogo não esteja rodando durante o countdown
+    gameRunning = false;
+    gameStarted = false;
+    firstFrame = true; // Resetar flag para otimizar primeiro frame da nova fase
+
     // Configurar dificuldade (aplicar modificadores)
     const baseConfig = substageConfig[substage];
     const config = applyDifficultyToConfig(baseConfig);
@@ -16973,6 +17182,9 @@ function selectSubstage(area, substage) {
         sounds.introSound.currentTime = 0;
     }
 
+    // Pre-warm das funções de desenho específicas da fase (melhora performance na primeira execução)
+    preWarmStageFunctions();
+
     document.getElementById('menuOverlay').style.display = 'none';
     document.getElementById('gameContainer').classList.add('active');
     
@@ -16982,6 +17194,9 @@ function selectSubstage(area, substage) {
     if (menuAnimFrame) {
         cancelAnimationFrame(menuAnimFrame);
     }
+
+    // Pre-warm das funções de desenho específicas da fase (melhora performance na primeira execução)
+    preWarmStageFunctions();
 
     showCountdown();
 }
@@ -19581,6 +19796,7 @@ function showCountdown() {
             // Agora inicia o jogo de verdade
             gameStarted = true;
             gameRunning = true;
+            firstFrame = true; // Resetar flag para otimizar primeiro frame
             
             // Reinicializar controles touch quando o jogo começar (importante para landscape)
             // Chamar imediatamente e depois com delays
@@ -19710,6 +19926,7 @@ function goToMenu() {
 
     // Reset completo
     gameRunning = false;
+    firstFrame = true; // Resetar flag para próxima execução
     // Esconder controles touch quando o jogo parar
     hideTouchControls();
     gameStarted = false;
