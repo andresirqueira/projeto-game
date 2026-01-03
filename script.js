@@ -3384,36 +3384,102 @@ let touchControls = {
 let debugMode = false;
 window.debugMode = false; // Pode ser ativado no console do navegador
 
-// Atalho para ativar/desativar debug: Ctrl+Shift+D
+// Função para alternar modo debug (pode ser chamada de qualquer lugar)
+function toggleDebugMode() {
+    debugMode = !debugMode;
+    window.debugMode = debugMode;
+    console.log('🔧 Modo Debug:', debugMode ? 'ATIVADO' : 'DESATIVADO');
+
+    // Mostrar/esconder indicador de debug
+    const debugIndicator = document.getElementById('debugIndicator');
+    if (debugIndicator) {
+        if (debugMode) {
+            debugIndicator.classList.add('active');
+        } else {
+            debugIndicator.classList.remove('active');
+        }
+    }
+
+    // Mostrar/esconder painel de debug
+    const debugPanel = document.getElementById('debugPanel');
+    if (debugPanel) {
+        if (debugMode && gameRunning) {
+            debugPanel.classList.add('active');
+        } else {
+            debugPanel.classList.remove('active');
+        }
+    }
+    
+    // Atualizar botão no menu de opções
+    updateDebugButton();
+}
+
+// Atualizar texto do botão de debug
+function updateDebugButton() {
+    const debugBtn = document.getElementById('debugOptionBtn');
+    if (debugBtn) {
+        debugBtn.textContent = debugMode ? '🔧 Desativar Debug' : '🔧 Ativar Debug';
+    }
+    
+    // Atualizar painel de debug se o jogo estiver rodando
+    const debugPanel = document.getElementById('debugPanel');
+    if (debugPanel && gameRunning) {
+        if (debugMode) {
+            debugPanel.classList.add('active');
+        } else {
+            debugPanel.classList.remove('active');
+        }
+    }
+}
+
+// Atalho para ativar/desativar debug: Ctrl+Shift+D (desktop)
 document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
-        debugMode = !debugMode;
-        window.debugMode = debugMode;
-        console.log('🔧 Modo Debug:', debugMode ? 'ATIVADO' : 'DESATIVADO');
-
-        // Mostrar/esconder indicador de debug
-        const debugIndicator = document.getElementById('debugIndicator');
-        if (debugIndicator) {
-            if (debugMode) {
-                debugIndicator.classList.add('active');
-            } else {
-                debugIndicator.classList.remove('active');
-            }
-        }
-
-        // Mostrar/esconder painel de debug
-        const debugPanel = document.getElementById('debugPanel');
-        if (debugPanel) {
-            if (debugMode && gameRunning) {
-                debugPanel.classList.add('active');
-            } else {
-                debugPanel.classList.remove('active');
-            }
-        }
-
+        toggleDebugMode();
         e.preventDefault();
     }
 });
+
+// Gesto de toque para ativar debug no mobile (tocar 5 vezes rapidamente no título do menu)
+let debugTouchCount = 0;
+let debugTouchTimer = null;
+
+// Configurar gesto de toque quando o DOM estiver pronto
+function initDebugTouchGesture() {
+    const debugTouchTarget = document.querySelector('.menu-title') || document.querySelector('h1');
+    if (debugTouchTarget) {
+        debugTouchTarget.addEventListener('touchstart', function(e) {
+            debugTouchCount++;
+            
+            // Resetar contador após 2 segundos
+            if (debugTouchTimer) {
+                clearTimeout(debugTouchTimer);
+            }
+            debugTouchTimer = setTimeout(() => {
+                debugTouchCount = 0;
+            }, 2000);
+            
+            // Se tocou 5 vezes em 2 segundos, ativar debug
+            if (debugTouchCount >= 5) {
+                toggleDebugMode();
+                debugTouchCount = 0;
+                e.preventDefault();
+                // Feedback visual
+                debugTouchTarget.style.transform = 'scale(1.1)';
+                setTimeout(() => {
+                    debugTouchTarget.style.transform = '';
+                }, 200);
+            }
+        });
+    }
+}
+
+// Inicializar quando o DOM estiver pronto
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDebugTouchGesture);
+} else {
+    initDebugTouchGesture();
+}
 
 document.addEventListener('keydown', (e) => {
     keys[e.key.toLowerCase()] = true;
@@ -20806,6 +20872,7 @@ setInterval(() => {
 // Inicializar UI de dificuldade
 initDifficultyUI();
 initControlUI();
+updateDebugButton(); // Inicializar estado do botão de debug
 
 // ========== FUNÇÕES DE CHUVA NA FLORESTA ==========
 
