@@ -21103,7 +21103,6 @@ function updateWaterDrops() {
     }
 
     // OTIMIZAÇÃO: Limitar número total de gotas (evitar memory leak) - reduzir no mobile
-    const isMobile = isMobileDevice();
     const maxDrops = isMobile ? 10 : 20;
     if (waterDrops.length > maxDrops) {
         waterDrops.splice(0, waterDrops.length - maxDrops);
