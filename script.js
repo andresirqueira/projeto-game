@@ -10014,13 +10014,22 @@ function drawSwampDetails(mistProgress) {
 
 // Desenhar cenário extremo do pântano (boss)
 function drawExtremeSwampBackground() {
+    // OTIMIZAÇÃO MOBILE: Detectar mobile para aplicar otimizações
+    const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
+    
     // Céu extremamente nublado e escuro (verde-azulado)
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
-    skyGradient.addColorStop(0, '#1E4A4A');
-    skyGradient.addColorStop(0.5, '#2C5F5F');
-    skyGradient.addColorStop(1, '#153535');
-    ctx.fillStyle = skyGradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // OTIMIZAÇÃO MOBILE: No mobile, usar cor sólida ao invés de gradiente
+    if (isMobile) {
+        ctx.fillStyle = '#1E4A4A';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+        const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height - 40);
+        skyGradient.addColorStop(0, '#1E4A4A');
+        skyGradient.addColorStop(0.5, '#2C5F5F');
+        skyGradient.addColorStop(1, '#153535');
+        ctx.fillStyle = skyGradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
     // Muitas nuvens escuras (céu muito nublado)
     for (let cloud of clouds) {
@@ -10035,8 +10044,10 @@ function drawExtremeSwampBackground() {
     }
 
     // Nuvens extras muito escuras
-    for (let i = 0; i < 4; i++) {
-        const extraCloudX = (i * 250 + Date.now() / 40) % (canvas.width + 200) - 100;
+    // OTIMIZAÇÃO MOBILE: Reduzir nuvens extras no mobile
+    const extraCloudCount = isMobile ? 1 : 4;
+    for (let i = 0; i < extraCloudCount; i++) {
+        const extraCloudX = (i * (250 * (4 / extraCloudCount)) + Date.now() / 40) % (canvas.width + 200) - 100;
         const extraCloudY = 30 + i * 25;
         ctx.globalAlpha = 0.85;
         ctx.fillStyle = 'rgba(25, 55, 65, 0.9)';
@@ -10065,80 +10076,130 @@ function drawExtremeSwampBackground() {
     }
 
     // Mata extremamente fechada e escura - muitas árvores em camadas
-    // Camada 1: Árvores mais ao fundo (muito escuras, maiores)
-    ctx.globalAlpha = 0.3;
-    drawSwampTree(-30, 140, 12, 1.0);
-    drawSwampTree(80, 130, 11, 1.0);
-    drawSwampTree(200, 150, 13, 1.0);
-    drawSwampTree(320, 135, 12, 1.0);
-    drawSwampTree(450, 145, 11, 1.0);
-    drawSwampTree(580, 140, 13, 1.0);
-    drawSwampTree(700, 135, 12, 1.0);
-    drawSwampTree(830, 150, 11, 1.0);
+    // OTIMIZAÇÃO MOBILE: Reduzir drasticamente árvores no mobile (boss tem 26 árvores!)
+    if (isMobile) {
+        // Mobile: Apenas 2 camadas com menos árvores (total: ~8 árvores)
+        // Camada 1: Árvores mais ao fundo (reduzidas)
+        ctx.globalAlpha = 0.3;
+        drawSwampTree(150, 140, 12, 1.0);
+        drawSwampTree(400, 150, 13, 1.0);
+        drawSwampTree(650, 140, 12, 1.0);
 
-    // Camada 2: Árvores do meio (escuras, maiores)
-    ctx.globalAlpha = 0.5;
-    drawSwampTree(20, 180, 15, 1.0);
-    drawSwampTree(150, 170, 16, 1.0);
-    drawSwampTree(280, 185, 14, 1.0);
-    drawSwampTree(410, 175, 17, 1.0);
-    drawSwampTree(540, 180, 15, 1.0);
-    drawSwampTree(670, 170, 16, 1.0);
-    drawSwampTree(800, 185, 14, 1.0);
+        // Camada 2: Árvores da frente (reduzidas)
+        ctx.globalAlpha = 0.7;
+        drawSwampTree(100, 220, 20, 1.0);
+        drawSwampTree(400, 230, 21, 1.0);
+        drawSwampTree(700, 220, 20, 1.0);
+        
+        // Camada 3: Apenas 2 árvores gigantes
+        ctx.globalAlpha = 0.9;
+        drawSwampTree(300, 245, 25, 1.0);
+        drawSwampTree(600, 245, 25, 1.0);
+    } else {
+        // Desktop: Todas as árvores (4 camadas, total: 26)
+        // Camada 1: Árvores mais ao fundo (muito escuras, maiores)
+        ctx.globalAlpha = 0.3;
+        drawSwampTree(-30, 140, 12, 1.0);
+        drawSwampTree(80, 130, 11, 1.0);
+        drawSwampTree(200, 150, 13, 1.0);
+        drawSwampTree(320, 135, 12, 1.0);
+        drawSwampTree(450, 145, 11, 1.0);
+        drawSwampTree(580, 140, 13, 1.0);
+        drawSwampTree(700, 135, 12, 1.0);
+        drawSwampTree(830, 150, 11, 1.0);
 
-    // Camada 3: Árvores da frente (mais visíveis mas ainda escuras, muito maiores)
-    ctx.globalAlpha = 0.7;
-    drawSwampTree(-10, 220, 20, 1.0);
-    drawSwampTree(120, 215, 19, 1.0);
-    drawSwampTree(250, 230, 21, 1.0);
-    drawSwampTree(380, 220, 20, 1.0);
-    drawSwampTree(510, 225, 19, 1.0);
-    drawSwampTree(640, 215, 21, 1.0);
-    drawSwampTree(770, 230, 20, 1.0);
+        // Camada 2: Árvores do meio (escuras, maiores)
+        ctx.globalAlpha = 0.5;
+        drawSwampTree(20, 180, 15, 1.0);
+        drawSwampTree(150, 170, 16, 1.0);
+        drawSwampTree(280, 185, 14, 1.0);
+        drawSwampTree(410, 175, 17, 1.0);
+        drawSwampTree(540, 180, 15, 1.0);
+        drawSwampTree(670, 170, 16, 1.0);
+        drawSwampTree(800, 185, 14, 1.0);
 
-    // Camada 4: Árvores muito próximas (silhuetas escuras, gigantes)
-    ctx.globalAlpha = 0.9;
-    drawSwampTree(50, 240, 24, 1.0);
-    drawSwampTree(300, 245, 25, 1.0);
-    drawSwampTree(550, 240, 24, 1.0);
-    drawSwampTree(750, 245, 25, 1.0);
+        // Camada 3: Árvores da frente (mais visíveis mas ainda escuras, muito maiores)
+        ctx.globalAlpha = 0.7;
+        drawSwampTree(-10, 220, 20, 1.0);
+        drawSwampTree(120, 215, 19, 1.0);
+        drawSwampTree(250, 230, 21, 1.0);
+        drawSwampTree(380, 220, 20, 1.0);
+        drawSwampTree(510, 225, 19, 1.0);
+        drawSwampTree(640, 215, 21, 1.0);
+        drawSwampTree(770, 230, 20, 1.0);
+
+        // Camada 4: Árvores muito próximas (silhuetas escuras, gigantes)
+        ctx.globalAlpha = 0.9;
+        drawSwampTree(50, 240, 24, 1.0);
+        drawSwampTree(300, 245, 25, 1.0);
+        drawSwampTree(550, 240, 24, 1.0);
+        drawSwampTree(750, 245, 25, 1.0);
+    }
 
     ctx.globalAlpha = 1;
 
     // Juncos altos e escuros
-    for (let reed of reeds) {
-        reed.color = '#0e6655';
-        drawReed(reed);
+    // OTIMIZAÇÃO MOBILE: Reduzir juncos no mobile
+    if (!isMobile || reeds.length <= 5) {
+        for (let reed of reeds) {
+            reed.color = '#0e6655';
+            drawReed(reed);
+        }
+    } else {
+        // Mobile: desenhar apenas metade dos juncos
+        for (let i = 0; i < reeds.length; i += 2) {
+            reeds[i].color = '#0e6655';
+            drawReed(reeds[i]);
+        }
     }
 
     // Pássaros do pântano
-    for (let bird of swampBirds) {
-        drawSwampBird(bird);
+    // OTIMIZAÇÃO MOBILE: Reduzir pássaros no mobile
+    if (!isMobile || swampBirds.length <= 1) {
+        for (let bird of swampBirds) {
+            drawSwampBird(bird);
+        }
+    } else {
+        // Mobile: desenhar apenas metade dos pássaros
+        for (let i = 0; i < swampBirds.length; i += 2) {
+            drawSwampBird(swampBirds[i]);
+        }
     }
 
     // Água escura mas AINDA DESTACADA (boss) - RESTAURADA com garantia de que não afeta as frutas
     ctx.save(); // Salvar estado do canvas antes de desenhar água
 
-    const waterGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
-    waterGradient.addColorStop(0, '#27ae60'); // Mais claro no topo
-    waterGradient.addColorStop(0.3, '#1e8449');
-    waterGradient.addColorStop(0.6, '#0e6655');
-    waterGradient.addColorStop(1, '#0b5345');
-    ctx.fillStyle = waterGradient;
-    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+    // OTIMIZAÇÃO MOBILE: No mobile, usar cor sólida ao invés de gradiente
+    if (isMobile) {
+        // Mobile: cor sólida (muito mais rápido)
+        ctx.fillStyle = '#1e8449';
+        ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+    } else {
+        // Desktop: gradiente (melhor qualidade)
+        const waterGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
+        waterGradient.addColorStop(0, '#27ae60');
+        waterGradient.addColorStop(0.3, '#1e8449');
+        waterGradient.addColorStop(0.6, '#0e6655');
+        waterGradient.addColorStop(1, '#0b5345');
+        ctx.fillStyle = waterGradient;
+        ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
 
-    // Brilho na superfície (boss)
-    const glowGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height - 20);
-    glowGradient.addColorStop(0, 'rgba(39, 174, 96, 0.3)');
-    glowGradient.addColorStop(1, 'rgba(39, 174, 96, 0)');
-    ctx.fillStyle = glowGradient;
-    ctx.fillRect(0, canvas.height - 40, canvas.width, 20);
+        // Brilho na superfície (boss)
+        const glowGradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height - 20);
+        glowGradient.addColorStop(0, 'rgba(39, 174, 96, 0.3)');
+        glowGradient.addColorStop(1, 'rgba(39, 174, 96, 0)');
+        ctx.fillStyle = glowGradient;
+        ctx.fillRect(0, canvas.height - 40, canvas.width, 20);
+    }
 
     // Linha de borda superior da água (destaque BRILHANTE no boss)
+    // OTIMIZAÇÃO MOBILE: Reduzir sombras no mobile
     ctx.strokeStyle = '#58d68d';
     ctx.lineWidth = 4;
-    ctx.shadowColor = '#27ae60';
-    ctx.shadowBlur = 10;
+    if (!isMobile) {
+        ctx.shadowColor = '#27ae60';
+        ctx.shadowBlur = 10;
+    }
     ctx.beginPath();
     ctx.moveTo(0, canvas.height - 40);
     ctx.lineTo(canvas.width, canvas.height - 40);
@@ -10154,12 +10215,16 @@ function drawExtremeSwampBackground() {
     ctx.stroke();
 
     // Reflexos de luz (mais visíveis no boss)
+    // OTIMIZAÇÃO MOBILE: Reduzir reflexos e sombras no mobile
     const time = Date.now() / 1000;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.shadowColor = 'rgba(39, 174, 96, 0.5)';
-    ctx.shadowBlur = 12;
-    for (let i = 0; i < 5; i++) {
-        const x = (i * 220 + time * 25) % (canvas.width + 100) - 50;
+    if (!isMobile) {
+        ctx.shadowColor = 'rgba(39, 174, 96, 0.5)';
+        ctx.shadowBlur = 12;
+    }
+    const reflectionCount = isMobile ? 2 : 5; // Mobile: reduzir ainda mais
+    for (let i = 0; i < reflectionCount; i++) {
+        const x = (i * (220 * (5 / reflectionCount)) + time * 25) % (canvas.width + 100) - 50;
         const y = canvas.height - 38;
         const width = 120 + Math.sin(time + i) * 40;
         const height = 12;
@@ -10170,18 +10235,22 @@ function drawExtremeSwampBackground() {
     ctx.shadowBlur = 0;
 
     // Ondulações mais intensas e brilhantes (boss)
+    // OTIMIZAÇÃO MOBILE: Reduzir ondulações e sombras no mobile
     ctx.strokeStyle = 'rgba(88, 214, 141, 0.8)';
     ctx.lineWidth = 3;
-    ctx.shadowColor = 'rgba(39, 174, 96, 0.5)';
-    ctx.shadowBlur = 6;
-    for (let i = 0; i < canvas.width; i += 22) {
-        const waveOffset = Math.sin(time * 2.5 + i / 22) * 5;
+    if (!isMobile) {
+        ctx.shadowColor = 'rgba(39, 174, 96, 0.5)';
+        ctx.shadowBlur = 6;
+    }
+    const waveStep = isMobile ? 75 : 22; // Mobile: muito menos ondulações
+    for (let i = 0; i < canvas.width; i += waveStep) {
+        const waveOffset = Math.sin(time * 2.5 + i / waveStep) * 5;
         ctx.beginPath();
         ctx.moveTo(i, canvas.height - 36 + waveOffset);
         ctx.quadraticCurveTo(
-            i + 11,
-            canvas.height - 40 + waveOffset + Math.sin(time * 3.5 + i / 14) * 4,
-            i + 22,
+            i + waveStep / 2,
+            canvas.height - 40 + waveOffset + Math.sin(time * 3.5 + i / (waveStep * 0.64)) * 4,
+            i + waveStep,
             canvas.height - 36 + waveOffset
         );
         ctx.stroke();
@@ -10189,17 +10258,30 @@ function drawExtremeSwampBackground() {
     ctx.shadowBlur = 0;
 
     // Ondulações (ripples) mais intensas
-    for (let ripple of waterRipples) {
-        ripple.alpha = 0.6;
-        drawWaterRipple(ripple);
+    // OTIMIZAÇÃO MOBILE: Reduzir ondulações no mobile
+    if (!isMobile || waterRipples.length <= 3) {
+        for (let ripple of waterRipples) {
+            ripple.alpha = 0.6;
+            drawWaterRipple(ripple);
+        }
+    } else {
+        // Mobile: desenhar apenas metade das ondulações
+        for (let i = 0; i < waterRipples.length; i += 2) {
+            waterRipples[i].alpha = 0.6;
+            drawWaterRipple(waterRipples[i]);
+        }
     }
 
     // Partículas flutuantes (mais visíveis no boss)
+    // OTIMIZAÇÃO MOBILE: Reduzir bolhas e sombras no mobile
     ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.shadowColor = 'rgba(39, 174, 96, 0.6)';
-    ctx.shadowBlur = 8;
-    for (let i = 0; i < 12; i++) {
-        const bubbleX = (i * 90 + time * 25) % canvas.width;
+    if (!isMobile) {
+        ctx.shadowColor = 'rgba(39, 174, 96, 0.6)';
+        ctx.shadowBlur = 8;
+    }
+    const bubbleCount = isMobile ? 4 : 12; // Mobile: reduzir ainda mais
+    for (let i = 0; i < bubbleCount; i++) {
+        const bubbleX = (i * (90 * (12 / bubbleCount)) + time * 25) % canvas.width;
         const bubbleY = canvas.height - 26 + Math.sin(time * 2 + i) * 5;
         const bubbleSize = 3.5 + Math.sin(time * 2.5 + i) * 2;
         ctx.beginPath();
