@@ -3414,13 +3414,8 @@ function toggleDebugMode() {
     updateDebugButton();
 }
 
-// Atualizar texto do botão de debug
+// Atualizar painel de debug (botão removido, apenas gesto de toque)
 function updateDebugButton() {
-    const debugBtn = document.getElementById('debugOptionBtn');
-    if (debugBtn) {
-        debugBtn.textContent = debugMode ? '🔧 Desativar Debug' : '🔧 Ativar Debug';
-    }
-    
     // Atualizar painel de debug se o jogo estiver rodando
     const debugPanel = document.getElementById('debugPanel');
     if (debugPanel && gameRunning) {
@@ -12642,9 +12637,7 @@ function draw() {
             }
 
             // Desenhar chuva apenas nas bordas (não na área central onde frutas estão)
-            // Simplificar desenho no mobile para melhor performance
-            const isMobile = isMobileDevice();
-            
+            // Simplificar desenho no mobile para melhor performance (isMobile já declarado acima)
             if (isMobile) {
                 // Mobile: desenho simplificado (sem brilho, menos operações)
                 ctx.strokeStyle = '#5F9EA0';

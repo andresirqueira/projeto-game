@@ -32,7 +32,7 @@
             overflow-x: hidden;
             overflow-y: auto;
         }
-        
+
         /* Desabilitar scroll quando em tela cheia */
         html:fullscreen,
         html:-webkit-full-screen,
@@ -998,47 +998,6 @@
         }
 
         .fullscreen-desc {
-            margin-top: 8px;
-            font-size: 0.75rem;
-            color: #bdc3c7;
-            font-style: italic;
-            min-height: 2em;
-            line-height: 1.3;
-            text-align: center;
-            padding: 0 3px;
-        }
-
-        .debug-selection {
-            margin-bottom: 12px;
-            padding-top: 12px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .debug-selection h4 {
-            margin-bottom: 8px;
-            font-size: 0.95rem;
-            color: #ecf0f1;
-        }
-
-        .debug-option-btn {
-            padding: 8px 20px;
-            font-size: 0.9rem;
-            border: 2px solid #f1c40f;
-            background: rgba(241, 196, 15, 0.2);
-            color: #f1c40f;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-            width: 100%;
-        }
-
-        .debug-option-btn:hover {
-            background: #f1c40f;
-            color: #000;
-            transform: scale(1.05);
-        }
-
-        .debug-desc {
             margin-top: 8px;
             font-size: 0.75rem;
             color: #bdc3c7;
