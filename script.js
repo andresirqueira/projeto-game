@@ -3752,7 +3752,11 @@ if (document.readyState === 'loading') {
 
 // Criar comida normal (cai do céu)
 function spawnFood() {
-    if (foods.length < 10) { // Máximo de 10 comidas na tela
+    // Reduzir número máximo de frutas no mobile para melhor performance
+    const isMobile = isMobileDevice();
+    const maxFoods = isMobile ? 5 : 10; // Mobile: 5 frutas, Desktop: 10 frutas
+    
+    if (foods.length < maxFoods) {
         foods.push({
             x: Math.random() * (canvas.width - 100) + 50,
             y: -30, // Começa acima da tela
@@ -12610,56 +12614,91 @@ function draw() {
 
         // Desenhar névoa e chuva do pântano DEPOIS das frutas (mas não na área das frutas)
         if (currentArea === 2) {
-            // NÃO desenhar névoa na área central da tela onde as frutas estão
-            // Área proibida: y entre 50 e canvas.height - 50 (área muito grande para garantir que nenhuma névoa cubra as frutas)
-            const forbiddenAreaTop = 50;
-            const forbiddenAreaBottom = canvas.height - 50;
+            const isMobile = isMobileDevice();
+            
+            // Desabilitar névoa completamente no mobile
+            if (!isMobile) {
+                // NÃO desenhar névoa na área central da tela onde as frutas estão
+                // Área proibida: y entre 50 e canvas.height - 50 (área muito grande para garantir que nenhuma névoa cubra as frutas)
+                const forbiddenAreaTop = 50;
+                const forbiddenAreaBottom = canvas.height - 50;
 
-            for (let mist of swampMist) {
-                // Verificar se a névoa está completamente FORA da área proibida
-                const mistTop = mist.y - mist.height / 2;
-                const mistBottom = mist.y + mist.height / 2;
+                for (let mist of swampMist) {
+                    // Verificar se a névoa está completamente FORA da área proibida
+                    const mistTop = mist.y - mist.height / 2;
+                    const mistBottom = mist.y + mist.height / 2;
 
-                // Só desenhar névoa se ela estiver completamente acima ou completamente abaixo da área proibida
-                const mistIsAboveForbiddenArea = mistBottom < forbiddenAreaTop;
-                const mistIsBelowForbiddenArea = mistTop > forbiddenAreaBottom;
+                    // Só desenhar névoa se ela estiver completamente acima ou completamente abaixo da área proibida
+                    const mistIsAboveForbiddenArea = mistBottom < forbiddenAreaTop;
+                    const mistIsBelowForbiddenArea = mistTop > forbiddenAreaBottom;
 
-                if (mistIsAboveForbiddenArea || mistIsBelowForbiddenArea) {
-                    // Garantir que globalAlpha está correto antes de desenhar névoa
-                    ctx.save();
-                    drawSwampMist(mist);
-                    ctx.restore();
+                    if (mistIsAboveForbiddenArea || mistIsBelowForbiddenArea) {
+                        // Garantir que globalAlpha está correto antes de desenhar névoa
+                        ctx.save();
+                        drawSwampMist(mist);
+                        ctx.restore();
+                    }
                 }
             }
 
             // Desenhar chuva apenas nas bordas (não na área central onde frutas estão)
-            ctx.save();
-            for (let drop of rainDrops) {
-                // Não desenhar chuva na área central onde as frutas estão (y entre 80 e canvas.height - 80)
-                const dropInFruitArea = drop.y > 80 && drop.y < canvas.height - 80;
-                if (!dropInFruitArea) {
-                    ctx.globalAlpha = drop.opacity;
-
-                    // Cor da chuva para pântano
-                    ctx.strokeStyle = '#5F9EA0';
-                    ctx.lineWidth = 1.5;
-                    ctx.lineCap = 'round';
-
-                    // Desenhar linha de chuva (inclinada)
-                    ctx.beginPath();
-                    ctx.moveTo(drop.x, drop.y);
-                    ctx.lineTo(drop.x - 2, drop.y + drop.length);
-                    ctx.stroke();
-
-                    // Brilho na ponta da gota
-                    ctx.globalAlpha = drop.opacity * 0.5;
-                    ctx.fillStyle = '#7FB3B3';
-                    ctx.beginPath();
-                    ctx.arc(drop.x - 2, drop.y + drop.length, 2, 0, Math.PI * 2);
-                    ctx.fill();
+            // Simplificar desenho no mobile para melhor performance
+            const isMobile = isMobileDevice();
+            
+            if (isMobile) {
+                // Mobile: desenho simplificado (sem brilho, menos operações)
+                ctx.strokeStyle = '#5F9EA0';
+                ctx.lineWidth = 1;
+                ctx.lineCap = 'round';
+                ctx.globalAlpha = 0.6;
+                
+                ctx.beginPath();
+                let drawnCount = 0;
+                const maxDrawn = 20; // Limitar gotas desenhadas no mobile
+                
+                for (let drop of rainDrops) {
+                    if (drawnCount >= maxDrawn) break;
+                    
+                    // Não desenhar chuva na área central onde as frutas estão
+                    const dropInFruitArea = drop.y > 80 && drop.y < canvas.height - 80;
+                    if (!dropInFruitArea) {
+                        ctx.moveTo(drop.x, drop.y);
+                        ctx.lineTo(drop.x - 2, drop.y + drop.length);
+                        drawnCount++;
+                    }
                 }
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+            } else {
+                // Desktop: desenho completo
+                ctx.save();
+                for (let drop of rainDrops) {
+                    // Não desenhar chuva na área central onde as frutas estão (y entre 80 e canvas.height - 80)
+                    const dropInFruitArea = drop.y > 80 && drop.y < canvas.height - 80;
+                    if (!dropInFruitArea) {
+                        ctx.globalAlpha = drop.opacity;
+
+                        // Cor da chuva para pântano
+                        ctx.strokeStyle = '#5F9EA0';
+                        ctx.lineWidth = 1.5;
+                        ctx.lineCap = 'round';
+
+                        // Desenhar linha de chuva (inclinada)
+                        ctx.beginPath();
+                        ctx.moveTo(drop.x, drop.y);
+                        ctx.lineTo(drop.x - 2, drop.y + drop.length);
+                        ctx.stroke();
+
+                        // Brilho na ponta da gota
+                        ctx.globalAlpha = drop.opacity * 0.5;
+                        ctx.fillStyle = '#7FB3B3';
+                        ctx.beginPath();
+                        ctx.arc(drop.x - 2, drop.y + drop.length, 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+                ctx.restore();
             }
-            ctx.restore();
 
             // Garantir que globalAlpha está em 1.0 após desenhar névoa e chuva
             ctx.globalAlpha = 1.0;
@@ -16024,8 +16063,29 @@ wormSpawnInterval = setInterval(() => {
 }, 300 + Math.random() * 500);
 
 // Loop principal do jogo
-function gameLoop() {
+// Throttling de FPS no mobile para melhor performance
+let lastFrameTime = 0;
+const mobileFrameInterval = 1000 / 30; // 30 FPS no mobile (em vez de 60)
+const desktopFrameInterval = 1000 / 60; // 60 FPS no desktop
+
+function gameLoop(timestamp) {
     if (!gameRunning) return;
+
+    // Throttling de FPS no mobile
+    const isMobile = isMobileDevice();
+    const frameInterval = isMobile ? mobileFrameInterval : desktopFrameInterval;
+    
+    // Se lastFrameTime ainda não foi inicializado, usar timestamp atual
+    if (lastFrameTime === 0) {
+        lastFrameTime = timestamp;
+    }
+    
+    if (timestamp - lastFrameTime < frameInterval) {
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+    
+    lastFrameTime = timestamp;
 
     // OTIMIZAÇÃO: Cachear Date.now() uma vez por frame (usado 40+ vezes)
     const currentTime = Date.now();
@@ -16126,6 +16186,9 @@ function gameLoop() {
 
     requestAnimationFrame(gameLoop);
 }
+
+// Inicializar lastFrameTime quando o jogo começar
+let gameLoopInitialized = false;
 
 // Progresso do jogador
 let gameProgress = JSON.parse(localStorage.getItem('birdGameProgress')) || {};
@@ -19769,7 +19832,8 @@ function showCountdown() {
             spawnFood();
             spawnFood();
             spawnFood();
-            gameLoop();
+            lastFrameTime = performance.now();
+            requestAnimationFrame(gameLoop);
             startTimer();
         }
     }, 800);
@@ -20910,9 +20974,17 @@ function updateRain() {
             }
         }
 
-        // Limitar número máximo de gotas (performance)
-        if (rainDrops.length > 150) {
-            rainDrops.splice(0, rainDrops.length - 150);
+        // Limitar número máximo de gotas (performance) - reduzir drasticamente no mobile
+        const isMobile = isMobileDevice();
+        const maxRainDrops = isMobile ? 30 : 150; // Reduzir de 150 para 30 no mobile
+        if (rainDrops.length > maxRainDrops) {
+            rainDrops.splice(0, rainDrops.length - maxRainDrops);
+        }
+        
+        // Reduzir intensidade de criação de chuva no mobile
+        if (isMobile && rainDrops.length > 20) {
+            // Não criar mais gotas se já tiver muitas
+            return;
         }
     } else {
         // Limpar chuva se não estiver na área correta
