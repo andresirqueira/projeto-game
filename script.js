@@ -3388,6 +3388,14 @@ let touchControls = {
 let debugMode = false;
 window.debugMode = false; // Pode ser ativado no console do navegador
 
+// Contador de FPS para modo debug
+let fps = 0;
+let fpsFrameCount = 0;
+let fpsLastTime = performance.now();
+let fpsHistory = []; // Histórico para média móvel
+const FPS_HISTORY_SIZE = 10; // Manter últimos 10 valores
+const FPS_UPDATE_INTERVAL = 500; // Atualizar a cada 500ms (mais responsivo)
+
 // Atalho para ativar/desativar debug: Ctrl+Shift+D
 document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
@@ -3402,6 +3410,22 @@ document.addEventListener('keydown', (e) => {
                 debugIndicator.classList.add('active');
             } else {
                 debugIndicator.classList.remove('active');
+            }
+        }
+
+        // Mostrar/esconder contador de FPS
+        const fpsCounter = document.getElementById('fpsCounter');
+        if (fpsCounter) {
+            if (debugMode) {
+                fpsCounter.style.display = 'block';
+                // Resetar contador de FPS
+                fpsFrameCount = 0;
+                fpsLastTime = performance.now();
+                fpsHistory = []; // Limpar histórico
+            } else {
+                fpsCounter.style.display = 'none';
+                fpsCounter.textContent = 'FPS: --';
+                fpsHistory = []; // Limpar histórico
             }
         }
 
@@ -3453,7 +3477,23 @@ document.addEventListener('keydown', (e) => {
                         debugIndicator.classList.remove('active');
                     }
                 }
-                
+
+                // Mostrar/esconder contador de FPS
+                const fpsCounter = document.getElementById('fpsCounter');
+                if (fpsCounter) {
+                    if (debugMode) {
+                        fpsCounter.style.display = 'block';
+                        // Resetar contador de FPS
+                        fpsFrameCount = 0;
+                        fpsLastTime = performance.now();
+                        fpsHistory = []; // Limpar histórico
+                    } else {
+                        fpsCounter.style.display = 'none';
+                        fpsCounter.textContent = 'FPS: --';
+                        fpsHistory = []; // Limpar histórico
+                    }
+                }
+
                 // Mostrar/esconder painel de debug
                 const debugPanel = document.getElementById('debugPanel');
                 if (debugPanel) {
@@ -15674,6 +15714,12 @@ function goToRoadmap() {
     if (debugPanel) {
         debugPanel.classList.remove('active');
     }
+    
+    // Esconder contador de FPS
+    const fpsCounter = document.getElementById('fpsCounter');
+    if (fpsCounter) {
+        fpsCounter.style.display = 'none';
+    }
 
     // Reiniciar animação do menu se não estiver rodando
     if (menuOverlay && menuOverlay.style.display !== 'none') {
@@ -16162,7 +16208,57 @@ function gameLoop() {
 
     draw();
 
+    // Atualizar contador de FPS se modo debug estiver ativo
+    if (debugMode || window.debugMode) {
+        updateFPS();
+    }
+
     requestAnimationFrame(gameLoop);
+}
+
+// Atualizar contador de FPS (com média móvel e atualização mais frequente)
+function updateFPS() {
+    fpsFrameCount++;
+    const currentTime = performance.now();
+    const elapsed = currentTime - fpsLastTime;
+    
+    // Atualizar FPS a cada 500ms (mais responsivo)
+    if (elapsed >= FPS_UPDATE_INTERVAL) {
+        // Calcular FPS atual
+        const currentFPS = Math.round((fpsFrameCount * 1000) / elapsed);
+        
+        // Adicionar ao histórico para média móvel
+        fpsHistory.push(currentFPS);
+        if (fpsHistory.length > FPS_HISTORY_SIZE) {
+            fpsHistory.shift(); // Remover o mais antigo
+        }
+        
+        // Calcular média móvel
+        const sum = fpsHistory.reduce((a, b) => a + b, 0);
+        fps = Math.round(sum / fpsHistory.length);
+        
+        // Resetar contadores
+        fpsFrameCount = 0;
+        fpsLastTime = currentTime;
+        
+        // Atualizar display
+        const fpsCounter = document.getElementById('fpsCounter');
+        if (fpsCounter) {
+            // Mostrar FPS atual e média
+            const minFPS = Math.min(...fpsHistory);
+            const maxFPS = Math.max(...fpsHistory);
+            fpsCounter.textContent = `FPS: ${fps} (${minFPS}-${maxFPS})`;
+            
+            // Mudar cor baseado no FPS médio
+            if (fps >= 55) {
+                fpsCounter.style.color = '#2ecc71'; // Verde - bom
+            } else if (fps >= 30) {
+                fpsCounter.style.color = '#f1c40f'; // Amarelo - médio
+            } else {
+                fpsCounter.style.color = '#e74c3c'; // Vermelho - ruim
+            }
+        }
+    }
 }
 
 // Progresso do jogador
@@ -19861,8 +19957,10 @@ function showCountdown() {
             if (debugMode || window.debugMode) {
                 const debugPanel = document.getElementById('debugPanel');
                 const debugIndicator = document.getElementById('debugIndicator');
+                const fpsCounter = document.getElementById('fpsCounter');
                 if (debugPanel) debugPanel.classList.add('active');
                 if (debugIndicator) debugIndicator.classList.add('active');
+                if (fpsCounter) fpsCounter.style.display = 'block';
             }
 
             spawnFood();
