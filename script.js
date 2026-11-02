@@ -2643,13 +2643,16 @@ function drawPassageHUD() {
     if (!passageState) return;
     const padding = 16;
     ctx.save();
-    ctx.font = 'bold 24px Arial';
+    ctx.font = 'bold 22px Arial';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#e74c3c';
+    ctx.beginPath();
+    ctx.arc(padding + 8, 32, 8, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'left';
-    ctx.fillText(`🍎 ${playerScore}/${passageState.totalFruits}`, padding, 32);
+    ctx.fillText(`${playerScore}/${passageState.totalFruits}`, padding + 22, 32);
     ctx.textAlign = 'center';
     ctx.fillStyle = timeLeft <= 10 ? '#ff6b6b' : '#ffffff';
     ctx.fillText(`${timeLeft}s`, canvas.width / 2, 32);
@@ -2666,31 +2669,39 @@ function drawPassageHUD() {
         ctx.textAlign = 'left';
         ctx.fillStyle = '#fff8d0';
         ctx.fillText('SHIFT', padding + 150, 56);
-        ctx.shadowBlur = 4;
     } else {
         ctx.shadowBlur = 0;
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         ctx.fillRect(padding, 52, 140, 10);
         ctx.fillStyle = player.speedBoost > 0 ? '#f39c12' : '#3498db';
         ctx.fillRect(padding, 52, boostWidth, 10);
-        ctx.shadowBlur = 4;
     }
 
-    let hearts = '';
     const heartsLeft = PASSAGE_MAX_HITS - passageState.hits;
     for (let i = 0; i < PASSAGE_MAX_HITS; i++) {
-        hearts += i < heartsLeft ? '❤️' : '🖤';
+        const hx = canvas.width - padding - (PASSAGE_MAX_HITS - 1 - i) * 22;
+        ctx.fillStyle = i < heartsLeft ? '#e74c3c' : '#2c2c2c';
+        ctx.beginPath();
+        ctx.arc(hx - 5, 30, 6, 0, Math.PI * 2);
+        ctx.arc(hx + 5, 30, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(hx - 10, 32);
+        ctx.lineTo(hx, 42);
+        ctx.lineTo(hx + 10, 32);
+        ctx.closePath();
+        ctx.fill();
     }
-    ctx.font = 'bold 24px Arial';
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'right';
-    ctx.fillText(hearts, canvas.width - padding, 32);
     if (passageStarActive()) {
         const left = Math.max(1, Math.ceil((passageState.starUntil - performance.now()) / 1000));
         ctx.font = 'bold 22px Arial';
-        ctx.fillStyle = '#ffe56a';
+        ctx.fillStyle = '#f1c40f';
+        ctx.beginPath();
+        ctx.ellipse(canvas.width - padding - 46, 62, 10, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(`🪲 ${left}s`, canvas.width - padding, 62);
+        ctx.textAlign = 'right';
+        ctx.fillText(`${left}s`, canvas.width - padding, 62);
     }
     ctx.shadowBlur = 0;
 
@@ -5821,8 +5832,54 @@ function initTouchControls() {
     initFlightPad();
     const joystickBase = document.getElementById('joystickBase');
     const joystickStick = document.getElementById('joystickStick');
-    
-    if (!joystickBase || !joystickStick) return;
+    if (!joystickBase || !joystickStick || joystickBase.dataset.stickBound === '1') return;
+    joystickBase.dataset.stickBound = '1';
+
+    let stickId = null;
+
+    function applyStick(event) {
+        const rect = joystickBase.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const radius = rect.width / 2;
+        let dx = event.clientX - centerX;
+        let dy = event.clientY - centerY;
+        const distance = Math.hypot(dx, dy) || 1;
+        if (distance > radius) {
+            dx = (dx / distance) * radius;
+            dy = (dy / distance) * radius;
+        }
+        touchControls.joystickActive = true;
+        touchControls.joystickX = dx;
+        touchControls.joystickY = dy;
+        joystickStick.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
+    }
+
+    function releaseStick(event) {
+        if (event && event.pointerId !== stickId) return;
+        stickId = null;
+        touchControls.joystickActive = false;
+        touchControls.joystickX = 0;
+        touchControls.joystickY = 0;
+        joystickStick.style.transform = 'translate(-50%, -50%)';
+    }
+
+    joystickBase.addEventListener('pointerdown', (event) => {
+        if (!gameRunning || !isMobileDevice() || stickId !== null) return;
+        stickId = event.pointerId;
+        if (joystickBase.setPointerCapture) joystickBase.setPointerCapture(event.pointerId);
+        applyStick(event);
+        event.preventDefault();
+    });
+    joystickBase.addEventListener('pointermove', (event) => {
+        if (event.pointerId !== stickId) return;
+        applyStick(event);
+        event.preventDefault();
+    });
+    joystickBase.addEventListener('pointerup', releaseStick);
+    joystickBase.addEventListener('pointercancel', releaseStick);
+    joystickBase.addEventListener('contextmenu', (event) => event.preventDefault());
+    return;
 
     // Obter posição do joystick base
     function getJoystickBasePosition() {
@@ -10862,10 +10919,12 @@ function drawFirefly(firefly) {
     const glow = 0.3 + Math.sin(firefly.glowPhase) * 0.7;
 
     ctx.save();
-    ctx.globalAlpha = glow;
-    ctx.shadowColor = '#ffff00';
-    ctx.shadowBlur = 8;
     ctx.fillStyle = '#ffff00';
+    ctx.globalAlpha = glow * 0.35;
+    ctx.beginPath();
+    ctx.arc(firefly.x, firefly.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = glow;
     ctx.beginPath();
     ctx.arc(firefly.x, firefly.y, 2, 0, Math.PI * 2);
     ctx.fill();
@@ -11027,13 +11086,12 @@ function drawForestBackground() {
         const moonY = 80;
         const moonAlpha = (dayNightProgress - 0.4) / 0.6; // Aparece gradualmente
         ctx.fillStyle = '#fffacd';
-        ctx.shadowColor = '#fffacd';
-        ctx.shadowBlur = 30 * moonAlpha;
+        ctx.shadowBlur = 0;
         ctx.globalAlpha = moonAlpha;
         ctx.beginPath();
         ctx.arc(moonX, moonY, 40, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
 
         // Crateras da lua
         ctx.fillStyle = `rgba(200, 195, 150, ${0.3 * moonAlpha})`;
@@ -14189,12 +14247,10 @@ function drawNightForestBackground() {
     const moonX = 650;
     const moonY = 80;
     ctx.fillStyle = '#fffacd';
-    ctx.shadowColor = '#fffacd';
-    ctx.shadowBlur = 30;
+    ctx.shadowBlur = 0;
     ctx.beginPath();
     ctx.arc(moonX, moonY, 40, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
 
     // Crateras da lua
     ctx.fillStyle = 'rgba(200, 195, 150, 0.3)';
@@ -14258,9 +14314,11 @@ function drawNightForestBackground() {
         const fx = 50 + (i * 100) + Math.sin(Date.now() / 800 + i * 2) * 30;
         const fy = 200 + Math.sin(Date.now() / 600 + i) * 50;
         const glow = 0.3 + Math.sin(Date.now() / 300 + i) * 0.7;
+        ctx.globalAlpha = glow * 0.35;
+        ctx.beginPath();
+        ctx.arc(fx, fy, 8, 0, Math.PI * 2);
+        ctx.fill();
         ctx.globalAlpha = glow;
-        ctx.shadowColor = '#ffff00';
-        ctx.shadowBlur = 10;
         ctx.beginPath();
         ctx.arc(fx, fy, 3, 0, Math.PI * 2);
         ctx.fill();
