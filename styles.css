@@ -729,6 +729,187 @@
             transform: scale(1.05);
         }
 
+        .story-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 250;
+        }
+
+        .story-overlay.active {
+            display: flex;
+        }
+
+        .story-box {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 30px 50px;
+            border-radius: 20px;
+            border: 3px solid #9b59b6;
+            max-width: 650px;
+            max-height: 85vh;
+            overflow-y: auto;
+            animation: rulesPopIn 0.3s ease-out;
+        }
+
+        .story-box::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .story-box::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        
+        .story-box::-webkit-scrollbar-thumb {
+            background: #9b59b6;
+            border-radius: 10px;
+        }
+        
+        .story-box::-webkit-scrollbar-thumb:hover {
+            background: #8e44ad;
+        }
+
+        .story-box h3 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 25px;
+            color: #f1c40f;
+        }
+
+        .story-content {
+            color: #ecf0f1;
+            line-height: 1.8;
+            font-size: 1rem;
+        }
+
+        .story-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(155, 89, 182, 0.1);
+            border-radius: 15px;
+            border-left: 4px solid #9b59b6;
+        }
+
+        .story-section h4 {
+            color: #bb8fce;
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px rgba(187, 143, 206, 0.5);
+        }
+
+        .story-section p {
+            color: #ecf0f1;
+            line-height: 1.8;
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .close-story-btn {
+            display: block;
+            margin: 25px auto 0;
+            padding: 12px 40px;
+            font-size: 1.2rem;
+            background: #e74c3c;
+            border: none;
+            color: white;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            position: sticky;
+            bottom: 0;
+        }
+
+        .close-story-btn:hover {
+            background: #c0392b;
+            transform: scale(1.05);
+        }
+
+        /* Menu de Pausa */
+        .pause-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 300;
+            backdrop-filter: blur(5px);
+        }
+
+        .pause-box {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 40px 50px;
+            border-radius: 20px;
+            border: 3px solid #f1c40f;
+            max-width: 400px;
+            text-align: center;
+            animation: rulesPopIn 0.3s ease-out;
+            box-shadow: 0 0 30px rgba(241, 196, 15, 0.5);
+        }
+
+        .pause-box h3 {
+            font-size: 2rem;
+            margin-bottom: 30px;
+            color: #f1c40f;
+            text-shadow: 0 0 10px rgba(241, 196, 15, 0.5);
+        }
+
+        .pause-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .pause-btn {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            color: white;
+        }
+
+        .pause-btn.continue-btn {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4);
+        }
+
+        .pause-btn.continue-btn:hover {
+            background: linear-gradient(135deg, #27ae60, #229954);
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(46, 204, 113, 0.6);
+        }
+
+        .pause-btn.quit-btn {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+        }
+
+        .pause-btn.quit-btn:hover {
+            background: linear-gradient(135deg, #c0392b, #a93226);
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(231, 76, 60, 0.6);
+        }
+
+        .pause-hint {
+            color: #95a5a6;
+            font-size: 0.9rem;
+            margin-top: 15px;
+            font-style: italic;
+        }
+
         .options-overlay {
             position: fixed;
             top: 0;
@@ -1200,6 +1381,75 @@
             transition: transform 0.3s, box-shadow 0.3s, background-color 0.3s, border-color 0.3s;
             border: 3px solid #f1c40f;
             position: relative;
+            overflow: hidden;
+        }
+
+        /* Overlay de maldição nos cards de áreas */
+        .area-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(142, 68, 173, 0.85), rgba(155, 89, 182, 0.75));
+            border-radius: 15px;
+            pointer-events: none;
+            transition: opacity 0.5s ease, filter 0.5s ease;
+            z-index: 1;
+        }
+
+        /* Partículas de maldição nos cards de área */
+        .area-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 25% 25%, rgba(155, 89, 182, 0.5) 2px, transparent 2px),
+                radial-gradient(circle at 75% 75%, rgba(142, 68, 173, 0.5) 2px, transparent 2px),
+                radial-gradient(circle at 50% 50%, rgba(155, 89, 182, 0.4) 2px, transparent 2px);
+            background-size: 40px 40px, 45px 45px, 30px 30px;
+            opacity: 0.7;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+            z-index: 1;
+        }
+
+        /* Conteúdo do card de área acima do overlay */
+        .area-card > * {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Áreas completamente libertadas - maldição removida */
+        .area-card.completed::after,
+        .area-card.completed::before {
+            opacity: 0;
+        }
+
+        /* Áreas com progresso - maldição parcialmente removida */
+        .area-card.curse-25::after {
+            opacity: 0.75;
+        }
+        .area-card.curse-25::before {
+            opacity: 0.52;
+        }
+
+        .area-card.curse-50::after {
+            opacity: 0.5;
+        }
+        .area-card.curse-50::before {
+            opacity: 0.35;
+        }
+
+        .area-card.curse-75::after {
+            opacity: 0.25;
+        }
+        .area-card.curse-75::before {
+            opacity: 0.17;
         }
 
         .area-card.unlocked:hover {
@@ -1211,6 +1461,31 @@
             background: linear-gradient(135deg, #555, #777);
             border-color: #888;
             cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .area-card.construction {
+            cursor: not-allowed;
+            opacity: 0.92;
+            background: rgba(44, 62, 80, 0.72);
+            border-color: #7f8c8d;
+        }
+
+        .area-card.construction::after,
+        .area-card.construction::before {
+            opacity: 0;
+        }
+
+        .area-card.construction .area-progress {
+            font-size: 0.72rem;
+            text-align: center;
+        }
+
+        /* Cards bloqueados têm maldição completa */
+        .area-card.locked::after {
+            opacity: 1;
+        }
+        .area-card.locked::before {
             opacity: 0.7;
         }
 
@@ -1292,6 +1567,8 @@
             border-radius: 20px;
             border: 3px solid #f1c40f;
             max-width: 600px;
+            max-height: 85vh;
+            overflow-y: auto;
             animation: rulesPopIn 0.3s ease-out;
             text-align: center;
         }
@@ -1321,6 +1598,76 @@
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
             border: 2px solid #5dade2;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Overlay de maldição nos cards de fases */
+        .substage-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(142, 68, 173, 0.8), rgba(155, 89, 182, 0.7));
+            border-radius: 12px;
+            pointer-events: none;
+            transition: opacity 0.5s ease, filter 0.5s ease;
+            z-index: 1;
+        }
+
+        /* Partículas de maldição (efeito visual) */
+        .substage-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 20% 30%, rgba(155, 89, 182, 0.4) 1px, transparent 1px),
+                radial-gradient(circle at 80% 70%, rgba(142, 68, 173, 0.4) 1px, transparent 1px),
+                radial-gradient(circle at 50% 50%, rgba(155, 89, 182, 0.3) 1px, transparent 1px);
+            background-size: 30px 30px, 35px 35px, 25px 25px;
+            opacity: 0.6;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+            z-index: 1;
+        }
+
+        /* Conteúdo do card acima do overlay */
+        .substage-card > * {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Cards completados - maldição removida completamente */
+        .substage-card.completed::after,
+        .substage-card.completed::before {
+            opacity: 0;
+        }
+
+        /* Cards com progresso - maldição parcialmente removida */
+        .substage-card.curse-25::after {
+            opacity: 0.75;
+        }
+        .substage-card.curse-25::before {
+            opacity: 0.45;
+        }
+
+        .substage-card.curse-50::after {
+            opacity: 0.5;
+        }
+        .substage-card.curse-50::before {
+            opacity: 0.3;
+        }
+
+        .substage-card.curse-75::after {
+            opacity: 0.25;
+        }
+        .substage-card.curse-75::before {
+            opacity: 0.15;
         }
 
         .substage-card.unlocked:hover {
@@ -1332,6 +1679,14 @@
             background: linear-gradient(135deg, #555, #666);
             border-color: #777;
             cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        /* Cards bloqueados têm maldição completa */
+        .substage-card.locked::after {
+            opacity: 1;
+        }
+        .substage-card.locked::before {
             opacity: 0.6;
         }
 
@@ -1377,6 +1732,12 @@
             box-shadow: 0 0 20px rgba(241, 196, 15, 0.6);
         }
 
+        /* Boss cards também devem ter maldição removida quando completados */
+        .substage-card.boss.completed::after,
+        .substage-card.boss.completed::before {
+            opacity: 0;
+        }
+
         .substage-card.boss .substage-number {
             font-size: 1.5rem;
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
@@ -1396,6 +1757,12 @@
         .substage-card.bonus.completed {
             background: linear-gradient(135deg, #27ae60, #2ecc71);
             border-color: #58d68d;
+        }
+
+        /* Bonus cards também devem ter maldição removida quando completados */
+        .substage-card.bonus.completed::after,
+        .substage-card.bonus.completed::before {
+            opacity: 0;
         }
 
         .substage-number {
@@ -1681,70 +2048,128 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+            background:
+                radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.08), transparent 52%),
+                linear-gradient(180deg, #163024 0%, #0c1612 100%);
             display: none;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             z-index: 150;
             overflow: hidden;
+            padding: 18px;
         }
-        
-        .countdown-header {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
+
+        .countdown-overlay[data-tone="night"] {
+            background:
+                radial-gradient(ellipse at 78% 8%, rgba(247, 243, 216, 0.16), transparent 36%),
+                linear-gradient(180deg, #141a30 0%, #070910 100%);
+        }
+
+        .countdown-overlay[data-tone="boss"] {
+            background:
+                radial-gradient(ellipse at 50% 0%, rgba(231, 76, 60, 0.22), transparent 48%),
+                linear-gradient(180deg, #2c1418 0%, #12080c 100%);
+        }
+
+        .countdown-overlay[data-tone="bonus"] {
+            background:
+                radial-gradient(ellipse at 50% 0%, rgba(241, 196, 15, 0.18), transparent 46%),
+                linear-gradient(180deg, #2c2614 0%, #141006 100%);
+        }
+
+        .countdown-overlay[data-tone="duel"] {
+            background:
+                radial-gradient(ellipse at 50% 0%, rgba(52, 152, 219, 0.16), transparent 46%),
+                linear-gradient(180deg, #1a1a2e 0%, #0d1018 100%);
+        }
+
+        .countdown-card {
+            position: relative;
+            z-index: 2;
+            width: min(640px, 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 22px 22px 14px;
+            border-radius: 28px;
+            background: rgba(8, 14, 12, 0.78);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        }
+
+        .countdown-kicker {
+            font-size: 0.78rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.62);
+        }
+
+        .countdown-title {
+            margin: 0;
+            font-size: clamp(1.7rem, 4vw, 2.5rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.05;
             text-align: center;
-            z-index: 151;
+            color: #fffaf0;
         }
-        
-        .countdown-stage-info {
-            font-size: 1.1rem;
-            color: #ecf0f1;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            opacity: 0.9;
+
+        .countdown-chips {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
         }
-        
-        .countdown-stage-info .stage-name {
-            font-weight: bold;
-            color: #3498db;
-        }
-        
-        .countdown-stage-info .difficulty {
-            font-size: 0.9rem;
-            color: #f1c40f;
-            margin-top: 5px;
+
+        .countdown-chip {
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            color: #f7f4ea;
+            font-size: 0.95rem;
+            font-weight: 650;
+            line-height: 1.2;
         }
 
         .countdown-scene {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
+            width: 100%;
+            border-radius: 18px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         #countdownCanvas {
-            border-radius: 10px;
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .countdown-hint {
+            margin: 0;
+            max-width: 34rem;
+            text-align: center;
+            font-size: 1.12rem;
+            line-height: 1.35;
+            color: #f4efe4;
         }
 
         .countdown-number {
-            font-size: 10rem;
-            font-weight: bold;
+            font-size: clamp(4.2rem, 12vw, 6.6rem);
+            font-weight: 800;
+            line-height: 0.9;
             color: #fff;
-            text-shadow: 0 0 50px #e74c3c, 0 0 100px #e74c3c;
-            animation: countPulse 0.5s ease-out, countShake 0.1s ease-out 0.3s;
-            min-width: 200px;
+            text-shadow: 0 8px 0 rgba(0, 0, 0, 0.28);
+            animation: countPulse 0.5s ease-out;
+            min-width: 0;
             text-align: center;
-            position: relative;
-            z-index: 152;
         }
 
         .countdown-go {
-            font-size: 6rem;
+            font-size: clamp(3.2rem, 9vw, 4.8rem);
             color: #2ecc71;
-            text-shadow: 0 0 50px #2ecc71, 0 0 100px #2ecc71;
+            text-shadow: 0 8px 0 rgba(0, 0, 0, 0.28);
         }
 
         @keyframes countPulse {
@@ -1766,7 +2191,7 @@
             top: 0;
             left: 0;
             pointer-events: none;
-            z-index: 151;
+            z-index: 1;
         }
         
         .particle {
@@ -1790,19 +2215,13 @@
             }
         }
 
-        .countdown-vs {
-            font-size: 2rem;
-            color: #f1c40f;
-            margin-bottom: 20px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-
         .countdown-effects {
             position: absolute;
             width: 100%;
             height: 100%;
             pointer-events: none;
             overflow: hidden;
+            z-index: 1;
         }
 
         .spark {
@@ -2112,6 +2531,14 @@
             display: none; /* Escondido por padrão (desktop) */
         }
 
+        .audio-btn.pause-btn-game {
+            display: none; /* Escondido por padrão - só aparece quando o jogo está rodando */
+        }
+
+        .game-container.active .audio-btn.pause-btn-game {
+            display: flex !important; /* Mostrar quando o jogo está ativo */
+        }
+
         /* Mostrar botão de tela cheia apenas em mobile */
         @media screen and (max-width: 750px), screen and (max-height: 750px) {
             .audio-btn.fullscreen-btn {
@@ -2164,6 +2591,35 @@
             /* Joystick Virtual */
             .joystick-container {
                 position: relative;
+            }
+
+            .passage-boost-btn {
+                display: none;
+                position: absolute;
+                right: 24px;
+                bottom: 28px;
+                width: 76px;
+                height: 76px;
+                border: 3px solid #f1c40f;
+                border-radius: 50%;
+                background: rgba(20, 20, 20, 0.72);
+                color: #f1c40f;
+                font-size: 32px;
+                pointer-events: auto;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .passage-boost-btn.ready {
+                display: flex;
+                animation: passageBoostPulse 0.65s ease-in-out infinite;
+                box-shadow: 0 0 18px #f1c40f;
+                background: rgba(241, 196, 15, 0.28);
+            }
+
+            @keyframes passageBoostPulse {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.16); }
             }
 
             .joystick-base {
@@ -2345,6 +2801,48 @@
                 padding-left: 8px !important;
             }
 
+            /* Story Box */
+            .story-overlay {
+                padding: 10px !important;
+                align-items: flex-start !important;
+                padding-top: 20px !important;
+                overflow-y: auto !important;
+            }
+
+            .story-box {
+                width: 95vw !important;
+                max-width: 95vw !important;
+                min-width: auto !important;
+                padding: 15px 20px !important;
+                max-height: 90vh !important;
+                overflow-y: auto !important;
+                margin: auto !important;
+            }
+
+            .story-box::-webkit-scrollbar {
+                width: 6px !important;
+            }
+
+            .story-content {
+                font-size: 0.85rem !important;
+                line-height: 1.5 !important;
+            }
+
+            .story-section {
+                margin-bottom: 20px !important;
+                padding: 15px !important;
+            }
+
+            .story-section h4 {
+                font-size: 1.1rem !important;
+                margin-bottom: 10px !important;
+            }
+
+            .story-section p {
+                font-size: 0.85rem !important;
+                line-height: 1.5 !important;
+            }
+
             /* Options Box */
             .options-overlay {
                 padding: 10px !important;
@@ -2471,6 +2969,26 @@
                 margin-bottom: 10px !important;
             }
 
+            .story-content {
+                font-size: 0.85rem !important;
+                line-height: 1.5 !important;
+            }
+
+            .story-section {
+                margin-bottom: 20px !important;
+                padding: 15px !important;
+            }
+
+            .story-section h4 {
+                font-size: 1.1rem !important;
+                margin-bottom: 10px !important;
+            }
+
+            .story-section p {
+                font-size: 0.85rem !important;
+                line-height: 1.5 !important;
+            }
+
             /* Roadmap Box */
             .roadmap-areas {
                 gap: 10px !important;
@@ -2560,26 +3078,14 @@
                 line-height: 1.5 !important;
             }
 
-            /* Countdown Overlay */
-            .countdown-overlay {
-                padding: 10px;
+            .countdown-card {
+                padding: 16px 14px 10px;
+                gap: 8px;
+                border-radius: 20px;
             }
 
-            .countdown-header {
-                margin-bottom: 10px;
-            }
-
-            .countdown-stage-info {
-                font-size: 0.9rem !important;
-            }
-
-            .countdown-vs {
-                font-size: 1rem !important;
-            }
-
-            #countdownCanvas {
-                width: 400px !important;
-                height: 133px !important;
+            .countdown-hint {
+                font-size: 1rem;
             }
 
             .countdown-number {
@@ -2642,7 +3148,7 @@
             }
 
             /* Botões de fechar */
-            .close-rules-btn, .close-options-btn, .close-credits-btn,
+            .close-rules-btn, .close-options-btn, .close-credits-btn, .close-story-btn,
             .back-roadmap-btn {
                 padding: 8px 25px !important;
                 font-size: 1rem !important;
@@ -2747,6 +3253,67 @@
             .rules-box li {
                 margin-bottom: 4px !important;
                 padding-left: 6px !important;
+            }
+
+            /* Story Box - Telas muito baixas */
+            .story-overlay {
+                padding: 5px !important;
+                padding-top: 10px !important;
+            }
+
+            .story-box {
+                width: 98vw !important;
+                max-width: 98vw !important;
+                padding: 12px 15px !important;
+                max-height: 95vh !important;
+            }
+
+            .story-box h3 {
+                font-size: 1.2rem !important;
+                margin-bottom: 10px !important;
+            }
+
+            .story-section {
+                margin-bottom: 15px !important;
+                padding: 12px !important;
+            }
+
+            .story-section h4 {
+                font-size: 1rem !important;
+                margin-bottom: 8px !important;
+            }
+
+            .story-section p {
+                font-size: 0.75rem !important;
+                line-height: 1.4 !important;
+            }
+
+            /* Pause Box - Telas muito baixas */
+            .pause-overlay {
+                padding: 5px !important;
+                padding-top: 10px !important;
+            }
+
+            .pause-box {
+                width: 95vw !important;
+                max-width: 95vw !important;
+                padding: 20px 25px !important;
+                max-height: 95vh !important;
+            }
+
+            .pause-box h3 {
+                font-size: 1.5rem !important;
+                margin-bottom: 20px !important;
+            }
+
+            .pause-btn {
+                padding: 12px 20px !important;
+                font-size: 1rem !important;
+            }
+
+            .pause-hint {
+                font-size: 0.8rem !important;
+                margin-top: 10px !important;
             }
 
             /* Options Box - Telas muito baixas */
@@ -2869,7 +3436,7 @@
             }
 
             .countdown-number {
-                font-size: 3rem !important;
+                font-size: 3.2rem !important;
             }
 
             /* Game Over - Telas muito baixas */
@@ -2928,7 +3495,7 @@
             }
 
             /* Botões de fechar - Telas muito baixas */
-            .close-rules-btn, .close-options-btn, .close-credits-btn,
+            .close-rules-btn, .close-options-btn, .close-credits-btn, .close-story-btn,
             .back-roadmap-btn {
                 padding: 6px 20px !important;
                 font-size: 0.9rem !important;

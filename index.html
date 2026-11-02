@@ -67,6 +67,7 @@
             <button class="menu-btn start-btn" onclick="startGame()">🎮 JOGAR</button>
             <button class="menu-btn options-btn" onclick="toggleOptions()">⚙️ OPÇÕES</button>
             <button class="menu-btn rules-btn" onclick="toggleRules()">📋 REGRAS</button>
+            <button class="menu-btn story-btn" onclick="toggleStory()">📖 HISTÓRIA</button>
             <button class="menu-btn credits-btn" onclick="showCredits()">🙏 CRÉDITOS</button>
         </div>
         
@@ -78,31 +79,31 @@
                     <div class="area-card unlocked" id="area1" onclick="openArea(1)">
                         <div class="area-icon">🌳</div>
                         <div class="area-name">Floresta</div>
-                        <div class="area-progress" id="areaProgress1">0/7</div>
+                        <div class="area-progress" id="areaProgress1">0/12</div>
                     </div>
                     
-                    <div class="area-card locked" id="area2">
-                        <div class="area-lock">🔒</div>
+                    <div class="area-card locked construction" id="area2">
+                        <div class="area-lock">🚧</div>
                         <div class="area-name">Pântano</div>
-                        <div class="area-progress" id="areaProgress2">0/7</div>
+                        <div class="area-progress" id="areaProgress2">Em construção</div>
                     </div>
                     
-                    <div class="area-card locked" id="area3">
-                        <div class="area-lock">🔒</div>
+                    <div class="area-card locked construction" id="area3">
+                        <div class="area-lock">🚧</div>
                         <div class="area-name">Ilha Tropical</div>
-                        <div class="area-progress" id="areaProgress3">0/7</div>
+                        <div class="area-progress" id="areaProgress3">Em construção</div>
                     </div>
                     
-                    <div class="area-card locked" id="area4">
-                        <div class="area-lock">🔒</div>
+                    <div class="area-card locked construction" id="area4">
+                        <div class="area-lock">🚧</div>
                         <div class="area-name">Deserto</div>
-                        <div class="area-progress" id="areaProgress4">0/7</div>
+                        <div class="area-progress" id="areaProgress4">Em construção</div>
                     </div>
                     
-                    <div class="area-card locked" id="area5">
-                        <div class="area-lock">🔒</div>
+                    <div class="area-card locked construction" id="area5">
+                        <div class="area-lock">🚧</div>
                         <div class="area-name">Metrópole</div>
-                        <div class="area-progress" id="areaProgress5">0/7</div>
+                        <div class="area-progress" id="areaProgress5">Em construção</div>
                     </div>
                 </div>
                 
@@ -155,15 +156,6 @@
                     <p class="difficulty-desc" id="difficultyDesc">CPU com velocidade e inteligência normais.</p>
                 </div>
                 
-                <div class="control-selection" id="controlSelection">
-                    <h4>📱 Controle Mobile:</h4>
-                    <div class="control-options">
-                        <button class="control-btn" data-control="drag" id="controlDrag" onclick="selectControlMode('drag')">👆 Arrastar Pássaro</button>
-                        <button class="control-btn" data-control="joystick" id="controlJoystick" onclick="selectControlMode('joystick')">🎮 Joystick</button>
-                    </div>
-                    <p class="control-desc" id="controlDesc">Toque e arraste o pássaro diretamente pela tela.</p>
-                </div>
-                
                 <div class="fullscreen-selection">
                     <h4>🖥️ Tela Cheia:</h4>
                     <button class="fullscreen-option-btn" id="fullscreenOptionBtn" onclick="toggleFullscreen()">⛶ Ativar Tela Cheia</button>
@@ -188,6 +180,7 @@
                     <li>⬇️ Frutas caem do céu - só pode comer <strong>no chão!</strong></li>
                     <li>💥 <strong>Colida</strong> com o adversário para atordoá-lo!</li>
                     <li>🔋 Coma <strong>20 frutas</strong> para carregar o stun!</li>
+                    <li>👑 No <strong>chefe</strong>, o seu stun fica guardado. Aperte <strong>Shift</strong> perto dele para soltar.</li>
                     <li>🌟 Comidas <strong>douradas no céu</strong> valem 5 pts e +5 stun!</li>
                     <li>⚡ Pegue o <strong>item azul</strong> para ganhar velocidade!</li>
                     <li>⚠️ <strong>Cuidado!</strong> A CPU também pode te stunnar!</li>
@@ -195,7 +188,8 @@
                     <li>🪙 Ganhe <strong>moedas</strong> ao vencer fases (mais na primeira vitória)!</li>
                     <li>❤️ Você tem <strong>5 vidas</strong> - perde uma ao ser derrotado!</li>
                     <li>⏰ Vidas regeneram automaticamente a cada <strong>5 minutos</strong></li>
-                    <li>🦇 <strong>Morcego</strong> aparece na floresta (fase 6) - cuidado!</li>
+                    <li>🌳 Na <strong>Floresta</strong>, voe até a saída, colete frutas e desvie. O chefe é só a última fase.</li>
+                    <li>🦇 <strong>Morcego</strong> aparece nas passagens noturnas da floresta - cuidado!</li>
                     <li>🦅 <strong>Gavião</strong> aparece no deserto (fase 6) - cuidado!</li>
                     <li>🌟 <strong>Fases Bônus:</strong> Colete minhocas, frutas congeladas ou frutos de cactos!</li>
                     <li>🎨 Mude sua cor por <strong>25 moedas</strong> nas opções!</li>
@@ -213,28 +207,56 @@
                 <button class="close-credits-btn" onclick="toggleCredits()">✖ FECHAR</button>
             </div>
         </div>
+        
+        <div class="story-overlay" id="storyOverlay">
+            <div class="story-box">
+                <h3>📖 A História</h3>
+                <div class="story-content">
+                    <div class="story-section">
+                        <h4>🪄 A Maldição</h4>
+                        <p>Há muito tempo, uma sombra mágica envolveu as terras. Uma maldição poderosa caiu sobre todos os pássaros, transformando-os em criaturas manipuladas, forçadas a competir sem controle próprio.</p>
+                    </div>
+                    <div class="story-section">
+                        <h4>🦅 O Herói</h4>
+                        <p>Você é o escolhido! Um pássaro corajoso que resistiu à maldição e mantém sua liberdade. Agora, cabe a você libertar seus irmãos dessa prisão mágica, enfrentando-os em combate para quebrar o feitiço que os controla.</p>
+                    </div>
+                    <div class="story-section">
+                        <h4>🗺️ A Jornada</h4>
+                        <p>Sua missão levará você através de múltiplas áreas: da Floresta sombria até a Metrópole, cada uma guardada por poderosos guardiões sob o controle da maldição. Vença-os para libertar cada área e restaurar a paz.</p>
+                    </div>
+                    <div class="story-section">
+                        <h4>👑 O Boss Final</h4>
+                        <p>No final de sua jornada, você enfrentará o verdadeiro responsável por toda essa maldição. Prepare-se para a batalha final que decidirá o destino de todos os pássaros!</p>
+                    </div>
+                </div>
+                <button class="close-story-btn" onclick="toggleStory()">✖ FECHAR</button>
+            </div>
+        </div>
     </div>
 
     <!-- Contagem Regressiva -->
     <div class="countdown-overlay" id="countdownOverlay">
-        <div class="countdown-header">
-            <div class="countdown-stage-info" id="countdownStageInfo"></div>
-            <div class="countdown-vs" id="countdownVs">⚔️ PREPARE-SE PARA A BATALHA ⚔️</div>
-        </div>
-        <div class="countdown-scene">
-            <canvas id="countdownCanvas" width="600" height="200"></canvas>
-        </div>
-        <div class="countdown-number" id="countdownNumber">3</div>
         <div class="countdown-effects" id="countdownEffects"></div>
         <div class="countdown-particles" id="countdownParticles"></div>
+        <div class="countdown-card">
+            <div class="countdown-kicker" id="countdownKicker"></div>
+            <h2 class="countdown-title" id="countdownVs"></h2>
+            <div class="countdown-chips" id="countdownStageInfo"></div>
+            <div class="countdown-scene">
+                <canvas id="countdownCanvas" width="600" height="200"></canvas>
+            </div>
+            <p class="countdown-hint" id="countdownHint"></p>
+            <div class="countdown-number" id="countdownNumber">3</div>
+        </div>
     </div>
 
     <!-- Container do Jogo -->
     <div class="game-container" id="gameContainer">
-        <!-- Botões de Áudio e Tela Cheia -->
+        <!-- Botões de Áudio, Pause e Tela Cheia -->
         <div class="audio-controls">
             <button class="audio-btn" id="musicBtnGame" onclick="toggleMusic()" title="Música">🎵</button>
             <button class="audio-btn" id="sfxBtnGame" onclick="toggleSFX()" title="Efeitos Sonoros">🔊</button>
+            <button class="audio-btn pause-btn-game" id="pauseBtnGame" onclick="togglePause()" title="Pausar (ESC)">⏸️</button>
             <button class="audio-btn fullscreen-btn" id="fullscreenBtn" onclick="toggleFullscreen()" title="Tela Cheia">⛶</button>
         </div>
         
@@ -262,6 +284,7 @@
                     <div class="joystick-stick" id="joystickStick"></div>
                 </div>
             </div>
+            <button type="button" class="passage-boost-btn" id="passageBoostBtn" aria-label="Usar boost">⚡</button>
         </div>
 
         <!-- Painel de Debug -->
@@ -281,8 +304,31 @@
                 <!-- Botões serão preenchidos pelo JavaScript -->
             </div>
         </div>
+
+        <!-- Menu de Pausa -->
+        <div class="pause-overlay" id="pauseOverlay">
+            <div class="pause-box">
+                <h3>⏸️ JOGO PAUSADO</h3>
+                <div class="pause-buttons">
+                    <button class="pause-btn continue-btn" onclick="resumeGame()">▶️ CONTINUAR</button>
+                    <button class="pause-btn quit-btn" onclick="quitGame()">🚪 DESISTIR</button>
+                </div>
+                <p class="pause-hint">Pressione ESC para continuar</p>
+            </div>
+        </div>
     </div>
 
+    <script src="fases/floresta/01-clareira-verde.js"></script>
+    <script src="fases/floresta/02-trilha-dos-passaros.js"></script>
+    <script src="fases/floresta/03-bosque-profundo.js"></script>
+    <script src="fases/floresta/05-caminho-do-rio.js"></script>
+    <script src="fases/floresta/06-galhos-baixos.js"></script>
+    <script src="fases/floresta/07-enxames.js"></script>
+    <script src="fases/floresta/08-perigo-noturno.js"></script>
+    <script src="fases/floresta/09-raizes-tortas.js"></script>
+    <script src="fases/floresta/10-vento-na-copa.js"></script>
+    <script src="fases/floresta/11-sombra-da-coruja.js"></script>
+    <script src="fases/floresta/12-ninho-da-coruja.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

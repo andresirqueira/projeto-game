@@ -142,7 +142,9 @@ window.addEventListener('orientationchange', () => {
 // Estado do jogo
 let gameRunning = false;
 let gameStarted = false;
+let gamePaused = false; // Estado de pausa do jogo
 let timeLeft = 60;
+let timerInterval = null; // Armazenar interval do timer para poder pausar
 let playerScore = 0;
 let cpuScore = 0;
 let lastPlayerScore = 0;
@@ -299,7 +301,7 @@ function toggleMusic() {
         if (sfxMuted) {
             // Se efeitos sonoros estão mutados, pausar
             sounds.bossWin.pause();
-        } else if (sounds.bossWin.paused && document.getElementById('gameOver').style.display === 'block' && currentSubstage === 7) {
+        } else if (sounds.bossWin.paused && document.getElementById('gameOver').style.display === 'block' && isBossStage()) {
             // Se estiver na tela de vitória do boss e efeitos não estiverem mutados, tocar
             sounds.bossWin.play().catch(e => {
                 console.log('Erro ao tocar boss-win:', e);
@@ -405,6 +407,7 @@ const player = {
     stunCharge: 0, // Comidas coletadas para o stun
     stunChargeMax: 20, // Precisa comer 20 para stunnar
     stunChargeTimer: 0, // Tempo restante para usar o stun (5 segundos = 300 frames)
+    stunShow: 0, // Aparência de stun depois que o jogador solta o golpe no chefe
     speedBoost: 0, // Tempo restante do boost de velocidade
     eatAnimation: 0, // Animação de comer
     lastEatenEmoji: '', // Último emoji comido
@@ -415,7 +418,7 @@ const player = {
 // CPU
 // Configurações das áreas
 const areaConfig = {
-    1: { name: 'Floresta', icon: '🌳', color: '#27ae60' },
+    1: { name: 'Floresta', icon: '🌳', color: '#27ae60', playable: true },
     2: { name: 'Pântano', icon: '🐸', color: '#2ecc71' },
     3: { name: 'Ilha Tropical', icon: '🏝️', color: '#16a085' },
     4: { name: 'Deserto', icon: '🏜️', color: '#f39c12' },
@@ -427,17 +430,21 @@ const areaConfig = {
     10: { name: 'Montanha', icon: '⛰️', color: '#95a5a6' }
 };
 
+function isAreaPlayable(area) {
+    return !!(areaConfig[area] && areaConfig[area].playable);
+}
+
 // Configurações de dificuldade por sub-fase
 // Configuração das sub-fases com nomes temáticos por área
 const substageNames = {
-    1: { // Floresta
+    1: { // Floresta — nomes 1 a 7; 8 a 12 ficam em areaStages
         1: 'Clareira Verde',
         2: 'Trilha dos Pássaros',
         3: 'Bosque Profundo',
         4: 'Caça às Minhocas',
         5: 'Caminho do Rio',
-        6: 'Perigo Noturno',
-        7: 'Ninho da Coruja'
+        6: 'Galhos Baixos',
+        7: 'Enxame'
     },
     2: { // Pântano
         1: 'Águas Paradas',
@@ -532,6 +539,2183 @@ const substageConfig = {
     7: { difficulty: '🏆 CHEFE', time: 60, cpuSpeed: 3.5, goalScore: 25, isBoss: true }
 };
 
+// ========== PASSAGENS (piloto: Floresta; o mesmo formato serve aos outros mundos) ==========
+const PASSAGE_MAX_HITS = 3;
+const PASSAGE_SLOW_PER_FRUIT = 0.05;
+const PASSAGE_MIN_SPEED_FACTOR = 0.5;
+const PASSAGE_RIVER_Y = 428;
+const PASSAGE_SWAMP_Y = 408;
+
+// Paleta guardada da floresta. Um perigo por trecho, alternando. Sem pedra e sem tronco em cima e embaixo.
+// Alto, voando: pássaros grandes. Na Trilha, pássaros menores voam embaixo dos grandes.
+// Chão, terrestre: sapos (Clareira), cobras (ainda sem desenho).
+// Bosque Profundo: árvores no caminho, o voo sobe; pássaros no alto, o voo desce.
+// Caminho do Rio: peixes pulam, sapos pousam na água, e a cachoeira sobe com o rio. O caminho estreita, sobe e desce.
+// Galhos Baixos: os galhos crescem do chão e o voo passa por cima. Nos vãos, pássaros no alto.
+// Enxames: abelhas e sapos no mesmo trecho. Árvores com colmeia logo ao lado.
+// Perigo Noturno: morcegos, cobras e árvores espalhados, sem ordem fixa.
+// Raízes Tortas: mangue à noite. A garça sobe e desce; as raízes pedem subir.
+// Vento na Copa: as copas fecham o alto, a rajada empurra o voo, e o pássaro sobe e desce no vão.
+// Sombra da Coruja: morcegos e cobras na noite. A coruja cruza o céu. No ataque, a sombra no chão marca a descida.
+// Ninho da Coruja: fase 12, chefe da floresta. O arquivo guarda a fase e a coruja. A luta fica no motor.
+const passageThemes = {
+    forest: {
+        trunk: '#6d4c41',
+        trunkDark: '#4e342e',
+        branch: '#5d4037',
+        leaf: '#2e7d32',
+        enemyBody: '#2c3e50',
+        enemyWing: '#1a1a2e',
+        fruits: ['🍎', '🍒', '🍓', '🍇', '🍊']
+    }
+};
+
+// Layouts desenhados ficam em fases/<mundo>/NN-nome.js e entram em PASSAGE_LAYOUTS.
+const passageLayouts = window.PASSAGE_LAYOUTS || {};
+const stageDefs = window.STAGE_DEFS || {};
+
+// type: passage | bonus | boss. Obstáculos e inimigos nascem dos chunks ou de um layout desenhado.
+const areaStages = {
+    1: [
+        { name: 'Clareira Verde', type: 'passage', theme: 'forest', layout: passageLayouts['1-1'] },
+        { name: 'Trilha dos Pássaros', type: 'passage', theme: 'forest', layout: passageLayouts['1-2'] },
+        { name: 'Bosque Profundo', type: 'passage', theme: 'forest', layout: passageLayouts['1-3'] },
+        { name: 'Caça às Minhocas', type: 'bonus', theme: 'forest' },
+        { name: 'Caminho do Rio', type: 'passage', theme: 'forest', layout: passageLayouts['1-5'] },
+        { name: 'Galhos Baixos', type: 'passage', theme: 'forest', layout: passageLayouts['1-6'] },
+        { name: 'Enxames', type: 'passage', theme: 'forest', layout: passageLayouts['1-7'] },
+        { name: 'Perigo Noturno', type: 'passage', theme: 'forest', night: true, layout: passageLayouts['1-8'] },
+        { name: 'Raízes Tortas', type: 'passage', theme: 'forest', night: true, layout: passageLayouts['1-9'] },
+        { name: 'Vento na Copa', type: 'passage', theme: 'forest', layout: passageLayouts['1-10'] },
+        { name: 'Sombra da Coruja', type: 'passage', theme: 'forest', night: true, layout: passageLayouts['1-11'] },
+        stageDefs['1-12']
+    ]
+};
+
+let isPassageStage = false;
+let passageState = null;
+
+function getAreaStageDef(area, substage) {
+    const list = areaStages[area];
+    if (!list) return null;
+    return list[substage - 1] || null;
+}
+
+function getAreaStageCount(area) {
+    const list = areaStages[area];
+    return list ? list.length : 7;
+}
+
+function isBossStage(area = currentArea, substage = currentSubstage) {
+    const stageDef = getAreaStageDef(area, substage);
+    if (stageDef) return stageDef.type === 'boss';
+    return substage === 7;
+}
+
+function passageLayoutForDifficulty(layout) {
+    if (!layout) return null;
+    const variant = layout.difficulties && layout.difficulties[gameDifficulty];
+    if (!variant) return layout;
+    return Object.assign({}, layout, variant);
+}
+
+function passagePickByDifficulty(table) {
+    if (!table) return [];
+    if (Array.isArray(table)) return table;
+    return table[gameDifficulty] || table.normal || [];
+}
+
+function passageStarDuration() {
+    if (gameDifficulty === 'easy') return 5000;
+    if (gameDifficulty === 'hard') return 3000;
+    return 4000;
+}
+
+function passageStarActive() {
+    return !!(passageState && passageState.starUntil && performance.now() < passageState.starUntil);
+}
+
+function buildPassageFromLayout(layout) {
+    const fruits = layout.fruits.map((fruit) => ({
+        x: fruit.x,
+        y: fruit.y,
+        emoji: fruit.emoji,
+        value: fruit.value || 1,
+        big: !!fruit.big
+    })).concat(passagePickByDifficulty(layout.bigFruits).map((fruit) => ({
+        x: fruit.x,
+        y: fruit.y,
+        emoji: fruit.emoji || '🍉',
+        value: 3,
+        big: true
+    })));
+    return {
+        length: layout.length,
+        fruits: fruits,
+        obstacles: layout.obstacles.map((obstacle) => ({ ...obstacle })),
+        enemies: (layout.enemies || []).map((enemy) => ({ ...enemy })),
+        birds: (layout.birds || []).map((bird) => ({
+            x: bird.x,
+            y: bird.y,
+            cx: bird.x,
+            cy: bird.y,
+            radius: bird.radius || 36,
+            range: bird.range || 0,
+            speed: bird.speed || 0.02,
+            axis: bird.axis || 'x',
+            phase: bird.phase || 0,
+            wing: bird.wing || 0,
+            facing: -1,
+            color: bird.color || '#5d6d7e',
+            wingColor: bird.wingColor || '#34495e',
+            beak: bird.beak || '#f1c40f',
+            kind: bird.kind || ''
+        })),
+        frogs: (layout.frogs || []).map((frog) => makePassageFrog(frog)),
+        fishes: (layout.fishes || []).map((fish) => makePassageFish(fish)),
+        falls: (layout.falls || []).map((fall) => ({
+            x0: fall.x0,
+            x1: fall.x1,
+            x2: fall.x2,
+            x3: fall.x3,
+            top: fall.top,
+            ceil: fall.ceil
+        })),
+        river: !!layout.river,
+        swamp: !!layout.swamp,
+        swarms: (layout.swarms || []).map((swarm) => makePassageSwarm(swarm)),
+        snakes: (layout.snakes || []).map((snake) => makePassageSnake(snake)),
+        gusts: (layout.gusts || []).map((gust) => ({
+            x: gust.x,
+            y: gust.y,
+            w: gust.w,
+            h: gust.h,
+            force: gust.force || 0
+        })),
+        shadows: (layout.shadows || []).map((shadow) => ({
+            x: shadow.x,
+            y: shadow.y,
+            cx: shadow.x,
+            cy: shadow.y,
+            radius: shadow.radius || 48,
+            range: shadow.range || 0,
+            speed: shadow.speed || 0.03,
+            phase: shadow.phase || 0
+        })),
+        stars: passagePickByDifficulty(layout.stars).map((star) => ({ x: star.x, y: star.y }))
+    };
+}
+
+function makePassageSnake(snake) {
+    const y = snake.y || 466;
+    return {
+        x: snake.x,
+        y: y,
+        strike: snake.strike || 160,
+        lunge: snake.lunge || 24,
+        speed: snake.speed || 0.04,
+        radius: snake.radius || 16,
+        phase: snake.phase || 0,
+        facing: snake.facing || 1,
+        state: 'rest',
+        timer: Math.round((snake.phase || 0) * 28),
+        headX: snake.x,
+        headY: y
+    };
+}
+
+function makePassageSwarm(swarm) {
+    return {
+        x: swarm.x,
+        y: swarm.y,
+        cx: swarm.x,
+        cy: swarm.y,
+        radius: swarm.radius || 56,
+        range: swarm.range || 0,
+        speed: swarm.speed || 0.03,
+        axis: swarm.axis || 'y',
+        phase: swarm.phase || 0,
+        wing: 0
+    };
+}
+
+function makePassageFish(fish) {
+    return {
+        x: fish.x,
+        jump: fish.jump || 180,
+        speed: fish.speed || 0.045,
+        phase: fish.phase || 0,
+        radius: fish.radius || 18,
+        cx: fish.x,
+        cy: PASSAGE_RIVER_Y,
+        airborne: false,
+        color: fish.color || '#e67e22',
+        belly: fish.belly || '#f5cba7'
+    };
+}
+
+function makePassageFrog(frog) {
+    return {
+        x: frog.x,
+        y: frog.y,
+        cx: frog.x,
+        cy: frog.y,
+        radius: frog.radius || 32,
+        range: frog.range || 0,
+        speed: frog.speed || 0.04,
+        hop: frog.hop || 18,
+        phase: frog.phase || 0,
+        facing: 1,
+        squash: 0.9,
+        color: frog.color || '#1e8449',
+        belly: frog.belly || '#7dcea0',
+        state: 'rest',
+        timer: Math.round((frog.phase || 0) * 36),
+        pad: 1,
+        jumpFrom: frog.x,
+        landX: frog.x
+    };
+}
+
+function buildPassageFromChunks(chunks, enemySpeed) {
+    const fruits = [];
+    const obstacles = [];
+    const enemies = [];
+    const birds = [];
+    const frogs = [];
+    const step = 900;
+    let x = 700;
+    const speed = enemySpeed || 1.3;
+    chunks.forEach((chunk) => {
+        if (chunk === 'top' || chunk === 'narrow') {
+            birds.push({
+                x: x + 300,
+                y: chunk === 'narrow' ? 132 : 96,
+                cx: x + 300,
+                cy: chunk === 'narrow' ? 132 : 96,
+                radius: chunk === 'narrow' ? 46 : 42,
+                range: chunk === 'narrow' ? 64 : 80,
+                speed: 0.03,
+                axis: 'x',
+                phase: 0,
+                wing: 0,
+                facing: -1,
+                color: '#5d6d7e',
+                wingColor: '#34495e',
+                beak: '#e67e22'
+            });
+            fruits.push({ x: x + 160, y: 280 });
+            fruits.push({ x: x + 560, y: 320 });
+        } else if (chunk === 'bottom' || chunk === 'trunk') {
+            frogs.push(makePassageFrog({
+                x: x + 320,
+                y: 448,
+                radius: chunk === 'trunk' ? 38 : 32,
+                range: 80,
+                speed: 0.045,
+                hop: chunk === 'trunk' ? 28 : 16
+            }));
+            fruits.push({ x: x + 160, y: 200 });
+            fruits.push({ x: x + 560, y: 220 });
+        } else if (chunk === 'bat') {
+            enemies.push({
+                x: x + 420,
+                y: 220,
+                minY: 110,
+                maxY: 390,
+                speed: speed,
+                dir: 1,
+                wing: 0
+            });
+            fruits.push({ x: x + 200, y: 150 });
+            fruits.push({ x: x + 640, y: 320 });
+        } else {
+            fruits.push({ x: x + 220, y: 160 });
+            fruits.push({ x: x + 520, y: 300 });
+        }
+        x += step;
+    });
+
+    return {
+        length: x + 650,
+        fruits: fruits,
+        obstacles: obstacles,
+        enemies: enemies,
+        birds: birds,
+        frogs: frogs
+    };
+}
+
+function initPassage(stageDef) {
+    const theme = passageThemes[stageDef.theme] || passageThemes.forest;
+    const layout = passageLayoutForDifficulty(stageDef.layout);
+    const built = layout
+        ? buildPassageFromLayout(layout)
+        : buildPassageFromChunks(stageDef.chunks || ['open'], stageDef.enemySpeed);
+    const fruitEmojis = theme.fruits;
+    passageState = {
+        scroll: 0,
+        length: built.length,
+        fruits: built.fruits.map((fruit, index) => ({
+            x: fruit.x,
+            y: fruit.y,
+            emoji: fruit.emoji || fruitEmojis[index % fruitEmojis.length],
+            value: fruit.value || 1,
+            big: !!fruit.big,
+            collected: false
+        })),
+        stars: (built.stars || []).map((star) => ({ x: star.x, y: star.y, collected: false })),
+        starUntil: 0,
+        obstacles: built.obstacles,
+        enemies: built.enemies.map((enemy) => ({ ...enemy })),
+        birds: (built.birds || []).map((bird) => ({ ...bird })),
+        frogs: (built.frogs || []).map((frog) => ({ ...frog })),
+        fishes: (built.fishes || []).map((fish) => ({ ...fish })),
+        falls: (built.falls || []).map((fall) => ({ ...fall })),
+        river: !!built.river,
+        swamp: !!built.swamp,
+        swarms: (built.swarms || []).map((swarm) => ({ ...swarm })),
+        snakes: (built.snakes || []).map((snake) => ({ ...snake })),
+        gusts: (built.gusts || []).map((gust) => ({ ...gust })),
+        shadows: (built.shadows || []).map((shadow) => ({ ...shadow })),
+        hits: 0,
+        invuln: 0,
+        cleared: false,
+        failed: false,
+        night: !!stageDef.night,
+        owl: layout && layout.owl ? {
+            warn: layout.owl.warn || 150,
+            strike: layout.owl.strike || 34,
+            gap: layout.owl.gap || 190,
+            raid: { mode: 'gap', timer: 120, kind: 'flyby', y: 90, x: 0, owlY: -90 }
+        } : null,
+        theme: stageDef.theme || 'forest',
+        totalFruits: built.fruits.reduce((sum, fruit) => sum + (fruit.value || 1), 0),
+        boostCharge: 0,
+        boostNeeded: stageDef.boostFruits || (layout && layout.boostFruits) || 6,
+        speedScale: stageDef.speedScale || 1,
+        slow: 0
+    };
+    timeLeft = stageDef.time || (layout && layout.time) || 28;
+    player.x = 140;
+    player.y = canvas.height / 2;
+    player.speedBoost = 0;
+    player.speed = player.baseSpeed * passageState.speedScale;
+    player.stunned = false;
+    player.stunTime = 0;
+    playerScore = 0;
+}
+
+function passageTreeHalf(obstacle, worldY) {
+    const y = obstacle.y;
+    const h = obstacle.h;
+    const w = obstacle.w;
+    const base = y + h;
+    if (worldY < y || worldY > base) return 0;
+    const layers = [
+        { top: y, bottom: y + h * 0.3, half: w * 0.28 },
+        { top: y + h * 0.1, bottom: y + h * 0.46, half: w * 0.4 },
+        { top: y + h * 0.22, bottom: y + h * 0.62, half: w * 0.5 }
+    ];
+    let half = 0;
+    for (const layer of layers) {
+        if (worldY < layer.top || worldY > layer.bottom) continue;
+        const span = layer.bottom - layer.top;
+        if (span <= 0) continue;
+        const next = layer.half * ((worldY - layer.top) / span);
+        if (next > half) half = next;
+    }
+    if (worldY >= y + h * 0.46) {
+        const trunkHalf = Math.max(16, w * 0.16) / 2;
+        if (trunkHalf > half) half = trunkHalf;
+    }
+    const shrubY = base - 16;
+    const shrubRy = 18;
+    const ny = (worldY - shrubY) / shrubRy;
+    if (ny >= -1 && ny <= 1) {
+        const shrubHalf = w * 0.42 * Math.sqrt(1 - ny * ny);
+        if (shrubHalf > half) half = shrubHalf;
+    }
+    return half;
+}
+
+function passageHiveCircle(obstacle) {
+    const w = obstacle.w;
+    const h = obstacle.h;
+    const cx = obstacle.x + w / 2;
+    const trunkW = Math.max(16, w * 0.16);
+    const hy = obstacle.y + h * 0.64 + 8;
+    const hx = Math.min(obstacle.x + w - 20, cx + trunkW * 0.35 + 28);
+    return { x: hx, y: hy, r: 17 };
+}
+
+function passageCircleHitsTree(cx, cy, radius, obstacle) {
+    const center = obstacle.x + obstacle.w / 2;
+    const steps = 14;
+    for (let i = 0; i <= steps; i++) {
+        const sampleY = cy - radius + (2 * radius * i) / steps;
+        const reach = Math.sqrt(Math.max(0, radius * radius - (sampleY - cy) * (sampleY - cy)));
+        const half = passageTreeHalf(obstacle, sampleY);
+        if (half <= 0 || reach <= 0) continue;
+        if (Math.abs(cx - center) < half + reach) return true;
+    }
+    if (obstacle.hive) {
+        const hive = passageHiveCircle(obstacle);
+        if (Math.hypot(cx - hive.x, cy - hive.y) < radius + hive.r) return true;
+    }
+    return false;
+}
+
+function passageResolveTree(cx, cy, radius, obstacle) {
+    if (!passageCircleHitsTree(cx, cy, radius, obstacle)) return { cx: cx, cy: cy, hit: false };
+    const center = obstacle.x + obstacle.w / 2;
+    let best = null;
+    const search = (stepX, stepY) => {
+        let x = cx;
+        let y = cy;
+        for (let i = 0; i < 48; i++) {
+            x += stepX;
+            y += stepY;
+            if (!passageCircleHitsTree(x, y, radius, obstacle)) {
+                const d = Math.hypot(x - cx, y - cy);
+                if (!best || d < best.d) best = { cx: x + stepX * 0.2, cy: y + stepY * 0.2, d: d };
+                return;
+            }
+        }
+    };
+    search(0, -3);
+    search(-3, 0);
+    search(3, 0);
+    if (!best) {
+        const dir = cx < center ? -1 : 1;
+        best = { cx: cx + dir * (radius + 4), cy: cy };
+    }
+    return { cx: best.cx, cy: best.cy, hit: true };
+}
+
+function passageRootCurves(obstacle) {
+    const lean = obstacle.lean === -1 ? -1 : 1;
+    const bend = obstacle.bend || 1;
+    const x = obstacle.x;
+    const peak = obstacle.y;
+    const foot = PASSAGE_SWAMP_Y + 36;
+    const amp = 22 * lean * bend;
+    const main = [];
+    const pair = [];
+    const twig = [];
+    const steps = 14;
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const y = peak + (foot - peak) * t;
+        const bow = Math.sin(t * Math.PI);
+        const twist = Math.sin(t * Math.PI * 2) * 9 * lean;
+        main.push({ x: x + amp * bow + twist, y: y });
+        pair.push({ x: x - amp * 0.78 * bow - twist * 0.65, y: y });
+        if (t > 0.32 && t < 0.78) twig.push({ x: x + twist * 1.35, y: y + 12 });
+    }
+    return [
+        { pts: main, thick: 8 },
+        { pts: pair, thick: 7 },
+        { pts: twig, thick: 4 }
+    ];
+}
+
+function passageDistToSegment(px, py, ax, ay, bx, by) {
+    const abx = bx - ax;
+    const aby = by - ay;
+    const len2 = abx * abx + aby * aby || 1;
+    let t = ((px - ax) * abx + (py - ay) * aby) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + abx * t), py - (ay + aby * t));
+}
+
+function passageCircleHitsRoot(cx, cy, radius, obstacle) {
+    if (Math.abs(cx - obstacle.x) > 78 + radius) return false;
+    const curves = passageRootCurves(obstacle);
+    for (let c = 0; c < curves.length; c++) {
+        const pts = curves[c].pts;
+        const reach = radius + curves[c].thick;
+        for (let i = 0; i < pts.length - 1; i++) {
+            if (passageDistToSegment(cx, cy, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y) < reach) return true;
+        }
+    }
+    return false;
+}
+
+function passageResolveRoot(cx, cy, radius, obstacle) {
+    if (!passageCircleHitsRoot(cx, cy, radius, obstacle)) return { cx: cx, cy: cy, hit: false };
+    let best = null;
+    const search = (stepX, stepY) => {
+        let x = cx;
+        let y = cy;
+        for (let i = 0; i < 48; i++) {
+            x += stepX;
+            y += stepY;
+            if (!passageCircleHitsRoot(x, y, radius, obstacle)) {
+                const d = Math.hypot(x - cx, y - cy);
+                if (!best || d < best.d) best = { cx: x + stepX * 0.2, cy: y + stepY * 0.2, d: d };
+                return;
+            }
+        }
+    };
+    search(0, -3);
+    search(-3, 0);
+    search(3, 0);
+    if (!best) {
+        const dir = cx < obstacle.x ? -1 : 1;
+        best = { cx: cx + dir * (radius + 4), cy: cy };
+    }
+    return { cx: best.cx, cy: best.cy, hit: true };
+}
+
+function passageCircleHitsRect(cx, cy, radius, rect) {
+    const nearestX = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
+    const nearestY = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
+    const dx = cx - nearestX;
+    const dy = cy - nearestY;
+    return dx * dx + dy * dy < radius * radius;
+}
+
+function resolvePassageObstacles() {
+    if (passageStarActive()) return;
+    const radius = player.size * 0.62;
+    let cx = player.x + passageState.scroll;
+    let cy = player.y;
+    let bumped = false;
+
+    for (let pass = 0; pass < 2; pass++) {
+        for (const obstacle of passageState.obstacles) {
+            if (obstacle.kind === 'tree') {
+                const resolved = passageResolveTree(cx, cy, radius, obstacle);
+                if (!resolved.hit) continue;
+                bumped = true;
+                cx = resolved.cx;
+                cy = resolved.cy;
+                continue;
+            }
+            if (obstacle.kind === 'root') {
+                const resolved = passageResolveRoot(cx, cy, radius, obstacle);
+                if (!resolved.hit) continue;
+                bumped = true;
+                cx = resolved.cx;
+                cy = resolved.cy;
+                continue;
+            }
+            if (!passageCircleHitsRect(cx, cy, radius, obstacle)) continue;
+            bumped = true;
+
+            const inside = cx > obstacle.x && cx < obstacle.x + obstacle.w && cy > obstacle.y && cy < obstacle.y + obstacle.h;
+            if (inside) {
+                const left = cx - obstacle.x;
+                const right = obstacle.x + obstacle.w - cx;
+                const top = cy - obstacle.y;
+                const bottom = obstacle.y + obstacle.h - cy;
+                const min = Math.min(left, right, top, bottom);
+                if (min === left) cx = obstacle.x - radius;
+                else if (min === right) cx = obstacle.x + obstacle.w + radius;
+                else if (min === top) cy = obstacle.y - radius;
+                else cy = obstacle.y + obstacle.h + radius;
+            } else {
+                const nearestX = Math.max(obstacle.x, Math.min(cx, obstacle.x + obstacle.w));
+                const nearestY = Math.max(obstacle.y, Math.min(cy, obstacle.y + obstacle.h));
+                let dx = cx - nearestX;
+                let dy = cy - nearestY;
+                const dist = Math.hypot(dx, dy) || 0.01;
+                const push = radius - dist + 0.5;
+                cx += (dx / dist) * push;
+                cy += (dy / dist) * push;
+            }
+        }
+    }
+
+    player.x = cx - passageState.scroll;
+    player.y = cy;
+    player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+    player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+    if (bumped) passageTakeHit('obstacle');
+    if (!gameRunning) return;
+}
+
+function passageTakeHit(source) {
+    if (!passageState || passageStarActive() || passageState.invuln > 0 || passageState.failed || passageState.cleared) return;
+    passageState.hits += 1;
+    passageState.invuln = 80;
+    player.x = Math.max(player.size, player.x - 90);
+    player.stunned = true;
+    player.stunTime = 24;
+    if (source === 'obstacle') playSound('stun');
+    else playSound('bat');
+    if (passageState.hits >= PASSAGE_MAX_HITS) {
+        passageState.failed = true;
+        endGame();
+    }
+}
+
+function updatePassageBirds() {
+    if (!passageState.birds) return;
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    for (const bird of passageState.birds) {
+        bird.wing += 0.4;
+        bird.phase += bird.speed;
+        const swing = Math.sin(bird.phase) * bird.range;
+        bird.cx = bird.x + (bird.axis === 'x' ? swing : 0);
+        bird.cy = bird.y + (bird.axis === 'y' ? swing : Math.sin(bird.phase * 2) * 8);
+        bird.facing = bird.axis === 'x' ? (Math.cos(bird.phase) >= 0 ? 1 : -1) : -1;
+        if (!gameRunning || passageState.invuln > 0) continue;
+        if (Math.hypot(bird.cx - px, bird.cy - py) < player.size * 0.55 + bird.radius) {
+            passageTakeHit('obstacle');
+        }
+    }
+}
+
+function passageFrogGround(frog) {
+    if (passageState.river) return PASSAGE_RIVER_Y - frog.radius * 0.55;
+    return frog.y;
+}
+
+function updatePassageFrogs() {
+    if (!passageState.frogs) return;
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    for (const frog of passageState.frogs) {
+        const pace = 0.04 / Math.max(0.02, frog.speed);
+        const restFrames = Math.round(58 * pace);
+        const hopFrames = Math.max(16, Math.round(28 * pace));
+        const ground = passageFrogGround(frog);
+        const left = frog.x - frog.range;
+        const right = frog.x + frog.range;
+
+        if (frog.state !== 'jump') {
+            frog.cx = frog.landX;
+            frog.cy = ground;
+            frog.squash = frog.timer > restFrames - 8 ? 0.72 : 0.9;
+            frog.timer += 1;
+            if (frog.timer >= restFrames) {
+                frog.state = 'jump';
+                frog.timer = 0;
+                frog.jumpFrom = frog.cx;
+                frog.landX = frog.pad > 0 ? right : left;
+                frog.facing = frog.landX >= frog.jumpFrom ? 1 : -1;
+                frog.pad *= -1;
+            }
+        } else {
+            frog.timer += 1;
+            const t = frog.timer / hopFrames;
+            if (t >= 1) {
+                frog.state = 'rest';
+                frog.timer = 0;
+                frog.cx = frog.landX;
+                frog.cy = ground;
+                frog.squash = 0.68;
+            } else {
+                frog.cx = frog.jumpFrom + (frog.landX - frog.jumpFrom) * t;
+                frog.cy = ground - Math.sin(t * Math.PI) * frog.hop;
+                frog.squash = 1.08;
+            }
+        }
+
+        if (!gameRunning || passageState.invuln > 0) continue;
+        if (Math.hypot(frog.cx - px, frog.cy - py) < player.size * 0.55 + frog.radius) {
+            passageTakeHit('obstacle');
+        }
+    }
+}
+
+function updatePassageFishes() {
+    if (!passageState.fishes) return;
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    for (const fish of passageState.fishes) {
+        fish.phase += fish.speed;
+        const lift = Math.max(0, Math.sin(fish.phase));
+        fish.cx = fish.x;
+        fish.cy = PASSAGE_RIVER_Y - lift * fish.jump;
+        fish.airborne = lift > 0.2;
+        if (!fish.airborne || !gameRunning || passageState.invuln > 0) continue;
+        if (Math.hypot(fish.cx - px, fish.cy - py) < player.size * 0.55 + fish.radius) {
+            passageTakeHit('obstacle');
+        }
+    }
+}
+
+function passageRiverSmooth(t) {
+    t = Math.max(0, Math.min(1, t));
+    return t * t * (3 - 2 * t);
+}
+
+function passageRiverProfile(x) {
+    let surface = PASSAGE_RIVER_Y;
+    let ceiling = null;
+    let inside = false;
+    for (const fall of (passageState && passageState.falls) || []) {
+        if (x < fall.x0 || x > fall.x3) continue;
+        inside = true;
+        const climb = fall.x1 - fall.x0 || 1;
+        const drop = fall.x3 - fall.x2 || 1;
+        let rise;
+        if (x < fall.x1) rise = passageRiverSmooth((x - fall.x0) / climb);
+        else if (x <= fall.x2) rise = 1;
+        else rise = 1 - passageRiverSmooth((x - fall.x2) / drop);
+        surface = PASSAGE_RIVER_Y + (fall.top - PASSAGE_RIVER_Y) * rise;
+        ceiling = fall.ceil * rise;
+    }
+    return { surface, ceiling, inside };
+}
+
+function passageRiverHits(cx, cy, radius) {
+    const steps = 6;
+    for (let i = 0; i <= steps; i++) {
+        const dx = -radius + (2 * radius * i) / steps;
+        const x = cx + dx;
+        const profile = passageRiverProfile(x);
+        if (!profile.inside) continue;
+        const half = Math.sqrt(Math.max(0, radius * radius - dx * dx));
+        if (cy + half > profile.surface) return true;
+        if (profile.ceiling > 0 && cy - half < profile.ceiling) return true;
+    }
+    return false;
+}
+
+function updatePassageFalls() {
+    if (!passageState.river || !passageState.falls || !passageState.falls.length) return;
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    const radius = player.size * 0.62;
+    if (!passageRiverHits(px, py, radius)) return;
+    if (!gameRunning || passageState.invuln > 0) return;
+    passageTakeHit('obstacle');
+}
+
+function updatePassageSwarms() {
+    if (!passageState.swarms || !passageState.swarms.length) return;
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    for (const swarm of passageState.swarms) {
+        swarm.phase += swarm.speed;
+        swarm.wing += 0.55;
+        const swing = Math.sin(swarm.phase) * swarm.range;
+        if (swarm.axis === 'y') {
+            swarm.cx = swarm.x;
+            swarm.cy = swarm.y + swing;
+        } else {
+            swarm.cx = swarm.x + swing;
+            swarm.cy = swarm.y + Math.sin(swarm.phase * 2) * 8;
+        }
+        if (!gameRunning || passageState.invuln > 0) continue;
+        const core = swarm.radius * 0.72;
+        if (Math.hypot(swarm.cx - px, swarm.cy - py) < player.size * 0.55 + core) {
+            passageTakeHit('obstacle');
+        }
+    }
+}
+
+function passageSnakeHits(snake, px, py) {
+    const hit = player.size * 0.55 + snake.radius;
+    if (Math.hypot(snake.headX - px, snake.headY - py) < hit) return true;
+    for (let i = 1; i <= 4; i++) {
+        const t = i / 5;
+        const x = snake.headX + (snake.x - snake.headX) * t;
+        const y = snake.headY + (snake.y - snake.headY) * t;
+        if (Math.hypot(x - px, y - py) < hit * 0.85) return true;
+    }
+    return false;
+}
+
+function updatePassageSnakes() {
+    if (!passageState.snakes || !passageState.snakes.length) return;
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    for (const snake of passageState.snakes) {
+        const pace = 0.045 / Math.max(0.02, snake.speed);
+        const restFrames = Math.round(70 * pace);
+        const strikeFrames = Math.max(18, Math.round(26 * pace));
+        if (snake.state !== 'strike') {
+            snake.headX = snake.x;
+            snake.headY = snake.y;
+            snake.timer += 1;
+            if (snake.timer >= restFrames) {
+                snake.state = 'strike';
+                snake.timer = 0;
+            }
+        } else {
+            snake.timer += 1;
+            const t = snake.timer / strikeFrames;
+            if (t >= 1) {
+                snake.state = 'rest';
+                snake.timer = 0;
+                snake.headX = snake.x;
+                snake.headY = snake.y;
+            } else {
+                const lift = Math.sin(t * Math.PI);
+                snake.headX = snake.x + lift * snake.lunge * snake.facing;
+                snake.headY = snake.y - lift * snake.strike;
+            }
+        }
+        if (!gameRunning || passageState.invuln > 0) continue;
+        if (passageSnakeHits(snake, px, py)) passageTakeHit('obstacle');
+    }
+}
+
+function updatePassageShadows() {
+    if (!passageState.shadows) return;
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    const body = player.size * 0.55;
+    for (const shadow of passageState.shadows) {
+        shadow.phase += shadow.speed;
+        shadow.cx = shadow.x;
+        shadow.cy = shadow.y + Math.sin(shadow.phase) * shadow.range;
+        if (!gameRunning || passageState.invuln > 0) continue;
+        const hx = shadow.radius * 1.35 + body;
+        const vy = shadow.radius * 0.95 + body;
+        const dx = shadow.cx - px;
+        const dy = shadow.cy - py;
+        if ((dx * dx) / (hx * hx) + (dy * dy) / (vy * vy) < 1) passageTakeHit('obstacle');
+    }
+}
+
+function drawPassageShadow(shadow, context) {
+    const drawCtx = context || ctx;
+    const x = shadow.cx || shadow.x;
+    const y = shadow.cy || shadow.y;
+    const r = shadow.radius || 48;
+    const flap = Math.sin((shadow.phase || 0) * 2) * 0.12;
+    drawCtx.save();
+    drawCtx.translate(x, y);
+    drawCtx.fillStyle = 'rgba(6, 8, 18, 0.28)';
+    drawCtx.beginPath();
+    drawCtx.ellipse(0, r * 0.35, r * 1.5, r * 0.4, 0, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.fillStyle = 'rgba(8, 10, 20, 0.92)';
+    drawCtx.beginPath();
+    drawCtx.ellipse(-r * 0.68, r * 0.08, r * 0.7, r * 0.36, -0.35 + flap, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.beginPath();
+    drawCtx.ellipse(r * 0.68, r * 0.08, r * 0.7, r * 0.36, 0.35 - flap, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.beginPath();
+    drawCtx.ellipse(0, r * 0.12, r * 0.4, r * 0.46, 0, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.beginPath();
+    drawCtx.arc(0, -r * 0.32, r * 0.36, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.beginPath();
+    drawCtx.moveTo(-r * 0.2, -r * 0.52);
+    drawCtx.lineTo(-r * 0.42, -r * 1.05);
+    drawCtx.lineTo(-r * 0.02, -r * 0.58);
+    drawCtx.closePath();
+    drawCtx.moveTo(r * 0.2, -r * 0.52);
+    drawCtx.lineTo(r * 0.42, -r * 1.05);
+    drawCtx.lineTo(r * 0.02, -r * 0.58);
+    drawCtx.closePath();
+    drawCtx.fill();
+    drawCtx.strokeStyle = 'rgba(247, 243, 216, 0.45)';
+    drawCtx.lineWidth = 2;
+    drawCtx.beginPath();
+    drawCtx.arc(0, -r * 0.32, r * 0.36, 0, Math.PI * 2);
+    drawCtx.stroke();
+    drawCtx.fillStyle = '#e74c3c';
+    drawCtx.beginPath();
+    drawCtx.arc(-r * 0.12, -r * 0.34, Math.max(2, r * 0.07), 0, Math.PI * 2);
+    drawCtx.arc(r * 0.12, -r * 0.34, Math.max(2, r * 0.07), 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.restore();
+}
+
+function updatePassageOwl() {
+    const owl = passageState && passageState.owl;
+    if (!owl || !owl.raid) return;
+    const raid = owl.raid;
+    raid.timer -= 1;
+    if (raid.mode === 'gap') {
+        if (raid.timer > 0) return;
+        raid.kind = raid.kind === 'flyby' ? 'dive' : 'flyby';
+        if (raid.kind === 'flyby') {
+            raid.mode = 'fly';
+            raid.timer = owl.strike;
+            raid.y = 78;
+            raid.x = canvas.width + 80;
+        } else {
+            raid.mode = 'shadow';
+            raid.timer = owl.warn;
+            raid.x = Math.max(90, Math.min(canvas.width - 90, player.x));
+            raid.y = canvas.height - 22;
+            raid.owlY = -90;
+        }
+        return;
+    }
+    if (raid.mode === 'shadow') {
+        if (raid.timer > 0) return;
+        raid.mode = 'dive';
+        raid.timer = owl.strike;
+        raid.owlY = -90;
+        try { playSound('owl'); } catch (e) {}
+        return;
+    }
+    if (raid.mode === 'fly') {
+        const span = canvas.width + 160;
+        const t = 1 - Math.max(0, raid.timer) / owl.strike;
+        raid.x = canvas.width + 80 - t * span;
+        if (raid.timer > 0) return;
+        raid.mode = 'gap';
+        raid.timer = owl.gap;
+        return;
+    }
+    const span = owl.strike || 1;
+    const t = 1 - Math.max(0, raid.timer) / span;
+    const top = -90;
+    const bottom = canvas.height - 92;
+    raid.owlY = top + Math.sin(Math.min(1, Math.max(0, t)) * Math.PI) * (bottom - top);
+    if (gameRunning && passageState.invuln <= 0) {
+        if (Math.hypot(raid.x - player.x, raid.owlY - player.y) < player.size * 0.55 + 32) {
+            passageTakeHit('obstacle');
+        }
+    }
+    if (raid.timer > 0) return;
+    raid.mode = 'gap';
+    raid.timer = owl.gap;
+}
+
+function drawOwlGroundShadow(x, strength) {
+    const gy = canvas.height - 22;
+    const fade = Math.max(0.35, Math.min(1, strength));
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, ' + (0.28 * fade) + ')';
+    ctx.beginPath();
+    ctx.ellipse(x, gy, 92, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0, 0, 0, ' + (0.62 * fade) + ')';
+    ctx.beginPath();
+    ctx.ellipse(x, gy, 62, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawBossOwlAt(x, y, facingRight) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const boss = bossCpuTypes[1];
+    drawBird({
+        x: x,
+        y: y,
+        size: 50,
+        color: boss.color,
+        wingColor: boss.wingColor,
+        beakColor: boss.beakColor,
+        eyeColor: boss.eyeColor,
+        type: boss.type,
+        facingRight: facingRight,
+        stunned: false,
+        stunCharge: 0,
+        stunChargeMax: 1,
+        eatAnimation: 0,
+        stunShow: 0
+    }, false);
+}
+
+function drawPassageOwlRaid() {
+    const owl = passageState && passageState.owl;
+    if (!owl || !owl.raid) return;
+    const raid = owl.raid;
+    if (raid.mode === 'shadow' || raid.mode === 'dive') {
+        let strength = 0.72 + Math.sin(Date.now() / 140) * 0.12;
+        if (raid.mode === 'dive' && Number.isFinite(raid.owlY)) {
+            const depth = (raid.owlY - (-90)) / ((canvas.height - 92) - (-90));
+            strength = 0.45 + Math.max(0, Math.min(1, depth)) * 0.55;
+        }
+        drawOwlGroundShadow(raid.x, strength);
+    }
+    if (raid.mode === 'fly') drawBossOwlAt(raid.x, raid.y, false);
+    if (raid.mode === 'dive') drawBossOwlAt(raid.x, raid.owlY, player.x >= raid.x);
+}
+
+function updatePassageEnemies() {
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    for (const enemy of passageState.enemies) {
+        enemy.y += enemy.speed * enemy.dir;
+        if (enemy.y <= enemy.minY || enemy.y >= enemy.maxY) {
+            enemy.dir *= -1;
+            enemy.y = Math.max(enemy.minY, Math.min(enemy.maxY, enemy.y));
+        }
+        enemy.wing += 0.35;
+        if (!gameRunning || passageState.invuln > 0) continue;
+        if (Math.hypot(enemy.x - px, enemy.y - py) < player.size * 0.65 + 20) {
+            passageTakeHit();
+        }
+    }
+}
+
+function collectPassageFruits() {
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    for (const fruit of passageState.fruits) {
+        if (fruit.collected) continue;
+        const reach = player.size * 0.7 + (fruit.big ? 20 : 12);
+        if (Math.hypot(fruit.x - px, fruit.y - py) < reach) {
+            const value = fruit.value || 1;
+            fruit.collected = true;
+            playerScore += value;
+            player.eatAnimation = 30;
+            player.lastEatenEmoji = fruit.emoji;
+            passageState.slow += value;
+            passageState.boostCharge = Math.min(passageState.boostNeeded, passageState.boostCharge + value);
+            if (player.speedBoost <= 0) applyPassageCruiseSpeed();
+            playSound('eat');
+        }
+    }
+}
+
+function collectPassageStars() {
+    if (!passageState.stars) return;
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    for (const star of passageState.stars) {
+        if (star.collected) continue;
+        if (Math.hypot(star.x - px, star.y - py) >= player.size * 0.7 + 16) continue;
+        star.collected = true;
+        passageState.starUntil = performance.now() + passageStarDuration();
+        playSound('eat');
+        playSound('stunLoaded');
+    }
+}
+
+function passageSpeedFactor() {
+    const slow = passageState && passageState.slow ? passageState.slow : 0;
+    return Math.max(PASSAGE_MIN_SPEED_FACTOR, 1 - slow * PASSAGE_SLOW_PER_FRUIT);
+}
+
+function applyPassageCruiseSpeed() {
+    if (!passageState) return;
+    player.speed = player.baseSpeed * passageState.speedScale * passageSpeedFactor();
+}
+
+function activatePassageBoost() {
+    if (!isPassageStage || !passageState || !gameRunning || gamePaused) return;
+    if (player.speedBoost > 0) return;
+    if (passageState.boostCharge < passageState.boostNeeded) return;
+    passageState.boostCharge = 0;
+    passageState.slow = 0;
+    player.speedBoost = 180;
+    player.speed = player.boostedSpeed;
+    playSound('powerup');
+    updatePassageBoostButton();
+}
+
+function updatePassageBoostButton() {
+    const button = document.getElementById('passageBoostBtn');
+    if (!button) return;
+    const passageReady = isPassageStage && gameRunning && passageState
+        && passageState.boostCharge >= passageState.boostNeeded
+        && player.speedBoost <= 0;
+    const bossReady = playerBossStunReady() && gameRunning;
+    button.classList.toggle('ready', passageReady || bossReady);
+    button.setAttribute('aria-label', bossReady ? 'Soltar stun' : 'Usar boost');
+}
+
+function updatePassageGusts() {
+    if (!passageState.gusts || player.stunned || passageStarActive()) return;
+    const px = player.x + passageState.scroll;
+    const py = player.y;
+    const radius = player.size * 0.55;
+    let push = 0;
+    for (const gust of passageState.gusts) {
+        if (px + radius < gust.x || px - radius > gust.x + gust.w) continue;
+        if (py + radius < gust.y || py - radius > gust.y + gust.h) continue;
+        push += gust.force;
+    }
+    if (!push) return;
+    player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y + push));
+}
+
+function drawPassageGust(gust) {
+    const dir = gust.force < 0 ? -1 : 1;
+    const sweep = (Date.now() / 7) % (gust.w + 80);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(gust.x, gust.y, gust.w, gust.h);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    const rows = Math.max(4, Math.round(gust.h / 28));
+    for (let i = 0; i < rows; i++) {
+        const y = gust.y + 10 + (i * (gust.h - 16)) / rows;
+        const x = gust.x + ((sweep + i * 53) % (gust.w + 70)) - 30;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 42, y + dir * 12);
+        ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(39, 174, 96, 0.9)';
+    for (let i = 0; i < 4; i++) {
+        const lx = gust.x + ((sweep * 1.3 + i * 78) % gust.w);
+        const ly = gust.y + 14 + ((i * 41) % Math.max(18, gust.h - 24));
+        ctx.beginPath();
+        ctx.ellipse(lx, ly, 7, 3, dir * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
+function updatePassage() {
+    if (!passageState || !gameRunning || gamePaused) return;
+    if (passageState.cleared || passageState.failed) return;
+
+    if (player.speedBoost > 0) {
+        player.speedBoost -= 1;
+        player.speed = player.boostedSpeed;
+        if (player.speedBoost <= 0) {
+            applyPassageCruiseSpeed();
+        }
+    }
+    updatePlayer();
+
+    const lead = canvas.width * 0.42;
+    if (player.x > lead) {
+        const delta = player.x - lead;
+        const maxScroll = Math.max(0, passageState.length - canvas.width);
+        const room = maxScroll - passageState.scroll;
+        const applied = Math.min(delta, Math.max(0, room));
+        passageState.scroll += applied;
+        player.x -= applied;
+    }
+
+    updatePassageGusts();
+    updatePassageShadows();
+    updatePassageOwl();
+    resolvePassageObstacles();
+    updatePassageBirds();
+    updatePassageFrogs();
+    updatePassageFishes();
+    updatePassageFalls();
+    updatePassageSwarms();
+    updatePassageSnakes();
+    if (passageState.invuln > 0) passageState.invuln -= 1;
+    collectPassageFruits();
+    collectPassageStars();
+    if (keys['shift']) activatePassageBoost();
+    updatePassageEnemies();
+    updatePassageBoostButton();
+    if (!gameRunning) return;
+
+    const worldX = player.x + passageState.scroll;
+    if (worldX >= passageState.length - 150) {
+        passageState.cleared = true;
+        endGame();
+    }
+}
+
+function drawPassageTree(obstacle, theme) {
+    const x = obstacle.x;
+    const y = obstacle.y;
+    const w = obstacle.w;
+    const h = obstacle.h;
+    const base = y + h;
+    const cx = x + w / 2;
+    const trunkW = Math.max(16, w * 0.16);
+    const trunkTop = y + h * 0.46;
+
+    ctx.fillStyle = '#1e8449';
+    ctx.beginPath();
+    ctx.ellipse(cx, base - 16, w * 0.42, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = theme.trunk;
+    ctx.fillRect(cx - trunkW / 2, trunkTop, trunkW, base - trunkTop);
+    ctx.fillStyle = theme.trunkDark;
+    ctx.fillRect(cx - trunkW * 0.08, trunkTop, Math.max(4, trunkW * 0.18), base - trunkTop);
+
+    const leaf = obstacle.leaf || theme.leaf;
+    const layers = [
+        { top: y + h * 0.22, half: w * 0.5, bottom: y + h * 0.62, color: leaf },
+        { top: y + h * 0.1, half: w * 0.4, bottom: y + h * 0.46, color: '#1e8449' },
+        { top: y, half: w * 0.28, bottom: y + h * 0.3, color: '#27ae60' }
+    ];
+    layers.forEach((layer) => {
+        ctx.fillStyle = layer.color;
+        ctx.beginPath();
+        ctx.moveTo(cx, layer.top);
+        ctx.lineTo(cx + layer.half, layer.bottom);
+        ctx.lineTo(cx - layer.half, layer.bottom);
+        ctx.closePath();
+        ctx.fill();
+    });
+
+    if (obstacle.hive) drawPassageHive(obstacle, theme);
+}
+
+function drawPassageHive(obstacle, theme) {
+    const x = obstacle.x;
+    const y = obstacle.y;
+    const w = obstacle.w;
+    const h = obstacle.h;
+    const cx = x + w / 2;
+    const trunkW = Math.max(16, w * 0.16);
+    const hangX = cx + trunkW * 0.35;
+    const hangY = y + h * 0.64;
+    const hx = Math.min(x + w - 20, hangX + 28);
+    const hy = hangY + 8;
+
+    ctx.save();
+    ctx.strokeStyle = theme.trunkDark;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hangX, hangY);
+    ctx.quadraticCurveTo((hangX + hx) / 2, hangY - 16, hx, hy - 16);
+    ctx.stroke();
+
+    ctx.fillStyle = '#f0c36a';
+    ctx.beginPath();
+    ctx.moveTo(hx - 14, hy + 16);
+    ctx.quadraticCurveTo(hx - 17, hy - 2, hx, hy - 18);
+    ctx.quadraticCurveTo(hx + 17, hy - 2, hx + 14, hy + 16);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = '#c48a2a';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(hx - 12, hy + 2);
+    ctx.quadraticCurveTo(hx, hy - 2, hx + 12, hy + 2);
+    ctx.moveTo(hx - 10, hy + 8);
+    ctx.quadraticCurveTo(hx, hy + 4, hx + 10, hy + 8);
+    ctx.stroke();
+
+    ctx.fillStyle = '#3e2723';
+    ctx.beginPath();
+    ctx.ellipse(hx, hy + 3, 3.4, 4.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#d4a24c';
+    ctx.fillRect(hx - 8, hy + 15, 16, 3);
+
+    const buzz = Date.now() / 220;
+    drawPassageBee(hx + 10, hy + 2 + Math.sin(buzz) * 2, 0.25, 0.58);
+    drawPassageBee(hx + 2, hy - 12 + Math.cos(buzz) * 2, -0.35, 0.5);
+    ctx.restore();
+}
+
+function drawPassageBranch(obstacle, theme) {
+    const x = obstacle.x;
+    const top = obstacle.y;
+    const w = obstacle.w;
+    const ground = top + obstacle.h;
+    const leaf = obstacle.leaf || theme.leaf;
+    const crown = top + 36;
+
+    [0.22, 0.55, 0.8].forEach((place) => {
+        const trunkX = x + w * place;
+        ctx.fillStyle = theme.trunk;
+        ctx.fillRect(trunkX - 8, crown, 16, ground - crown);
+        ctx.fillStyle = theme.trunkDark;
+        ctx.fillRect(trunkX - 3, crown, 5, ground - crown);
+    });
+
+    ctx.strokeStyle = theme.branch;
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x + 12, crown + 8);
+    ctx.quadraticCurveTo(x + w * 0.45, top + 18, x + w - 14, crown + 4);
+    ctx.moveTo(x + 16, crown + 48);
+    ctx.quadraticCurveTo(x + w * 0.5, crown + 16, x + w - 10, crown + 56);
+    ctx.stroke();
+
+    ctx.fillStyle = leaf;
+    ctx.beginPath();
+    ctx.ellipse(x + w * 0.28, top + 24, w * 0.26, 18, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + w * 0.62, top + 20, w * 0.3, 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#27ae60';
+    ctx.beginPath();
+    ctx.ellipse(x + w * 0.46, top + 12, w * 0.2, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#145a32';
+    ctx.beginPath();
+    ctx.ellipse(x + w * 0.34, ground - 12, w * 0.16, 12, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + w * 0.7, ground - 10, w * 0.14, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+function drawPassageRoot(obstacle) {
+    const curves = passageRootCurves(obstacle);
+    const colors = ['#6d4c41', '#4e342e', '#5d4037'];
+    const widths = [16, 12, 8];
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    curves.forEach((curve, index) => {
+        ctx.strokeStyle = colors[index];
+        ctx.lineWidth = widths[index];
+        ctx.beginPath();
+        curve.pts.forEach((point, i) => {
+            if (i === 0) ctx.moveTo(point.x, point.y);
+            else ctx.lineTo(point.x, point.y);
+        });
+        ctx.stroke();
+    });
+    const crown = curves[0].pts;
+    const crownEnd = Math.max(2, Math.floor(crown.length * 0.28));
+    ctx.strokeStyle = 'rgba(255, 248, 230, 0.9)';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    for (let i = 0; i <= crownEnd; i++) {
+        const point = crown[i];
+        if (i === 0) ctx.moveTo(point.x - 4, point.y + 3);
+        else ctx.lineTo(point.x - 4, point.y + 3);
+    }
+    ctx.stroke();
+    const peak = curves[0].pts[0];
+    ctx.fillStyle = '#efebe9';
+    ctx.beginPath();
+    ctx.arc(peak.x, peak.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#3e2723';
+    ctx.beginPath();
+    ctx.arc(peak.x, peak.y + 1.5, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+function drawPassageSwamp() {
+    const y0 = PASSAGE_SWAMP_Y;
+    const bottom = canvas.height;
+    const length = passageState.length;
+    const water = ctx.createLinearGradient(0, y0 - 8, 0, bottom);
+    water.addColorStop(0, '#1f6f68');
+    water.addColorStop(0.18, '#0f3d39');
+    water.addColorStop(1, '#071412');
+    ctx.fillStyle = water;
+    ctx.fillRect(-60, y0, length + 120, bottom - y0);
+
+    const shineX = passageState.scroll + 640;
+    const shine = ctx.createLinearGradient(0, y0, 0, bottom);
+    shine.addColorStop(0, 'rgba(255, 250, 205, 0.32)');
+    shine.addColorStop(1, 'rgba(255, 250, 205, 0)');
+    ctx.fillStyle = shine;
+    ctx.beginPath();
+    ctx.moveTo(shineX - 16, y0);
+    ctx.lineTo(shineX + 16, y0);
+    ctx.lineTo(shineX + 48, bottom);
+    ctx.lineTo(shineX - 48, bottom);
+    ctx.closePath();
+    ctx.fill();
+
+    const drift = Date.now() / 680;
+    ctx.strokeStyle = 'rgba(186, 230, 214, 0.45)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = -40; x <= length + 40; x += 10) {
+        const y = y0 + Math.sin(x * 0.018 + drift) * 2.4;
+        if (x === -40) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    const pads = Math.ceil(length / 360);
+    for (let i = 0; i < pads; i++) {
+        const x = 220 + i * 360 + (i % 2) * 50;
+        const y = y0 + 20 + (i % 3) * 9;
+        ctx.fillStyle = i % 2 === 0 ? '#0b5345' : '#196f3d';
+        ctx.beginPath();
+        ctx.ellipse(x, y, 18, 8, 0.25, 0.35, Math.PI * 1.8);
+        ctx.fill();
+        ctx.strokeStyle = '#7dcea0';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x - 2, y);
+        ctx.lineTo(x + 15, y - 2);
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(214, 234, 228, 0.09)';
+    for (let x = 140; x < length; x += 480) {
+        ctx.beginPath();
+        ctx.ellipse(x, y0 - 6, 100, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function drawPassageObstacle(obstacle, theme) {
+    if (obstacle.kind === 'root') {
+        drawPassageRoot(obstacle);
+        return;
+    }
+    if (obstacle.kind === 'branch') {
+        drawPassageBranch(obstacle, theme);
+        return;
+    }
+    if (obstacle.kind === 'tree') {
+        drawPassageTree(obstacle, theme);
+        return;
+    }
+    if (obstacle.kind === 'trunk') {
+        ctx.fillStyle = theme.trunk;
+        ctx.fillRect(obstacle.x, obstacle.y, obstacle.w, obstacle.h);
+        ctx.fillStyle = theme.trunkDark;
+        ctx.fillRect(obstacle.x + obstacle.w * 0.28, obstacle.y, Math.max(6, obstacle.w * 0.16), obstacle.h);
+        ctx.fillStyle = theme.trunk;
+        ctx.beginPath();
+        ctx.ellipse(obstacle.x + obstacle.w / 2, obstacle.y + obstacle.h - 4, obstacle.w * 0.7, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (obstacle.kind === 'rock') {
+        const x = obstacle.x;
+        const y = obstacle.y;
+        const w = obstacle.w;
+        const h = obstacle.h;
+        ctx.fillStyle = '#5c534c';
+        ctx.beginPath();
+        ctx.moveTo(x + w * 0.08, y + h);
+        ctx.quadraticCurveTo(x - w * 0.02, y + h * 0.45, x + w * 0.2, y + h * 0.22);
+        ctx.quadraticCurveTo(x + w * 0.38, y, x + w * 0.58, y + h * 0.1);
+        ctx.quadraticCurveTo(x + w * 0.86, y - h * 0.02, x + w, y + h * 0.38);
+        ctx.quadraticCurveTo(x + w * 1.04, y + h * 0.72, x + w * 0.9, y + h);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#7d746b';
+        ctx.beginPath();
+        ctx.ellipse(x + w * 0.4, y + h * 0.5, w * 0.16, h * 0.16, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#3e4a32';
+        ctx.beginPath();
+        ctx.ellipse(x + w * 0.55, y + h * 0.16, w * 0.22, h * 0.1, 0, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        ctx.fillStyle = theme.branch;
+        ctx.fillRect(obstacle.x, obstacle.y, obstacle.w, obstacle.h);
+        ctx.fillStyle = theme.leaf;
+        ctx.beginPath();
+        ctx.ellipse(obstacle.x + obstacle.w / 2, obstacle.y, obstacle.w / 2, 18, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function drawPassageBlockerBird(bird, context) {
+    const drawCtx = context || ctx;
+    const radius = bird.radius || 35;
+    const s = radius / 35;
+    const wingTime = bird.wing || 0;
+    const flap = Math.sin(wingTime) * 0.5;
+    drawCtx.save();
+    drawCtx.translate(bird.cx, bird.cy);
+    drawCtx.scale(bird.facing || -1, 1);
+
+    const wingColor = bird.wingColor || '#16a085';
+    drawCtx.fillStyle = wingColor;
+    drawCtx.beginPath();
+    drawCtx.ellipse(-radius * 0.72, radius * 0.08 + flap * 6 * s, radius * 0.62, radius * 0.34, -0.7 + flap, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.fillStyle = darkenColor(wingColor);
+    drawCtx.beginPath();
+    drawCtx.ellipse(-radius * 0.86, radius * 0.16 - flap * 4 * s, radius * 0.36, radius * 0.2, -0.9 - flap, 0, Math.PI * 2);
+    drawCtx.fill();
+
+    drawCtx.fillStyle = bird.color || '#1abc9c';
+    drawCtx.beginPath();
+    drawCtx.arc(0, 0, radius, 0, Math.PI * 2);
+    drawCtx.fill();
+
+    drawCtx.fillStyle = '#ffffff';
+    drawCtx.beginPath();
+    drawCtx.arc(10 * s, -5 * s, 10 * s, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.fillStyle = '#e74c3c';
+    drawCtx.beginPath();
+    drawCtx.arc(12 * s, -5 * s, 5 * s, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.fillStyle = '#7b241c';
+    drawCtx.beginPath();
+    drawCtx.arc(12.8 * s, -4.6 * s, 2.1 * s, 0, Math.PI * 2);
+    drawCtx.fill();
+
+    const beakW = 5 * s;
+    const beakX = radius - 5 * s;
+    drawCtx.fillStyle = bird.beak || '#f39c12';
+    drawCtx.beginPath();
+    drawCtx.moveTo(beakX, -beakW / 2);
+    drawCtx.lineTo(beakX + 15 * s, 0);
+    drawCtx.lineTo(beakX, beakW / 2);
+    drawCtx.closePath();
+    drawCtx.fill();
+    drawCtx.restore();
+}
+
+function drawPassageFrog(frog, context) {
+    const drawCtx = context || ctx;
+    const radius = frog.radius;
+    const squash = frog.squash || 1;
+    const jumping = frog.state === 'jump';
+    if (passageState && passageState.river && !jumping) {
+        drawCtx.save();
+        drawCtx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+        drawCtx.lineWidth = 2;
+        drawCtx.beginPath();
+        drawCtx.ellipse(frog.cx, PASSAGE_RIVER_Y + 1, radius * 0.95, 4, 0, 0, Math.PI * 2);
+        drawCtx.stroke();
+        drawCtx.restore();
+    }
+    drawCtx.save();
+    drawCtx.translate(frog.cx, frog.cy);
+    drawCtx.scale(frog.facing || 1, squash);
+
+    const legY = jumping ? -radius * 0.02 : radius * 0.2;
+    drawCtx.fillStyle = '#196f3d';
+    drawCtx.beginPath();
+    drawCtx.ellipse(-radius * 0.62, legY, radius * 0.42, radius * 0.26, jumping ? -1.15 : -0.45, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.beginPath();
+    drawCtx.ellipse(radius * 0.55, jumping ? radius * 0.02 : radius * 0.22, radius * 0.34, radius * 0.2, jumping ? 0.9 : 0.35, 0, Math.PI * 2);
+    drawCtx.fill();
+
+    drawCtx.fillStyle = frog.color || '#1e8449';
+    drawCtx.beginPath();
+    drawCtx.ellipse(0, 0, radius, radius * 0.68, 0, 0, Math.PI * 2);
+    drawCtx.fill();
+
+    drawCtx.fillStyle = frog.belly || '#7dcea0';
+    drawCtx.beginPath();
+    drawCtx.ellipse(radius * 0.12, radius * 0.12, radius * 0.46, radius * 0.34, 0, 0, Math.PI * 2);
+    drawCtx.fill();
+
+    drawCtx.fillStyle = '#ffffff';
+    drawCtx.beginPath();
+    drawCtx.arc(radius * 0.22, -radius * 0.52, radius * 0.28, 0, Math.PI * 2);
+    drawCtx.arc(-radius * 0.16, -radius * 0.5, radius * 0.24, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.fillStyle = '#e74c3c';
+    drawCtx.beginPath();
+    drawCtx.arc(radius * 0.3, -radius * 0.5, radius * 0.12, 0, Math.PI * 2);
+    drawCtx.arc(-radius * 0.08, -radius * 0.48, radius * 0.1, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.fillStyle = '#7b241c';
+    drawCtx.beginPath();
+    drawCtx.arc(radius * 0.33, -radius * 0.48, radius * 0.05, 0, Math.PI * 2);
+    drawCtx.arc(-radius * 0.05, -radius * 0.46, radius * 0.04, 0, Math.PI * 2);
+    drawCtx.fill();
+
+    drawCtx.strokeStyle = '#145a32';
+    drawCtx.lineWidth = Math.max(2, radius * 0.08);
+    drawCtx.lineCap = 'round';
+    drawCtx.beginPath();
+    drawCtx.arc(radius * 0.18, radius * 0.02, radius * 0.26, 0.25, Math.PI - 0.5);
+    drawCtx.stroke();
+    drawCtx.restore();
+}
+
+function drawPassageBee(x, y, angle, scale) {
+    const s = scale;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = '#f7f9f9';
+    ctx.beginPath();
+    ctx.ellipse(-2.4 * s, -2.5 * s, 3.6 * s, 1.5 * s, -0.55, 0, Math.PI * 2);
+    ctx.ellipse(-2.4 * s, 2.5 * s, 3.6 * s, 1.5 * s, 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#f4d03f';
+    ctx.beginPath();
+    ctx.ellipse(0.8 * s, 0, 4.8 * s, 2.9 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1c1c1c';
+    ctx.fillRect(-0.5 * s, -2.9 * s, 1.2 * s, 5.8 * s);
+    ctx.fillRect(1.6 * s, -2.9 * s, 1.2 * s, 5.8 * s);
+    ctx.beginPath();
+    ctx.arc(4.6 * s, 0, 1.55 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#e74c3c';
+    ctx.beginPath();
+    ctx.arc(5.15 * s, -0.55 * s, 0.72 * s, 0, Math.PI * 2);
+    ctx.arc(5.15 * s, 0.55 * s, 0.72 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawPassageSwarm(swarm) {
+    const core = swarm.radius * 0.72;
+    const buzz = swarm.wing || 0;
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#f4d03f';
+    ctx.beginPath();
+    ctx.ellipse(swarm.cx, swarm.cy, core, core * 0.78, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    const beeScale = Math.max(0.7, Math.min(1.05, core / 52));
+    const bees = 22;
+    for (let i = 0; i < bees; i++) {
+        const spin = buzz * 0.85 + i * (Math.PI * 2 / bees);
+        const ring = i < 7 ? core * (0.12 + (i % 4) * 0.1) : core * (0.42 + (i % 5) * 0.1);
+        const bx = swarm.cx + Math.cos(spin) * ring;
+        const by = swarm.cy + Math.sin(spin * 1.05 + i) * ring * 0.74;
+        drawPassageBee(bx, by, spin + Math.sin(buzz + i) * 0.4, beeScale * (0.72 + (i % 4) * 0.12));
+    }
+    ctx.restore();
+}
+
+function drawPassageSnake(snake) {
+    const hx = snake.headX;
+    const hy = snake.headY;
+    const rising = snake.y - hy > 10;
+    ctx.save();
+    if (!rising) {
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath();
+        ctx.ellipse(snake.x, snake.y, 28, 13, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#d4ac0d';
+        ctx.beginPath();
+        ctx.ellipse(snake.x - 4, snake.y - 1, 16, 8, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath();
+        ctx.arc(snake.x + 14, snake.y - 3, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath();
+        ctx.arc(snake.x + 16, snake.y - 4, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#7b241c';
+        ctx.beginPath();
+        ctx.arc(snake.x + 16.6, snake.y - 3.7, 0.9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#e74c3c';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(snake.x + 21, snake.y - 3);
+        ctx.lineTo(snake.x + 28, snake.y - 6);
+        ctx.moveTo(snake.x + 21, snake.y - 3);
+        ctx.lineTo(snake.x + 28, snake.y - 1);
+        ctx.stroke();
+    } else {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (let i = 0; i <= 6; i++) {
+            const t = i / 6;
+            const x = snake.x + (hx - snake.x) * t + Math.sin(t * Math.PI) * 12 * snake.facing;
+            const y = snake.y + (hy - snake.y) * t;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 14;
+        ctx.stroke();
+        ctx.strokeStyle = '#d4ac0d';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        const angle = Math.atan2(hy - snake.y, hx - snake.x);
+        ctx.translate(hx, hy);
+        ctx.rotate(angle);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 15, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath();
+        ctx.arc(6, -2, 2.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#7b241c';
+        ctx.beginPath();
+        ctx.arc(6.6, -1.7, 0.9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#e74c3c';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(14, 0);
+        ctx.lineTo(22, -3);
+        ctx.moveTo(14, 0);
+        ctx.lineTo(22, 3);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+function drawPassageEnemy(enemy, theme) {
+    const flap = Math.sin(enemy.wing);
+    ctx.save();
+    ctx.translate(enemy.x, enemy.y);
+    ctx.fillStyle = '#5d6d7e';
+    ctx.strokeStyle = '#f4f6f7';
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-6, -2);
+    ctx.quadraticCurveTo(-26, -20 - flap * 16, -40, 6);
+    ctx.quadraticCurveTo(-24, 14 + flap * 8, -8, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(6, -2);
+    ctx.quadraticCurveTo(26, -20 - flap * 16, 40, 6);
+    ctx.quadraticCurveTo(24, 14 + flap * 8, 8, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#1b2631';
+    ctx.beginPath();
+    ctx.ellipse(0, 2, 16, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2c3e50';
+    ctx.beginPath();
+    ctx.moveTo(-5, -6);
+    ctx.lineTo(-11, -20);
+    ctx.lineTo(-1, -8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(5, -6);
+    ctx.lineTo(11, -20);
+    ctx.lineTo(1, -8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#e74c3c';
+    ctx.beginPath();
+    ctx.arc(-5, -1, 2.6, 0, Math.PI * 2);
+    ctx.arc(5, -1, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#7b241c';
+    ctx.beginPath();
+    ctx.arc(-4.4, -0.6, 1.1, 0, Math.PI * 2);
+    ctx.arc(5.6, -0.6, 1.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawPassagePortal() {
+    const x = passageState.length - 120;
+    const y = canvas.height / 2;
+    const pulse = 8 + Math.sin(Date.now() / 180) * 4;
+    ctx.fillStyle = 'rgba(241, 196, 15, 0.28)';
+    ctx.beginPath();
+    ctx.arc(x, y, 58 + pulse * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#f1c40f';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(x, y, 52, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#fff8dc';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SAÍDA', x, y);
+}
+
+function drawPassageWorld() {
+    if (!passageState) return;
+    const theme = passageThemes[passageState.theme] || passageThemes.forest;
+
+    ctx.save();
+    ctx.translate(-passageState.scroll * 0.25, 0);
+    ctx.fillStyle = passageState.swamp ? 'rgba(6, 28, 26, 0.55)' : 'rgba(20, 70, 24, 0.28)';
+    for (let x = -80; x < passageState.length + 200; x += 240) {
+        ctx.beginPath();
+        ctx.arc(x, canvas.height - 10, 100, Math.PI, 0);
+        ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(-passageState.scroll, 0);
+    if (passageState.river) drawPassageRiver();
+    if (passageState.swamp) drawPassageSwamp();
+    for (const gust of passageState.gusts || []) drawPassageGust(gust);
+    for (const obstacle of passageState.obstacles) drawPassageObstacle(obstacle, theme);
+    for (const shadow of passageState.shadows || []) drawPassageShadow(shadow);
+    for (const frog of passageState.frogs || []) drawPassageFrog(frog);
+    for (const snake of passageState.snakes || []) drawPassageSnake(snake);
+    ctx.font = '28px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff';
+    for (const fruit of passageState.fruits) {
+        if (fruit.collected) continue;
+        drawPassageFruit(fruit);
+    }
+    for (const star of passageState.stars || []) {
+        if (star.collected) continue;
+        drawPassagePowerInsect(star);
+    }
+    for (const fish of passageState.fishes || []) drawPassageFish(fish);
+    for (const swarm of passageState.swarms || []) drawPassageSwarm(swarm);
+    for (const enemy of passageState.enemies) drawPassageEnemy(enemy, theme);
+    for (const bird of passageState.birds || []) drawPassageBlockerBird(bird);
+    drawPassagePortal();
+    ctx.restore();
+    drawPassageOwlRaid();
+
+    if (!player.stunned && passageState.invuln > 0 && Math.floor(passageState.invuln / 6) % 2 === 0) {
+        ctx.globalAlpha = 0.4;
+    }
+    drawBird(player, true);
+    ctx.globalAlpha = 1;
+}
+
+function drawPassageFruit(fruit) {
+    if (!fruit.big) {
+        ctx.fillText(fruit.emoji, fruit.x, fruit.y);
+        return;
+    }
+    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 180);
+    ctx.save();
+    ctx.strokeStyle = `rgba(241, 196, 15, ${0.65 + pulse * 0.35})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(fruit.x, fruit.y, 24 + pulse * 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '46px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fruit.emoji, fruit.x, fruit.y);
+    ctx.restore();
+}
+
+function drawPassagePowerInsect(insect, context) {
+    const drawCtx = context || ctx;
+    const hover = Math.sin(Date.now() / 160) * 3;
+    const flap = Math.sin(Date.now() / 90);
+    drawCtx.save();
+    drawCtx.translate(insect.x, insect.y + hover);
+    drawCtx.scale(-1, 1);
+    drawCtx.fillStyle = 'rgba(46, 204, 113, 0.28)';
+    drawCtx.beginPath();
+    drawCtx.arc(0, 0, 20 + flap, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.strokeStyle = '#3d2914';
+    drawCtx.lineWidth = 2;
+    drawCtx.lineCap = 'round';
+    drawCtx.beginPath();
+    drawCtx.moveTo(-4, 5);
+    drawCtx.lineTo(-10, 11);
+    drawCtx.moveTo(2, 6);
+    drawCtx.lineTo(1, 13);
+    drawCtx.moveTo(8, 5);
+    drawCtx.lineTo(14, 10);
+    drawCtx.stroke();
+    drawCtx.fillStyle = 'rgba(232, 245, 233, 0.85)';
+    drawCtx.beginPath();
+    drawCtx.ellipse(-2, -7, 8, 3.2, -0.5 + flap * 0.2, 0, Math.PI * 2);
+    drawCtx.ellipse(-2, 6, 8, 3.2, 0.5 - flap * 0.2, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.fillStyle = '#1e8449';
+    drawCtx.beginPath();
+    drawCtx.ellipse(-1, 0, 11, 8, 0, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.strokeStyle = '#145a32';
+    drawCtx.lineWidth = 1.4;
+    drawCtx.beginPath();
+    drawCtx.moveTo(-1, -7);
+    drawCtx.lineTo(-1, 7);
+    drawCtx.stroke();
+    drawCtx.fillStyle = '#58d68d';
+    drawCtx.beginPath();
+    drawCtx.ellipse(-5, -2, 3, 4.5, -0.4, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.fillStyle = '#145a32';
+    drawCtx.beginPath();
+    drawCtx.arc(10, -1, 5.5, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.fillStyle = '#1a1a1a';
+    drawCtx.beginPath();
+    drawCtx.arc(12, -2.6, 1.3, 0, Math.PI * 2);
+    drawCtx.arc(12, 0.8, 1.3, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.strokeStyle = '#145a32';
+    drawCtx.lineWidth = 1.5;
+    drawCtx.beginPath();
+    drawCtx.moveTo(12, -6);
+    drawCtx.quadraticCurveTo(16, -12, 20, -9);
+    drawCtx.moveTo(13, -5);
+    drawCtx.quadraticCurveTo(18, -8, 21, -4);
+    drawCtx.stroke();
+    drawCtx.restore();
+}
+
+function drawPassageRiver() {
+    const bottom = canvas.height;
+    const step = 14;
+    const pts = [];
+    for (let x = -40; x <= passageState.length + 40; x += step) {
+        pts.push({ x, ...passageRiverProfile(x) });
+    }
+
+    const deep = ctx.createLinearGradient(0, PASSAGE_RIVER_Y - 6, 0, bottom);
+    deep.addColorStop(0, '#85c1e9');
+    deep.addColorStop(0.18, '#2e86c1');
+    deep.addColorStop(1, '#1a5276');
+    ctx.fillStyle = deep;
+    ctx.fillRect(-40, PASSAGE_RIVER_Y, passageState.length + 80, bottom - PASSAGE_RIVER_Y);
+
+    ctx.fillStyle = '#3d4c5c';
+    ctx.beginPath();
+    let rock = false;
+    for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        const raised = p.surface < PASSAGE_RIVER_Y - 4;
+        if (raised && !rock) {
+            ctx.moveTo(p.x, bottom);
+            ctx.lineTo(p.x, p.surface);
+            rock = true;
+        } else if (raised) {
+            ctx.lineTo(p.x, p.surface);
+        } else if (rock) {
+            ctx.lineTo(pts[i - 1].x, bottom);
+            ctx.closePath();
+            rock = false;
+        }
+    }
+    if (rock) {
+        ctx.lineTo(pts[pts.length - 1].x, bottom);
+        ctx.closePath();
+    }
+    ctx.fill();
+
+    const lower = pts.map((p, i) => {
+        const prev = pts[Math.max(0, i - 1)];
+        const next = pts[Math.min(pts.length - 1, i + 1)];
+        const dx = next.x - prev.x;
+        const dy = next.surface - prev.surface;
+        const len = Math.hypot(dx, dy) || 1;
+        return {
+            x: p.x + (-dy / len) * 52,
+            y: Math.min(bottom, p.surface + (dx / len) * 52)
+        };
+    });
+    const skin = ctx.createLinearGradient(0, 80, 0, PASSAGE_RIVER_Y);
+    skin.addColorStop(0, '#d4e6f1');
+    skin.addColorStop(0.45, '#5dade2');
+    skin.addColorStop(1, '#1a5276');
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].surface);
+    for (const p of pts) ctx.lineTo(p.x, p.surface);
+    for (let i = lower.length - 1; i >= 0; i--) ctx.lineTo(lower[i].x, lower[i].y);
+    ctx.closePath();
+    ctx.fill();
+
+    const flow = Date.now() / 180;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    for (const shift of [10, 24, 38]) {
+        ctx.beginPath();
+        let drawing = false;
+        for (let i = 0; i < pts.length; i++) {
+            const prev = pts[Math.max(0, i - 1)];
+            const next = pts[Math.min(pts.length - 1, i + 1)];
+            const steep = Math.abs(next.surface - prev.surface) > 5;
+            if (!steep) {
+                drawing = false;
+                continue;
+            }
+            const dx = next.x - prev.x;
+            const dy = next.surface - prev.surface;
+            const len = Math.hypot(dx, dy) || 1;
+            const sx = pts[i].x + (-dy / len) * shift;
+            const sy = pts[i].surface + (dx / len) * shift;
+            if (!drawing) {
+                ctx.moveTo(sx, sy);
+                drawing = true;
+            } else ctx.lineTo(sx, sy);
+        }
+        ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    for (let i = 0; i < pts.length; i += 3) {
+        const prev = pts[Math.max(0, i - 1)];
+        const next = pts[Math.min(pts.length - 1, i + 1)];
+        const dy = next.surface - prev.surface;
+        if (Math.abs(dy) < 6) continue;
+        const slide = (flow + i * 9) % 70;
+        const dir = dy > 0 ? 1 : -1;
+        ctx.beginPath();
+        ctx.ellipse(pts[i].x + dir * (slide - 20), pts[i].surface + 18, 8, 3.5, dy * 0.02, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
+    for (const fall of passageState.falls || []) {
+        ctx.beginPath();
+        ctx.ellipse(fall.x0 + 24, PASSAGE_RIVER_Y + 2, 54, 12, 0, 0, Math.PI * 2);
+        ctx.ellipse(fall.x3 - 24, PASSAGE_RIVER_Y + 2, 54, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#5d6d7e';
+        ctx.fillRect(fall.x1 - 36, fall.top - 4, 64, 16);
+        ctx.fillRect(fall.x2 - 28, fall.top - 4, 64, 16);
+        ctx.fillStyle = '#1e8449';
+        ctx.fillRect(fall.x1 - 40, fall.top - 10, 72, 8);
+        ctx.fillRect(fall.x2 - 32, fall.top - 10, 72, 8);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
+    }
+
+    ctx.fillStyle = '#243042';
+    for (const fall of passageState.falls || []) {
+        ctx.beginPath();
+        ctx.moveTo(fall.x0, 0);
+        for (let x = fall.x0; x <= fall.x3; x += step) {
+            ctx.lineTo(x, passageRiverProfile(x).ceiling || 0);
+        }
+        ctx.lineTo(fall.x3, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#1e8449';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        for (let x = fall.x0; x <= fall.x3; x += step) {
+            const y = passageRiverProfile(x).ceiling || 0;
+            if (x === fall.x0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 2;
+    const time = Date.now() / 380;
+    for (let x = 0; x < passageState.length; x += 56) {
+        if (passageRiverProfile(x).surface < PASSAGE_RIVER_Y - 8) continue;
+        const wave = Math.sin(time + x * 0.05) * 3;
+        ctx.beginPath();
+        ctx.moveTo(x, PASSAGE_RIVER_Y + 8 + wave);
+        ctx.quadraticCurveTo(x + 28, PASSAGE_RIVER_Y + 2 + wave, x + 56, PASSAGE_RIVER_Y + 8 + wave);
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = '#196f3d';
+    for (let x = 60; x < passageState.length; x += 170) {
+        if (passageRiverProfile(x).surface < PASSAGE_RIVER_Y - 8) continue;
+        ctx.fillRect(x, PASSAGE_RIVER_Y - 22, 3, 24);
+        ctx.fillRect(x + 8, PASSAGE_RIVER_Y - 30, 3, 32);
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff';
+}
+
+function drawPassageFish(fish) {
+    if (!fish.airborne) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(fish.x, PASSAGE_RIVER_Y + 2, 8 + Math.abs(Math.sin(fish.phase)) * 6, 3, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        return;
+    }
+
+    ctx.save();
+    ctx.translate(fish.cx, fish.cy);
+    ctx.rotate(Math.cos(fish.phase) * 0.9);
+    ctx.fillStyle = fish.color || '#e67e22';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, fish.radius * 1.35, fish.radius * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = fish.belly || '#f5cba7';
+    ctx.beginPath();
+    ctx.ellipse(fish.radius * 0.15, fish.radius * 0.12, fish.radius * 0.7, fish.radius * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = fish.color || '#e67e22';
+    ctx.beginPath();
+    ctx.moveTo(-fish.radius * 0.9, 0);
+    ctx.lineTo(-fish.radius * 1.9, -fish.radius * 0.65);
+    ctx.lineTo(-fish.radius * 1.9, fish.radius * 0.65);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(fish.radius * 0.55, -fish.radius * 0.12, fish.radius * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#e74c3c';
+    ctx.beginPath();
+    ctx.arc(fish.radius * 0.62, -fish.radius * 0.12, fish.radius * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#7b241c';
+    ctx.beginPath();
+    ctx.arc(fish.radius * 0.66, -fish.radius * 0.1, fish.radius * 0.045, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawPassageHUD() {
+    if (!passageState) return;
+    const padding = 16;
+    ctx.save();
+    ctx.font = 'bold 24px Arial';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.fillText(`🍎 ${playerScore}/${passageState.totalFruits}`, padding, 32);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = timeLeft <= 10 ? '#ff6b6b' : '#ffffff';
+    ctx.fillText(`${timeLeft}s`, canvas.width / 2, 32);
+    ctx.fillStyle = '#ffffff';
+
+    const boostRatio = Math.max(0, Math.min(1, passageState.boostCharge / passageState.boostNeeded));
+    const boostFull = boostRatio >= 1 && player.speedBoost <= 0;
+    const boostWidth = player.speedBoost > 0 ? 140 * (player.speedBoost / 180) : 140 * boostRatio;
+    if (boostFull) {
+        const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 110);
+        const barH = 14 + pulse * 8;
+        const barY = 57 - barH / 2;
+        ctx.save();
+        ctx.shadowColor = '#f1c40f';
+        ctx.shadowBlur = 16 + pulse * 18;
+        ctx.fillStyle = `rgba(241, 196, 15, ${0.28 + pulse * 0.35})`;
+        ctx.fillRect(padding - 6, barY - 6, 152, barH + 12);
+        ctx.fillStyle = pulse > 0.45 ? '#ffe56a' : '#f39c12';
+        ctx.fillRect(padding, barY, 140, barH);
+        ctx.restore();
+        const labelSize = 18 + Math.round(pulse * 8);
+        ctx.font = `bold ${labelSize}px Arial`;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#fff8d0';
+        ctx.shadowColor = '#f1c40f';
+        ctx.shadowBlur = 12;
+        ctx.fillText('⚡ SHIFT', padding + 150, 58);
+        ctx.shadowBlur = 4;
+    } else {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillRect(padding, 52, 140, 10);
+        ctx.fillStyle = player.speedBoost > 0 ? '#f39c12' : '#3498db';
+        ctx.fillRect(padding, 52, boostWidth, 10);
+        ctx.shadowBlur = 4;
+    }
+
+    let hearts = '';
+    const heartsLeft = PASSAGE_MAX_HITS - passageState.hits;
+    for (let i = 0; i < PASSAGE_MAX_HITS; i++) {
+        hearts += i < heartsLeft ? '❤️' : '🖤';
+    }
+    ctx.font = 'bold 24px Arial';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'right';
+    ctx.fillText(hearts, canvas.width - padding, 32);
+    if (passageStarActive()) {
+        const left = Math.max(1, Math.ceil((passageState.starUntil - performance.now()) / 1000));
+        ctx.font = 'bold 22px Arial';
+        ctx.fillStyle = '#ffe56a';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(`🪲 ${left}s`, canvas.width - padding, 62);
+    }
+    ctx.shadowBlur = 0;
+
+    const progress = Math.max(0, Math.min(1, (player.x + passageState.scroll) / passageState.length));
+    const barX = padding;
+    const barY = canvas.height - 26;
+    const barW = canvas.width - padding * 2;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(barX, barY, barW, 10);
+    ctx.fillStyle = '#2ecc71';
+    ctx.fillRect(barX, barY, barW * progress, 10);
+    ctx.restore();
+}
+
 // CPUs das sub-fases (pássaros genéricos da área)
 // Índices: 0=1-1, 1=1-2, 2=1-3, 3=1-4(bônus), 4=1-5, 5=1-6
 const areaCpuColors = {
@@ -614,7 +2798,7 @@ const areaCpuColors = {
 
 // Tipos de CPU CHEFE para cada área
 const bossCpuTypes = {
-    1: { // Floresta - Coruja
+    1: (stageDefs['1-12'] && stageDefs['1-12'].boss) || {
         name: 'Coruja',
         color: '#8B4513',
         wingColor: '#654321',
@@ -765,6 +2949,7 @@ function spawnBat() {
 
 // Atualizar morcego
 function updateBat() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     // Ativa apenas na fase 1-6 (floresta)
     if (currentArea !== 1 || currentSubstage !== 6) {
         bat.active = false;
@@ -943,6 +3128,7 @@ function spawnHawk() {
 
 // Atualizar gavião
 function updateHawk() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     // Ativa na fase 2-6 (pântano) ou 4-6 (deserto)
     if ((currentArea !== 2 && currentArea !== 4) || currentSubstage !== 6) {
         hawk.active = false;
@@ -1215,6 +3401,7 @@ function spawnWorm() {
 
 // Atualizar minhocas
 function updateWorms() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     if (!isBonusStage) return;
 
     // Atualizar cooldown dos buracos
@@ -1258,7 +3445,7 @@ function updateWorms() {
 
 // Verificar colisão com minhocas e cobras
 function checkWormCollisions() {
-    if (!isBonusStage) return;
+    if (!isBonusStage || gamePaused) return;
 
     for (let i = worms.length - 1; i >= 0; i--) {
         const worm = worms[i];
@@ -1547,6 +3734,7 @@ function spawnCactusFruit() {
 
 // Atualizar frutos de cactos
 function updateCactusFruits() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     if (!isBonusStage || currentArea !== 4) return;
 
     // Spawnar novos frutos periodicamente (probabilidade aumentada)
@@ -1601,6 +3789,7 @@ function updateCactusFruits() {
 
 // Verificar colisão com frutos de cactos
 function checkCactusFruitCollisions() {
+    if (gamePaused) return; // Não verificar colisões se estiver pausado
     if (!isBonusStage || currentArea !== 4) return;
 
     for (let i = cactusFruits.length - 1; i >= 0; i--) {
@@ -1859,6 +4048,7 @@ function spawnSwampInsect() {
 
 // Atualizar insetos do pântano
 function updateSwampInsects() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     if (!isBonusStage || currentArea !== 2) return;
 
     // Limites
@@ -2070,6 +4260,7 @@ function updateSwampInsects() {
 
 // Verificar colisão com insetos
 function checkSwampInsectCollisions() {
+    if (gamePaused) return; // Não verificar colisões se estiver pausado
     if (!isBonusStage || currentArea !== 2) return;
 
     for (let i = swampInsects.length - 1; i >= 0; i--) {
@@ -2326,6 +4517,7 @@ function spawnTropicalFish() {
 
 // Atualizar peixes
 function updateTropicalFish() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     if (!isBonusStage || currentArea !== 3) return;
 
     // Garantir que sempre há pelo menos 1 peixe na tela
@@ -2408,6 +4600,7 @@ function updateTropicalFish() {
 
 // Verificar colisão com peixes
 function checkTropicalFishCollisions() {
+    if (gamePaused) return; // Não verificar colisões se estiver pausado
     if (!isBonusStage || currentArea !== 3) return;
 
     for (let i = tropicalFish.length - 1; i >= 0; i--) {
@@ -2665,6 +4858,7 @@ function throwBread() {
 
 // Atualizar pães
 function updateMetropolisBread() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     if (!isBonusStage || currentArea !== 5) return;
     
     // Atualizar pessoa que joga pães
@@ -2779,6 +4973,7 @@ function updateMetropolisBread() {
 
 // Verificar colisão com pães
 function checkMetropolisBreadCollisions() {
+    if (gamePaused) return; // Não verificar colisões se estiver pausado
     if (!isBonusStage || currentArea !== 5) return;
     
     for (let i = breads.length - 1; i >= 0; i--) {
@@ -2946,6 +5141,7 @@ function drawMetropolisBread() {
 
 // Atualizar frutas congeladas
 function updateFrozenFruits() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     if (!isBonusStage || currentArea !== 3) return;
 
     // Spawnar novas frutas periodicamente (probabilidade muito reduzida)
@@ -2987,7 +5183,7 @@ function updateFrozenFruits() {
 
 // Verificar colisão com frutas congeladas
 function checkFrozenFruitCollisions() {
-    if (!isBonusStage || currentArea !== 3) return;
+    if (!isBonusStage || currentArea !== 3 || gamePaused) return;
 
     for (let i = frozenFruits.length - 1; i >= 0; i--) {
         const fruit = frozenFruits[i];
@@ -3377,7 +5573,7 @@ let touchControls = {
     joystickBaseY: 0,
     joystickRadius: 50,
     // Novo modo: arrastar pássaro diretamente
-    dragMode: true, // Padrão: arrastar pássaro (será sobrescrito por initControlUI)
+    dragMode: false,
     dragActive: false,
     dragTargetX: 0,
     dragTargetY: 0
@@ -3397,6 +5593,30 @@ const FPS_HISTORY_SIZE = 10; // Manter últimos 10 valores
 const FPS_UPDATE_INTERVAL = 500; // Atualizar a cada 500ms (mais responsivo)
 
 // Atalho para ativar/desativar debug: Ctrl+Shift+D
+// Listener para pausar com ESC
+document.addEventListener('keydown', (e) => {
+    // Pausar/despausar com ESC quando o jogo está rodando
+    if (e.key === 'Escape' && gameRunning && gameStarted) {
+        const countdownOverlay = document.getElementById('countdownOverlay');
+        const pauseOverlay = document.getElementById('pauseOverlay');
+        const isCountdownVisible = countdownOverlay && countdownOverlay.style.display !== 'none';
+        const isPaused = pauseOverlay && pauseOverlay.style.display === 'flex';
+        
+        // Se não está no countdown e não está na tela de game over, pode pausar
+        if (!isCountdownVisible && !isPaused) {
+            togglePause();
+            e.preventDefault();
+            return;
+        }
+        // Se já está pausado, ESC continua o jogo
+        else if (isPaused) {
+            resumeGame();
+            e.preventDefault();
+            return;
+        }
+    }
+});
+
 document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
         debugMode = !debugMode;
@@ -3733,6 +5953,17 @@ function initTouchControls() {
     document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
     document.addEventListener('touchend', handleTouchEnd, { passive: false, capture: true });
     document.addEventListener('touchcancel', handleTouchEnd, { passive: false, capture: true });
+
+    const passageBoostBtn = document.getElementById('passageBoostBtn');
+    if (passageBoostBtn) {
+        const usePassageBoost = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (isBossStage()) tryPlayerBossStun();
+            else activatePassageBoost();
+        };
+        passageBoostBtn.addEventListener('pointerdown', usePassageBoost);
+    }
     
     // Listener adicional no canvas para modo de arrasto
     canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
@@ -3837,6 +6068,7 @@ function spawnSpeedItem() {
 
 // Atualizar comidas (fazer cair e quicar)
 function updateFood() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     for (let food of foods) {
         if (!food.grounded) {
             // Gravidade
@@ -5807,6 +8039,7 @@ function drawCpuTypeDetails(bird, hasStunReady) {
 
 // Atualizar jogador
 function updatePlayer() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     // Se estiver atordoado, não se move
     if (player.stunned) {
         player.stunTime--;
@@ -5885,6 +8118,7 @@ function updatePlayer() {
 
 // Atualizar CPU (IA com reação mais lenta)
 function updateCPU() {
+    if (gamePaused) return; // Não atualizar se estiver pausado
     // Se estiver atordoado, não se move
     if (cpu.stunned) {
         cpu.stunTime--;
@@ -6012,60 +8246,94 @@ function updateCPU() {
     cpu.y = Math.max(cpu.size, Math.min(canvas.height - cpu.size, cpu.y));
 }
 
+let bossStunKeyHeld = false;
+
+function playerBossStunReady() {
+    return isBossStage()
+        && player.stunCharge >= player.stunChargeMax
+        && !player.stunned;
+}
+
+function notePlayerStunFilled() {
+    if (!isBossStage()) player.stunChargeTimer = 300;
+    playSound('stunLoaded');
+}
+
+function releaseBirdStun(playerAttacks, cpuAttacks) {
+    const playerHasStun = playerAttacks && !player.stunned;
+    const cpuHasStun = cpuAttacks && !cpu.stunned;
+
+    if (playerHasStun && cpuHasStun) {
+        player.stunned = true;
+        player.stunTime = 120;
+        player.stunCharge = 0;
+        player.stunChargeTimer = 0;
+
+        cpu.stunned = true;
+        cpu.stunTime = 120;
+        cpu.stunCharge = 0;
+        cpu.stunChargeTimer = 0;
+
+        playSound('stun');
+        updateStunUI();
+        return;
+    }
+
+    if (playerHasStun && !cpu.stunned) {
+        cpu.stunned = true;
+        cpu.stunTime = 120;
+        player.stunCharge = 0;
+        player.stunChargeTimer = 0;
+        if (isBossStage()) player.stunShow = 180;
+
+        const stunSound = sounds.stun;
+        if (stunSound) {
+            stunSound.volume = masterVolume * 0.6;
+            playSound('stun');
+            stunSound.volume = masterVolume;
+        }
+
+        updateStunUI();
+        return;
+    }
+
+    if (cpuHasStun && !player.stunned) {
+        player.stunned = true;
+        player.stunTime = 120;
+        cpu.stunCharge = 0;
+        cpu.stunChargeTimer = 0;
+        playSound('stun');
+    }
+}
+
+function birdsWithinStunReach() {
+    return distance(player, cpu) < player.size + cpu.size;
+}
+
 // Verificar colisão entre pássaros
 function checkBirdCollision() {
-    const dist = distance(player, cpu);
+    if (gamePaused) return;
+    if (!birdsWithinStunReach()) return;
+    const playerAttacks = !isBossStage() && player.stunCharge >= player.stunChargeMax;
+    const cpuAttacks = cpu.stunCharge >= cpu.stunChargeMax;
+    releaseBirdStun(playerAttacks, cpuAttacks);
+}
 
-    // Verifica se colidiu
-    if (dist < player.size + cpu.size) {
-        const playerHasStun = player.stunCharge >= player.stunChargeMax;
-        const cpuHasStun = cpu.stunCharge >= cpu.stunChargeMax;
+function tryPlayerBossStun() {
+    if (!playerBossStunReady() || gamePaused || !gameRunning) return;
+    if (!birdsWithinStunReach()) return;
+    const cpuAttacks = cpu.stunCharge >= cpu.stunChargeMax;
+    releaseBirdStun(true, cpuAttacks);
+}
 
-        // Ambos com stun carregado - stun mútuo!
-        if (playerHasStun && cpuHasStun && !player.stunned && !cpu.stunned) {
-            player.stunned = true;
-            player.stunTime = 120;
-            player.stunCharge = 0;
-            player.stunChargeTimer = 0;
-
-            cpu.stunned = true;
-            cpu.stunTime = 120;
-            cpu.stunCharge = 0;
-            cpu.stunChargeTimer = 0;
-
-            // 🔊 Som de stun (mútuo)
-            playSound('stun');
-
-            updateStunUI();
-        }
-        // Só jogador tem stun
-        else if (playerHasStun && !cpu.stunned && !player.stunned) {
-            cpu.stunned = true;
-            cpu.stunTime = 120;
-            player.stunCharge = 0;
-            player.stunChargeTimer = 0;
-
-            // 🔊 Som de stun (CPU stunnada - mais baixo)
-            const stunSound = sounds.stun;
-            if (stunSound) {
-                stunSound.volume = masterVolume * 0.6;
-                playSound('stun');
-                stunSound.volume = masterVolume;
-            }
-
-            updateStunUI();
-        }
-        // Só CPU tem stun
-        else if (cpuHasStun && !player.stunned && !cpu.stunned) {
-            player.stunned = true;
-            player.stunTime = 120;
-            cpu.stunCharge = 0;
-            cpu.stunChargeTimer = 0;
-
-            // 🔊 Som de stun (player stunnado)
-            playSound('stun');
-        }
+function updateBossStunInput() {
+    if (!isBossStage() || isPassageStage) {
+        bossStunKeyHeld = false;
+        return;
     }
+    const shiftDown = !!(keys['shift'] || keys['ShiftLeft'] || keys['ShiftRight']);
+    if (shiftDown && !bossStunKeyHeld) tryPlayerBossStun();
+    bossStunKeyHeld = shiftDown;
 }
 
 // Atualizar UI do stun
@@ -6076,7 +8344,12 @@ function updateStunUI() {
     const progress = player.stunCharge / player.stunChargeMax;
     cooldownFill.style.width = (progress * 100) + '%';
 
-    if (player.stunCharge >= player.stunChargeMax) {
+    if (player.stunCharge >= player.stunChargeMax && isBossStage()) {
+        cooldownText.textContent = 'SHIFT';
+        cooldownText.className = 'ready';
+        cooldownFill.style.background = 'linear-gradient(90deg, #2ecc71, #27ae60)';
+        cooldownFill.style.animation = '';
+    } else if (player.stunCharge >= player.stunChargeMax) {
         // Mostrar tempo restante para usar
         const secondsLeft = Math.ceil(player.stunChargeTimer / 60);
         cooldownText.textContent = `⚡ ${secondsLeft}s`;
@@ -6100,6 +8373,7 @@ function updateStunUI() {
 
 // Verificar colisões com comida
 function checkCollisions() {
+    if (gamePaused) return; // Não verificar colisões se estiver pausado
     // Comidas normais
     for (let i = foods.length - 1; i >= 0; i--) {
         const food = foods[i];
@@ -6141,11 +8415,7 @@ function checkCollisions() {
             if (player.stunCharge < player.stunChargeMax) {
                 player.stunCharge = Math.min(player.stunCharge + 1, player.stunChargeMax);
                 // Iniciar timer quando carregou completamente
-                if (player.stunCharge >= player.stunChargeMax) {
-                    player.stunChargeTimer = 300; // 5 segundos
-                    // 🔊 Som de stun carregado
-                    playSound('stunLoaded');
-                }
+                if (player.stunCharge >= player.stunChargeMax) notePlayerStunFilled();
                 updateStunUI();
             }
             continue;
@@ -6229,11 +8499,7 @@ function checkCollisions() {
                 const wasNotFull = player.stunCharge < player.stunChargeMax;
                 player.stunCharge = Math.min(player.stunCharge + 5, player.stunChargeMax);
                 // Iniciar timer quando carregou completamente
-                if (wasNotFull && player.stunCharge >= player.stunChargeMax) {
-                    player.stunChargeTimer = 300; // 5 segundos
-                    // 🔊 Som de stun carregado
-                    playSound('stunLoaded');
-                }
+                if (wasNotFull && player.stunCharge >= player.stunChargeMax) notePlayerStunFilled();
                 updateStunUI();
             }
             continue;
@@ -6315,8 +8581,11 @@ function checkCollisions() {
 function drawBird(bird, isPlayer) {
     ctx.save();
 
-    // Verificar se tem stun pronto
-    const hasStunReady = bird.stunCharge >= bird.stunChargeMax;
+    // O besouro da passagem usa o mesmo visual de stun carregado do pássaro
+    const passagePowered = !!(isPlayer && isPassageStage && passageStarActive());
+    const bossStunStored = isPlayer && isBossStage() && bird.stunCharge >= bird.stunChargeMax;
+    const bossStunShown = isPlayer && bird.stunShow > 0;
+    const hasStunReady = bossStunShown || (!bossStunStored && bird.stunCharge >= bird.stunChargeMax) || passagePowered;
 
     // Atualizar animação de comer
     if (bird.eatAnimation > 0) {
@@ -6368,6 +8637,10 @@ function drawBird(bird, isPlayer) {
         // Cada pão aumenta o tamanho em 2% (máximo de 30% maior com 15 pães)
         fatScale = 1 + (bird.fatness * 0.02);
     }
+    let weightScale = 1;
+    if (isPlayer && isPassageStage && passageState && passageState.slow > 0) {
+        weightScale = 1 + Math.min(passageState.slow, 8) * 0.025;
+    }
 
     // Verificar se está se movendo para efeito de voo
     const isMoving = isPlayer ? (player.dx !== 0 || player.dy !== 0) : !cpu.stunned && (cpu.targetFood || cpu.goingForSpecial || cpu.goingForSpeed);
@@ -6381,7 +8654,7 @@ function drawBird(bird, isPlayer) {
     if (!bird.facingRight) {
         ctx.scale(-1, 1); // Espelha horizontalmente
     }
-    ctx.scale(eatScale * stunScale * fatScale, eatScale * stunScale * fatScale);
+    ctx.scale(eatScale * stunScale * fatScale * weightScale, eatScale * stunScale * fatScale * weightScale);
     ctx.translate(-bird.x, -bird.y - hoverOffset);
 
     // Efeito de boost de velocidade (simplificado)
@@ -6393,6 +8666,48 @@ function drawBird(bird, isPlayer) {
         ctx.ellipse(bird.x - 15, bird.y, 25, 15, 0, 0, Math.PI * 2);
         ctx.fill();
     }
+    
+    // AURA DE MALDIÇÃO para pássaros CPU amaldiçoados
+    if (!isPlayer && !bird.stunned) {
+        ctx.save();
+        const time = Date.now();
+        const pulseSpeed = 800; // Velocidade da pulsação
+        const pulseIntensity = 0.4 + Math.sin(time / pulseSpeed) * 0.2; // Intensidade pulsante
+        
+        // Aura externa (roxa/mágica)
+        const auraRadius = bird.size * 1.4;
+        const auraGradient = ctx.createRadialGradient(
+            bird.x, bird.y, bird.size * 0.8,
+            bird.x, bird.y, auraRadius
+        );
+        auraGradient.addColorStop(0, `rgba(155, 89, 182, ${pulseIntensity * 0.3})`); // Roxo translúcido
+        auraGradient.addColorStop(0.5, `rgba(142, 68, 173, ${pulseIntensity * 0.2})`);
+        auraGradient.addColorStop(1, 'rgba(155, 89, 182, 0)');
+        
+        ctx.fillStyle = auraGradient;
+        ctx.beginPath();
+        ctx.arc(bird.x, bird.y, auraRadius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Partículas de maldição ao redor do pássaro (simplificadas para performance)
+        const particleCount = 6;
+        for (let i = 0; i < particleCount; i++) {
+            const angle = (Math.PI * 2 / particleCount) * i + time / 1500;
+            const distance = bird.size * 1.2 + Math.sin(time / 600 + i) * 8;
+            const particleX = bird.x + Math.cos(angle) * distance;
+            const particleY = bird.y + Math.sin(angle) * distance;
+            const particleSize = 2 + Math.sin(time / 400 + i) * 1;
+            
+            // Partícula roxa
+            ctx.fillStyle = `rgba(155, 89, 182, ${0.6 + Math.sin(time / 300 + i) * 0.3})`;
+            ctx.beginPath();
+            ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.restore();
+    }
+    
     // Aura maligna quando tem stun pronto (sem shadow - muito pesado)
     else if (hasStunReady && !bird.stunned) {
         // Removido shadowBlur - causa lag
@@ -6408,6 +8723,9 @@ function drawBird(bird, isPlayer) {
         if (bird.type !== 'tuiuiu') {
             bodyColor = darkenColor(bird.color);
         }
+    } else if (!isPlayer && !bird.stunned) {
+        // Pássaros CPU amaldiçoados têm cor levemente alterada (tom roxo/escuro)
+        bodyColor = interpolateColor(bird.color, '#8e44ad', 0.15); // 15% mais roxo/escuro para parecer amaldiçoado
     } else if (currentArea === 7 && !bird.stunned) {
         // Ficar mais azulado/pálido com frio
         const coldProgress = getColdProgress();
@@ -6551,8 +8869,10 @@ function drawBird(bird, isPlayer) {
         ctx.arc(rightEyeX, eyeY, 10 * eyeScale, 0, Math.PI * 2);
         ctx.fill();
 
-        // Pupilas grandes da coruja (amarelas)
-        ctx.fillStyle = bird.eyeColor || '#FFD700';
+        // Pupilas grandes da coruja AMALDIÇOADAS (vermelhas brilhantes)
+        const time = Date.now();
+        const eyeGlow = 0.7 + Math.sin(time / 500) * 0.3; // Brilho pulsante
+        ctx.fillStyle = `rgba(231, 76, 60, ${eyeGlow})`; // Vermelho amaldiçoado
         ctx.beginPath();
         ctx.arc(leftEyeX + 2 * eyeScale, eyeY, 8 * eyeScale, 0, Math.PI * 2);
         ctx.fill();
@@ -6560,7 +8880,7 @@ function drawBird(bird, isPlayer) {
         ctx.arc(rightEyeX, eyeY, 6 * eyeScale, 0, Math.PI * 2);
         ctx.fill();
 
-        // Centro preto
+        // Centro preto (mantido para dar profundidade)
         ctx.fillStyle = 'black';
         ctx.beginPath();
         ctx.arc(leftEyeX + 2 * eyeScale, eyeY, 3.5 * eyeScale, 0, Math.PI * 2);
@@ -6569,8 +8889,8 @@ function drawBird(bird, isPlayer) {
         ctx.arc(rightEyeX, eyeY, 3 * eyeScale, 0, Math.PI * 2);
         ctx.fill();
 
-        // Brilho nos olhos
-        ctx.fillStyle = 'white';
+        // Brilho amaldiçoado nos olhos (vermelho brilhante)
+        ctx.fillStyle = `rgba(255, 100, 100, ${eyeGlow * 0.8})`;
         ctx.beginPath();
         ctx.arc(leftEyeX, eyeY - 3 * eyeScale, 2 * eyeScale, 0, Math.PI * 2);
         ctx.fill();
@@ -7008,6 +9328,96 @@ function drawBird(bird, isPlayer) {
         // Apenas um símbolo de raiva (menos desenhos = mais rápido)
         ctx.font = '16px Arial';
         ctx.fillText('💢', bird.x + 25, bird.y - 35);
+    }
+
+    // Olhos vermelhos brilhantes para pássaros CPU amaldiçoados (exceto coruja que já tem efeito nos dois olhos)
+    if (!isPlayer && !bird.stunned && bird.type !== 'owl') {
+        ctx.save();
+        const time = Date.now();
+        const eyeGlow = 0.7 + Math.sin(time / 500) * 0.3; // Brilho pulsante
+        
+        // Verificar se é um tipo especial que já tem olhos desenhados
+        const hasSpecialEyes = bird.type && ['phoenix', 'bacurau', 'toucan', 'gull', 'guara', 'pelican', 'pyrrhuloxia', 'acorn-woodpecker', 'virginias-warbler', 'bearded-vulture', 'phainopepla', 'tuiuiu', 'prairie-falcon', 'ground-dove', 'rufous-backed-thrush', 'orange-thrush', 'sayaca-tanager', 'kiskadee', 'barn-owl'].includes(bird.type);
+        
+        // Apenas aplicar efeito vermelho para pássaros com olho padrão
+        if (!hasSpecialEyes) {
+            // Olho padrão - posição padrão
+            const eyeX = bird.x + 12;
+            const eyeY = bird.y - 5;
+            const eyeRadius = 5;
+            
+            // Efeito de olho vermelho brilhante (sobrepondo o olho padrão)
+            // Brilho externo
+            const glowGradient = ctx.createRadialGradient(
+                eyeX, eyeY, eyeRadius * 0.5,
+                eyeX, eyeY, eyeRadius * 2
+            );
+            glowGradient.addColorStop(0, `rgba(231, 76, 60, ${eyeGlow * 0.8})`);
+            glowGradient.addColorStop(0.5, `rgba(192, 57, 43, ${eyeGlow * 0.4})`);
+            glowGradient.addColorStop(1, 'rgba(231, 76, 60, 0)');
+            
+            ctx.fillStyle = glowGradient;
+            ctx.beginPath();
+            ctx.arc(eyeX, eyeY, eyeRadius * 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Pupila vermelha brilhante (sobrepondo a pupila preta)
+            ctx.fillStyle = `rgba(231, 76, 60, ${eyeGlow})`;
+            ctx.beginPath();
+            ctx.arc(eyeX, eyeY, eyeRadius * 0.7, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Brilho interno
+            ctx.fillStyle = `rgba(255, 100, 100, ${eyeGlow * 0.6})`;
+            ctx.beginPath();
+            ctx.arc(eyeX - 1, eyeY - 1, eyeRadius * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.restore();
+    }
+    
+    // Efeito de brilho externo para os dois olhos da coruja amaldiçoada
+    if (!isPlayer && !bird.stunned && bird.type === 'owl') {
+        ctx.save();
+        const time = Date.now();
+        const eyeGlow = 0.7 + Math.sin(time / 500) * 0.3; // Brilho pulsante
+        const eyeScale = bird.size / 35;
+        const leftEyeX = bird.x + 5 * eyeScale + 2 * eyeScale; // Posição da pupila esquerda
+        const rightEyeX = bird.x + 22 * eyeScale; // Posição da pupila direita
+        const eyeY = bird.y - 5 * eyeScale;
+        const leftEyeRadius = 8 * eyeScale;
+        const rightEyeRadius = 6 * eyeScale;
+        
+        // Brilho externo para o olho esquerdo
+        const leftGlowGradient = ctx.createRadialGradient(
+            leftEyeX, eyeY, leftEyeRadius * 0.5,
+            leftEyeX, eyeY, leftEyeRadius * 2
+        );
+        leftGlowGradient.addColorStop(0, `rgba(231, 76, 60, ${eyeGlow * 0.8})`);
+        leftGlowGradient.addColorStop(0.5, `rgba(192, 57, 43, ${eyeGlow * 0.4})`);
+        leftGlowGradient.addColorStop(1, 'rgba(231, 76, 60, 0)');
+        
+        ctx.fillStyle = leftGlowGradient;
+        ctx.beginPath();
+        ctx.arc(leftEyeX, eyeY, leftEyeRadius * 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Brilho externo para o olho direito
+        const rightGlowGradient = ctx.createRadialGradient(
+            rightEyeX, eyeY, rightEyeRadius * 0.5,
+            rightEyeX, eyeY, rightEyeRadius * 2
+        );
+        rightGlowGradient.addColorStop(0, `rgba(231, 76, 60, ${eyeGlow * 0.8})`);
+        rightGlowGradient.addColorStop(0.5, `rgba(192, 57, 43, ${eyeGlow * 0.4})`);
+        rightGlowGradient.addColorStop(1, 'rgba(231, 76, 60, 0)');
+        
+        ctx.fillStyle = rightGlowGradient;
+        ctx.beginPath();
+        ctx.arc(rightEyeX, eyeY, rightEyeRadius * 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
     }
 
     ctx.restore(); // Restaura antes de desenhar textos (para não espelhar)
@@ -7696,7 +10106,7 @@ function initBackgroundDecorations() {
                     time: Math.random() * 100
                 });
             }
-        } else if (currentSubstage === 7) {
+        } else if (isBossStage()) {
             // 2-7: Boss - Deserto extremo
             for (let i = 0; i < 5; i++) {
                 cacti.push({
@@ -7920,7 +10330,7 @@ function initBackgroundDecorations() {
                     coldProgress: 1.0
                 });
             }
-        } else if (currentSubstage === 7) {
+        } else if (isBossStage()) {
             // 3-7: Boss - Gelo extremo
             for (let i = 0; i < 80; i++) {
                 snowflakes.push({
@@ -8101,7 +10511,7 @@ function initBackgroundDecorations() {
                     color: '#1e8449'
                 });
             }
-        } else if (currentSubstage === 7) {
+        } else if (isBossStage()) {
             // 2-7: Boss - Ninho da Garça - Pântano extremo
             // OTIMIZAÇÃO MOBILE: Reduzir névoas no mobile
             const isMobile = window.innerWidth <= 750 || window.innerHeight <= 750;
@@ -8151,7 +10561,7 @@ function initBackgroundDecorations() {
 
         // Criar prédios na inicialização (não durante o draw)
         // Usar progresso baseado na subfase atual (não chamar getMetropolisProgress que pode não estar pronto)
-        if (currentSubstage === 7) {
+        if (isBossStage()) {
             // Boss: muitos prédios altos
             for (let i = 0; i < 10; i++) {
                 const x = (i * 80) % (canvas.width + 100);
@@ -8494,9 +10904,9 @@ function updateBackgroundDecorations() {
 
 // Calcular progresso da transição dia/noite (0 = dia completo, 1 = noite completa)
 function getDayNightProgress() {
-    if (currentArea !== 1 || currentSubstage >= 7) return 0; // 1-7 usa drawNightForestBackground
-    // 1-1 = 0.0, 1-2 = 0.15, 1-3 = 0.3, 1-4 = 0.5, 1-5 = 0.7, 1-6 = 0.85
-    const progress = (currentSubstage - 1) / 6;
+    if (currentArea !== 1) return 0;
+    if (isBossStage() || (passageState && passageState.night)) return 0;
+    const progress = Math.min(0.45, (currentSubstage - 1) * 0.04);
     return Math.max(0, Math.min(0.85, progress)); // Máximo 0.85 para 1-6
 }
 
@@ -11394,7 +13804,7 @@ function updateTropicalDecorations() {
         }
 
         // Sub fase 7 (Boss): Todos os elementos (mais quantidade)
-        if (currentSubstage === 7) {
+        if (isBossStage()) {
             if (tropicalStarfish.length === 0) {
                 for (let i = 0; i < 4; i++) {
                     tropicalStarfish.push({
@@ -11698,7 +14108,7 @@ function getMistProgress() {
     if (currentSubstage === 4) return 0.3;
     if (currentSubstage === 5) return 0.4;
     if (currentSubstage === 6) return 0.8;
-    if (currentSubstage === 7) return 1.0;
+    if (isBossStage()) return 1.0;
     return 0.5;
 }
 
@@ -12656,44 +15066,44 @@ function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Desenhar cenário baseado na área atual
-    if (currentArea === 1) {
-        // Fase do boss (Coruja) = noite
-        if (currentSubstage === 7) {
+        if (currentArea === 1) {
+        // Chefe e passagens noturnas usam a floresta à noite
+        if (isBossStage() || (isPassageStage && passageState && passageState.night)) {
             drawNightForestBackground();
         } else {
             drawForestBackground();
         }
     } else if (currentArea === 2) {
         // Área 2: Pântano - Fase do boss (Tuiuiu) = pântano extremo
-        if (currentSubstage === 7) {
+        if (isBossStage()) {
             drawExtremeSwampBackground();
         } else {
             drawSwampBackground();
         }
     } else if (currentArea === 3) {
         // Área 3: Ilha Tropical - Fase do boss (Tucano) = ilha extrema
-        if (currentSubstage === 7) {
+        if (isBossStage()) {
             drawExtremeTropicalBackground();
         } else {
             drawTropicalBackground();
         }
     } else if (currentArea === 4) {
         // Área 4: Deserto - Fase do boss (Falcão) = deserto extremo
-        if (currentSubstage === 7) {
+        if (isBossStage()) {
             drawExtremeDesertBackground();
         } else {
             drawDesertBackground();
         }
     } else if (currentArea === 5) {
         // Área 5: Metrópole - Fase do boss (Carcará) = metrópole extrema
-        if (currentSubstage === 7) {
+        if (isBossStage()) {
             drawExtremeMetropolisBackground();
         } else {
             drawMetropolisBackground();
         }
     } else if (currentArea === 7) {
         // Área 7: Gelo - Fase do boss (Pinguim) = gelo extremo
-        if (currentSubstage === 7) {
+        if (isBossStage()) {
             drawExtremeIceBackground();
         } else {
             drawIceBackground();
@@ -12732,6 +15142,8 @@ function draw() {
 
         // Apenas o player
         drawBird(player, true);
+    } else if (isPassageStage) {
+        drawPassageWorld();
     } else {
         // Fase normal
         // Garantir que globalAlpha está em 1.0 antes de desenhar frutas
@@ -14316,6 +16728,10 @@ function drawScoreTextEffects() {
 }
 
 function drawGameUI() {
+    if (isPassageStage) {
+        drawPassageHUD();
+        return;
+    }
     const padding = 15;
     const fontSize = 32; // Aumentado para 32
     const topY = padding;
@@ -14461,7 +16877,7 @@ function drawGameUI() {
         // Preenchimento da barra
         let playerStunProgress = player.stunCharge / player.stunChargeMax;
         // Se o stun está pronto, a barra regride conforme o timer
-        if (player.stunCharge >= player.stunChargeMax && player.stunChargeTimer > 0) {
+        if (!isBossStage() && player.stunCharge >= player.stunChargeMax && player.stunChargeTimer > 0) {
             // Timer máximo é 300 frames (5 segundos), calcular progresso regressivo
             const maxTimer = 300;
             playerStunProgress = player.stunChargeTimer / maxTimer; // Regride de 1.0 para 0.0
@@ -14483,20 +16899,20 @@ function drawGameUI() {
         ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
         ctx.shadowBlur = 4;
         if (player.stunCharge >= player.stunChargeMax) {
-            // Mostrar timer quando stun está pronto
+            // Mostrar timer quando stun está pronto. No chefe, a carga do jogador fica guardada.
             const secondsLeft = Math.ceil(player.stunChargeTimer / 60);
-            ctx.fillText(`💥 ${secondsLeft}s`, stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight / 2);
+            ctx.fillText(isBossStage() ? 'SHIFT' : `💥 ${secondsLeft}s`, stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight / 2);
             ctx.shadowBlur = 0;
 
             // Aviso quando tempo está acabando
-            if (secondsLeft <= 2) {
+            if (!isBossStage() && secondsLeft <= 2) {
                 ctx.fillStyle = '#e74c3c';
                 ctx.font = `bold ${fontSize * 0.6}px Arial`;
                 ctx.shadowBlur = 4;
                 ctx.fillText('⚠️', stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight + 12);
                 ctx.shadowBlur = 0;
                 ctx.font = `bold ${fontSize * 0.5}px Arial`;
-            } else {
+            } else if (!isBossStage()) {
                 ctx.fillStyle = '#2ecc71';
                 ctx.font = `bold ${fontSize * 0.6}px Arial`;
                 ctx.shadowBlur = 4;
@@ -15179,6 +17595,101 @@ function drawSadBird(ctxW, x, y, color, wingColor, scale, type = null) {
     ctxW.restore();
 }
 
+// Desenhar pássaro amaldiçoado (com aura roxa e olhos vermelhos)
+function drawCursedBird(ctxW, x, y, color, wingColor, scale, type = null) {
+    ctxW.save();
+    ctxW.translate(x, y);
+    ctxW.scale(scale, scale);
+
+    // Aura de maldição roxa
+    const time = Date.now();
+    const pulse = 0.7 + Math.sin(time / 500) * 0.3;
+    const auraGradient = ctxW.createRadialGradient(0, 0, 35, 0, 0, 50);
+    auraGradient.addColorStop(0, `rgba(155, 89, 182, ${pulse * 0.4})`);
+    auraGradient.addColorStop(1, 'rgba(142, 68, 173, 0)');
+    ctxW.fillStyle = auraGradient;
+    ctxW.beginPath();
+    ctxW.arc(0, 0, 50, 0, Math.PI * 2);
+    ctxW.fill();
+
+    // Corpo com tom roxo/escuro (amaldiçoado)
+    const bodyColor = (type === 'tuiuiu') ? '#ffffff' : interpolateColor(color, '#8e44ad', 0.15);
+    ctxW.fillStyle = bodyColor;
+    ctxW.beginPath();
+    ctxW.arc(0, 0, 35, 0, Math.PI * 2);
+    ctxW.fill();
+
+    // Detalhes específicos do tipo
+    ctxW.globalAlpha = 0.9;
+    drawResultBirdTypeDetails(ctxW, type, 35, wingColor, color);
+    ctxW.globalAlpha = 1;
+
+    // Olho amaldiçoado (vermelho brilhante)
+    ctxW.fillStyle = 'white';
+    ctxW.beginPath();
+    ctxW.arc(10, -5, 10, 0, Math.PI * 2);
+    ctxW.fill();
+
+    // Pupila vermelha brilhante (amaldiçoada)
+    if (type === 'bacurau') {
+        ctxW.fillStyle = '#FFD700'; // Bacurau mantém amarelo
+    } else {
+        ctxW.fillStyle = `rgba(231, 76, 60, ${pulse})`;
+    }
+    ctxW.beginPath();
+    ctxW.arc(12, -5, 6, 0, Math.PI * 2);
+    ctxW.fill();
+
+    // Brilho vermelho no olho
+    ctxW.fillStyle = `rgba(255, 100, 100, ${pulse * 0.6})`;
+    ctxW.beginPath();
+    ctxW.arc(10, -7, 3, 0, Math.PI * 2);
+    ctxW.fill();
+
+    // Sobrancelha zangada/amaldiçoada
+    ctxW.strokeStyle = '#8e44ad';
+    ctxW.lineWidth = 2;
+    ctxW.beginPath();
+    ctxW.moveTo(2, -18);
+    ctxW.lineTo(20, -12);
+    ctxW.stroke();
+
+    // Bico normal (não triste, mas também não feliz)
+    const isTuiuiu = type === 'tuiuiu';
+    const beakColor = isTuiuiu ? '#000000' : '#f39c12';
+    const beakLength = isTuiuiu ? 20 : 15;
+    const beakWidth = isTuiuiu ? 7 : 5;
+
+    ctxW.fillStyle = beakColor;
+    ctxW.beginPath();
+    ctxW.moveTo(30, 0);
+    ctxW.lineTo(30 + beakLength, 5);
+    ctxW.lineTo(30, 10);
+    ctxW.closePath();
+    ctxW.fill();
+
+    // Partículas de maldição ao redor
+    for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * Math.PI * 2 + time / 800;
+        const dist = 45 + Math.sin(time / 400 + i) * 5;
+        const particleX = Math.cos(angle) * dist;
+        const particleY = Math.sin(angle) * dist;
+        ctxW.fillStyle = `rgba(155, 89, 182, ${0.6 + Math.sin(time / 300 + i) * 0.3})`;
+        ctxW.beginPath();
+        ctxW.arc(particleX, particleY, 2 + Math.sin(time / 400 + i) * 1, 0, Math.PI * 2);
+        ctxW.fill();
+    }
+
+    // Asa normal (não caída, mas também não celebrando)
+    const finalWingColor = (type === 'tuiuiu') ? '#f5f5f5' : wingColor;
+    ctxW.fillStyle = finalWingColor;
+    ctxW.beginPath();
+    ctxW.ellipse(-10, 5, 20, 12, -0.3, 0, Math.PI * 2);
+    ctxW.fill();
+
+    ctxW.restore();
+}
+
 // Desenhar cena de vitória especial do boss
 function drawBossVictoryScene() {
     const winnerCanvas = document.getElementById('winnerCanvas');
@@ -15367,7 +17878,7 @@ function drawResultScene(playerWon, isDraw) {
 
                 drawHappyBird(ctxW, 200, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
             } else {
-                // Falhou
+                // Falhou no bônus
                 drawSadBird(ctxW, 200, 95, selectedPlayerColor, selectedPlayerWing, scale * 0.9);
 
                 // Elementos temáticos fugindo
@@ -15376,6 +17887,30 @@ function drawResultScene(playerWon, isDraw) {
                     const wx = 50 + i * 100 + Math.sin(time * 3 + i) * 10;
                     ctxW.fillText(bonusEmojis[i % bonusEmojis.length], wx, 150);
                 }
+            }
+        } else if (isPassageStage) {
+            ctxW.textAlign = 'center';
+            if (playerWon) {
+                const pulse = 4 + Math.sin(time * 3) * 3;
+                ctxW.strokeStyle = '#f1c40f';
+                ctxW.lineWidth = 4;
+                ctxW.beginPath();
+                ctxW.arc(300, 78, 26 + pulse, 0, Math.PI * 2);
+                ctxW.stroke();
+                ctxW.fillStyle = 'rgba(241, 196, 15, 0.22)';
+                ctxW.fill();
+
+                ctxW.font = '18px Arial';
+                for (let i = 0; i < 4; i++) {
+                    const bob = Math.sin(time * 2 + i) * 6;
+                    ctxW.fillText('🍎', 40 + i * 42, 36 + bob);
+                }
+                drawHappyBird(ctxW, 150, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
+            } else {
+                drawSadBird(ctxW, 200, 90, selectedPlayerColor, selectedPlayerWing, scale * 0.9);
+                ctxW.font = '22px Arial';
+                ctxW.fillText('🌿', 90, 36);
+                ctxW.fillText('🌿', 310, 42);
             }
         } else if (isDraw) {
             // Empate - ambos normais
@@ -15407,11 +17942,11 @@ function drawResultScene(playerWon, isDraw) {
 
             drawHappyBird(ctxW, 100, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
 
-            // CPU triste (espelhada)
+            // CPU FELIZ (liberto da maldição!) - espelhada
             ctxW.save();
             ctxW.translate(300, 0);
             ctxW.scale(-1, 1);
-            drawSadBird(ctxW, 0, 95, cpu.color, cpu.wingColor, scale * 0.9, cpu.type);
+            drawHappyBird(ctxW, 0, 85 + bounce, cpu.color, cpu.wingColor, scale * 0.9, cpu.type);
             ctxW.restore();
         } else {
             // CPU ganhou
@@ -15431,16 +17966,16 @@ function drawResultScene(playerWon, isDraw) {
             // Jogador triste
             drawSadBird(ctxW, 100, 95, selectedPlayerColor, selectedPlayerWing, scale * 0.9);
 
-            // CPU feliz (espelhada)
+            // CPU AMALDIÇOADO (mantém a maldição!) - espelhada
             ctxW.save();
             ctxW.translate(300, 0);
             ctxW.scale(-1, 1);
-            drawHappyBird(ctxW, 0, 85 + bounce, cpu.color, cpu.wingColor, scale, cpu.type);
+            drawCursedBird(ctxW, 0, 85, cpu.color, cpu.wingColor, scale, cpu.type);
             ctxW.restore();
         }
 
-        // VS no centro (só se não for bônus)
-        if (!isBonusStage) {
+        // VS no centro só na batalha
+        if (!isBonusStage && !isPassageStage) {
             ctxW.font = 'bold 24px Arial';
             ctxW.fillStyle = '#f1c40f';
             ctxW.textAlign = 'center';
@@ -15511,6 +18046,14 @@ function simulateDefeat() {
 function endGame() {
     gameRunning = false;
     firstFrame = true; // Resetar flag para próxima execução
+    if (window.gameLoopAnimFrame) {
+        cancelAnimationFrame(window.gameLoopAnimFrame);
+        window.gameLoopAnimFrame = null;
+    }
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
     // Esconder controles touch quando o jogo parar
     hideTouchControls();
 
@@ -15531,18 +18074,42 @@ function endGame() {
         clearInterval(wormSpawnInterval);
         wormSpawnInterval = null;
     }
+    // Garantir que não está pausado ao terminar o jogo
+    gamePaused = false;
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    if (pauseOverlay) {
+        pauseOverlay.style.display = 'none';
+    }
+
     const gameOverDiv = document.getElementById('gameOver');
     const resultTitle = document.getElementById('resultTitle');
     const resultText = document.getElementById('resultText');
-    const config = substageConfig[currentSubstage];
+    const config = substageConfig[currentSubstage] || substageConfig[7];
 
-    // Verificar vitória (fase bônus: atingir meta, fase normal: mais pontos que CPU)
-    const isVictory = isBonusStage ? (playerScore >= config.goalScore) : (playerScore > cpuScore);
+    // Passagem: chegar ao fim. Bônus: meta. Duelo: mais pontos que a CPU.
+    const isVictory = isPassageStage
+        ? !!(passageState && passageState.cleared && !passageState.failed)
+        : (isBonusStage ? (playerScore >= config.goalScore) : (playerScore > cpuScore));
+
+    // Verificar se é primeira vitória nesta fase (declarar antes dos blocos condicionais)
+    // Inicializar arrays se não existirem
+    if (!gameProgress.completedStages[currentArea]) {
+        gameProgress.completedStages[currentArea] = [];
+    }
+    if (!gameProgress.unlockedStages[currentArea]) {
+        gameProgress.unlockedStages[currentArea] = [1];
+    }
+    
+    // Verificar se é primeira vitória ANTES de marcar como completada
+    const isFirstVictory = !gameProgress.completedStages[currentArea] ||
+        !gameProgress.completedStages[currentArea].includes(currentSubstage);
 
     if (isVictory) {
         // Vitória especial do boss
-        if (currentSubstage === 7) {
-            resultTitle.textContent = '👑 BOSS DERROTADO! 👑';
+        if (isBossStage()) {
+            const bossType = bossCpuTypes[currentArea];
+            const bossName = bossType && bossType.name ? bossType.name : 'Guardião';
+            resultTitle.textContent = '✨ PÁSSARO LIBERTADO! ✨';
             resultTitle.className = 'win';
 
             // 🔊 Som especial de vitória do boss (efeito sonoro com loop)
@@ -15581,6 +18148,13 @@ function endGame() {
             const bossStars = calculateCurrentStars();
             window.victoryStars = bossStars; // Salvar para mostrar na tela
             drawBossVictoryScene();
+        } else if (isPassageStage) {
+            resultTitle.textContent = '🌳 PASSAGEM CONCLUÍDA!';
+            resultTitle.className = 'win';
+            playSound('win');
+            const victoryStars = calculateCurrentStars();
+            window.victoryStars = victoryStars;
+            drawResultScene(true, false);
         } else {
             resultTitle.textContent = isBonusStage ?
                 (currentArea === 7 ? '❄️ BÔNUS COMPLETO! ❄️' :
@@ -15589,7 +18163,7 @@ function endGame() {
                             currentArea === 3 ? '🐟 BÔNUS COMPLETO! 🐟' :
                                 currentArea === 2 ? '🦟 BÔNUS COMPLETO! 🦟' :
                                     '🪱 BÔNUS COMPLETO! 🪱') :
-                '🎉 VOCÊ VENCEU! 🎉';
+                '✨ MALDIÇÃO QUEBRADA! ✨';
             resultTitle.className = 'win';
 
             // 🔊 Som de vitória normal
@@ -15601,18 +18175,6 @@ function endGame() {
             drawResultScene(true, false);
         }
 
-        // Inicializar arrays se não existirem
-        if (!gameProgress.completedStages[currentArea]) {
-            gameProgress.completedStages[currentArea] = [];
-        }
-        if (!gameProgress.unlockedStages[currentArea]) {
-            gameProgress.unlockedStages[currentArea] = [1];
-        }
-
-        // Verificar se é primeira vitória nesta fase
-        const isFirstVictory = !gameProgress.completedStages[currentArea] ||
-            !gameProgress.completedStages[currentArea].includes(currentSubstage);
-
         // Marcar sub-fase como completada
         if (!gameProgress.completedStages[currentArea].includes(currentSubstage)) {
             gameProgress.completedStages[currentArea].push(currentSubstage);
@@ -15620,15 +18182,22 @@ function endGame() {
 
         // Desbloquear próxima sub-fase
         const nextSubstage = currentSubstage + 1;
-        if (nextSubstage <= 7 && !gameProgress.unlockedStages[currentArea].includes(nextSubstage)) {
+        const stageCount = getAreaStageCount(currentArea);
+        if (nextSubstage <= stageCount && !gameProgress.unlockedStages[currentArea].includes(nextSubstage)) {
             gameProgress.unlockedStages[currentArea].push(nextSubstage);
         }
 
         // Se completou o chefe (sub-fase 7), desbloquear próxima área
-        if (currentSubstage === 7) {
+        let areaFullyLiberated = false;
+        if (isBossStage()) {
+            // Verificar se todas as 7 fases foram completadas (área completamente libertada)
+            if (gameProgress.completedStages[currentArea] && gameProgress.completedStages[currentArea].length >= getAreaStageCount(currentArea)) {
+                areaFullyLiberated = true;
+            }
+            
             const nextArea = currentArea + 1;
             const maxAreas = Object.keys(areaConfig).length;
-            if (nextArea <= maxAreas && !gameProgress.unlockedAreas.includes(nextArea)) {
+            if (nextArea <= maxAreas && isAreaPlayable(nextArea) && !gameProgress.unlockedAreas.includes(nextArea)) {
                 gameProgress.unlockedAreas.push(nextArea);
                 if (!gameProgress.unlockedStages[nextArea]) {
                     gameProgress.unlockedStages[nextArea] = [1];
@@ -15651,7 +18220,7 @@ function endGame() {
 
         if (isFirstVictory) {
             // Primeira vitória - recompensa maior
-            if (currentSubstage === 7) {
+            if (isBossStage()) {
                 coinsEarned = 50 + starBonus; // Boss primeira vez + bônus estrelas
             } else if (isBonusStage) {
                 coinsEarned = 25 + starBonus; // Fase bônus primeira vez + bônus estrelas
@@ -15660,7 +18229,7 @@ function endGame() {
             }
         } else {
             // Refazendo fase - recompensa reduzida
-            if (currentSubstage === 7) {
+            if (isBossStage()) {
                 coinsEarned = 15 + Math.floor(starBonus * 0.5); // Boss refazer + bônus reduzido
             } else if (isBonusStage) {
                 coinsEarned = 10 + Math.floor(starBonus * 0.4); // Fase bônus refazer + bônus reduzido
@@ -15675,6 +18244,14 @@ function endGame() {
 
         saveProgress();
 
+    } else if (isPassageStage) {
+        resultTitle.textContent = '😔 VOCÊ CAIU!';
+        resultTitle.className = 'lose';
+        playSound('lose');
+        loseLife();
+        window.livesRemaining = gameProgress.lives;
+        window.lifeLost = true;
+        drawResultScene(false, false);
     } else if (isBonusStage) {
         // Fase bônus - não atingiu a meta
         resultTitle.textContent = currentArea === 7 ? '❄️ NÃO CONSEGUIU! ❄️' :
@@ -15732,9 +18309,51 @@ function endGame() {
         }
         starsHTML += '</div>';
 
-        if (currentSubstage === 7) {
-            // Boss derrotado
-            resultText.innerHTML = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
+        if (isBossStage()) {
+            // Boss derrotado - libertado
+            const bossType = bossCpuTypes[currentArea];
+            const bossName = bossType && bossType.name ? bossType.name : 'Guardião';
+            const areaName = areaConfig[currentArea] ? areaConfig[currentArea].name : 'área';
+            const nextArea = currentArea + 1;
+            const maxAreas = Object.keys(areaConfig).length;
+            let liberationMessage = '';
+            
+            // Verificar se área foi completamente libertada
+            const completedCount = gameProgress.completedStages[currentArea] ? gameProgress.completedStages[currentArea].length : 0;
+            
+            // Verificar se já foi completado antes (replay)
+            const stageKeyBoss = `${currentArea}-${currentSubstage}`;
+            const wasAlreadyCompleted = !isFirstVictory;
+            
+            if (completedCount >= getAreaStageCount(currentArea)) {
+                // Área completamente libertada!
+                if (wasAlreadyCompleted) {
+                    liberationMessage = `<br><span style="color: #2ecc71; font-size: 1.2em; margin-top: 10px; display: block; font-weight: bold;">✨ LIBERTAÇÃO REFORÇADA! ✨</span><span style="color: #bb8fce; font-size: 1em; margin-top: 8px; display: block;">💪 O feitiço de libertação foi fortalecido na memória da batalha!</span><span style="color: #f39c12; font-size: 0.95em; margin-top: 5px; display: block;">🧠 Revivendo a vitória mantém a maldição afastada...</span>`;
+                } else {
+                    liberationMessage = `<br><span style="color: #2ecc71; font-size: 1.2em; margin-top: 10px; display: block; font-weight: bold;">✨ ${areaName.toUpperCase()} COMPLETAMENTE LIBERTADA! ✨</span><span style="color: #bb8fce; font-size: 1em; margin-top: 8px; display: block;">🕊️ Todos os pássaros da ${areaName} foram libertados da maldição!</span><span style="color: #2ecc71; font-size: 1em; margin-top: 5px; display: block;">🪄 ${bossName} foi o último a ser libertado!</span>`;
+                }
+                if (nextArea <= maxAreas && isAreaPlayable(nextArea)) {
+                    const nextAreaName = areaConfig[nextArea] ? areaConfig[nextArea].name : 'próxima área';
+                    liberationMessage += `<span style="color: #3498db; font-size: 1em; margin-top: 8px; display: block;">🗺️ Nova área desbloqueada: ${nextAreaName}</span>`;
+                } else if (nextArea <= maxAreas) {
+                    liberationMessage += `<span style="color: #95a5a6; font-size: 1em; margin-top: 8px; display: block;">🚧 As outras áreas estão em construção.</span>`;
+                }
+            } else {
+                // Boss libertado, mas área ainda não completa
+                if (wasAlreadyCompleted) {
+                    liberationMessage = `<br><span style="color: #2ecc71; font-size: 1.1em; margin-top: 10px; display: block;">💪 Libertação reforçada!</span><span style="color: #f39c12; font-size: 0.95em; margin-top: 5px; display: block;">🧠 A memória desta batalha fortalece o feitiço de proteção...</span>`;
+                } else {
+                    liberationMessage = `<br><span style="color: #2ecc71; font-size: 1.1em; margin-top: 10px; display: block;">🕊️ ${bossName} foi libertado da maldição!</span>`;
+                }
+                if (nextArea <= maxAreas && isAreaPlayable(nextArea)) {
+                    const nextAreaName = areaConfig[nextArea] ? areaConfig[nextArea].name : 'próxima área';
+                    liberationMessage += `<span style="color: #3498db; font-size: 1em; margin-top: 5px; display: block;">🗺️ Nova área desbloqueada: ${nextAreaName}</span>`;
+                } else if (nextArea <= maxAreas) {
+                    liberationMessage += `<span style="color: #95a5a6; font-size: 1em; margin-top: 5px; display: block;">🚧 As outras áreas estão em construção.</span>`;
+                }
+                liberationMessage += `<span style="color: #f39c12; font-size: 0.95em; margin-top: 5px; display: block;">📊 Progresso da ${areaName}: ${completedCount}/${getAreaStageCount(currentArea)} fases completadas</span>`;
+            }
+            resultText.innerHTML = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎${liberationMessage}<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
         } else if (isBonusStage) {
             if (currentArea === 7) {
                 resultText.innerHTML = `Frutas: ${playerScore} / ${config.goalScore} ❄️<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
@@ -15751,15 +18370,30 @@ function endGame() {
             } else {
                 resultText.innerHTML = `Minhocas: ${playerScore} / ${config.goalScore} 🪱<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
             }
+        } else if (isPassageStage && passageState) {
+            resultText.innerHTML = `Frutas: ${playerScore} / ${passageState.totalFruits} 🍎<br><span style="color: #2ecc71; font-size: 1em; margin-top: 10px; display: block;">🌳 Você atravessou o caminho!</span><br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
         } else {
-            resultText.innerHTML = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
+            // Verificar se já foi completado antes (replay)
+            const stageKeyNormal = `${currentArea}-${currentSubstage}`;
+            const wasAlreadyCompleted = !isFirstVictory;
+            
+            let normalMessage = '';
+            if (wasAlreadyCompleted) {
+                normalMessage = `<br><span style="color: #2ecc71; font-size: 1em; margin-top: 10px; display: block;">💪 Libertação reforçada!</span><span style="color: #f39c12; font-size: 0.95em; margin-top: 5px; display: block;">🧠 A memória desta batalha fortalece o feitiço de proteção...</span>`;
+            } else {
+                normalMessage = `<br><span style="color: #2ecc71; font-size: 1em; margin-top: 10px; display: block;">🕊️ Você quebrou o feitiço que controlava o pássaro!</span>`;
+            }
+            
+            resultText.innerHTML = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎${normalMessage}<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
         }
         window.lastCoinsEarned = null; // Limpar
         window.victoryStars = null; // Limpar
     } else if (window.lifeLost) {
         // Derrota - mostrar vidas perdidas e restantes
         const livesRemaining = window.livesRemaining || 0;
-        if (isBonusStage) {
+        if (isPassageStage && passageState) {
+            resultText.innerHTML = `Frutas: ${playerScore} / ${passageState.totalFruits} 🍎<br><span style="color: #e74c3c; font-size: 1.1em; margin-top: 10px; display: block;">❤️ Perdeu 1 vida! Restam ${livesRemaining} vidas</span>`;
+        } else if (isBonusStage) {
             if (currentArea === 7) {
                 resultText.innerHTML = `Frutas: ${playerScore} / ${config.goalScore} ❄️<br><span style="color: #e74c3c; font-size: 1.1em; margin-top: 10px; display: block;">❤️ Perdeu 1 vida! Restam ${livesRemaining} vidas</span>`;
             } else if (currentArea === 7) {
@@ -15805,13 +18439,13 @@ function endGame() {
 
     if (isVictory) {
         // Se derrotou o boss (subfase 7), mostrar apenas Roadmap
-        if (currentSubstage === 7) {
+        if (isBossStage()) {
             resultButtons.innerHTML = `
                 <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
                     `;
         } else {
             // Vitória normal - Próxima fase ou Roadmap
-            const hasNextStage = currentSubstage < 7 || (currentSubstage === 7 && currentArea < 5);
+            const hasNextStage = currentSubstage < getAreaStageCount(currentArea);
 
             if (hasNextStage) {
                 resultButtons.innerHTML = `
@@ -15826,7 +18460,7 @@ function endGame() {
                         `;
             }
         }
-    } else if (cpuScore > playerScore || (isBonusStage && !isVictory)) {
+    } else if (cpuScore > playerScore || ((isBonusStage || isPassageStage) && !isVictory)) {
         // Derrota - Tentar novamente ou Roadmap (incluindo boss)
         const livesRemaining = window.livesRemaining || 0;
         const canRetry = livesRemaining > 0;
@@ -15867,9 +18501,14 @@ function goToNextStage() {
     let nextSubstage = currentSubstage + 1;
 
     // Se completou o chefe, vai para próxima área
-    if (currentSubstage === 7) {
+    if (isBossStage()) {
         nextArea = currentArea + 1;
         nextSubstage = 1;
+    }
+
+    if (!isAreaPlayable(nextArea)) {
+        goToMenu();
+        return;
     }
 
     // Verificar se a próxima fase está desbloqueada
@@ -16008,6 +18647,7 @@ function restartGame() {
     cpu.goingForSpeed = false;
     player.stunCharge = 0;
     player.stunChargeTimer = 0;
+    player.stunShow = 0;
     player.stunned = false;
 
     // Reset gavião
@@ -16069,6 +18709,14 @@ function restartGame() {
     const cooldownFill = document.getElementById('cooldownFill');
     if (cooldownFill) cooldownFill.style.width = '0%';
 
+    if (isPassageStage) {
+        const stageDef = getAreaStageDef(currentArea, currentSubstage);
+        if (stageDef) initPassage(stageDef);
+        if (timerEl) timerEl.textContent = timeLeft;
+    } else if (isBossStage()) {
+        setCpuForSubstage(currentArea, currentSubstage);
+    }
+
     document.getElementById('gameOver').style.display = 'none';
 
     // Parar animação do vencedor
@@ -16083,12 +18731,22 @@ function restartGame() {
 
 // Timer
 function startTimer() {
-    const timerInterval = setInterval(() => {
+    // Limpar timer anterior se existir
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    
+    timerInterval = setInterval(() => {
         if (!gameRunning) {
             clearInterval(timerInterval);
+            timerInterval = null;
             document.getElementById('timer').parentElement.classList.remove('urgent');
             return;
         }
+
+        // Não decrementar tempo se o jogo estiver pausado
+        if (gamePaused) return;
 
         timeLeft--;
         // Timer agora é desenhado no canvas, mas manter sincronização com HTML se existir
@@ -16108,10 +18766,108 @@ function startTimer() {
 
         if (timeLeft <= 0) {
             clearInterval(timerInterval);
+            timerInterval = null;
             document.getElementById('timer').parentElement.classList.remove('urgent');
+            if (isPassageStage && passageState && !passageState.cleared) {
+                passageState.failed = true;
+            }
             endGame();
         }
     }, 1000);
+}
+
+// Sistema de Pausa do Jogo
+function togglePause() {
+    // Só pode pausar se o jogo estiver rodando e não estiver no countdown
+    const countdownOverlay = document.getElementById('countdownOverlay');
+    const isCountdownVisible = countdownOverlay && countdownOverlay.style.display !== 'none';
+    
+    if (!gameRunning || !gameStarted || isCountdownVisible) {
+        return; // Não pode pausar se o jogo não está rodando ou está no countdown
+    }
+
+    gamePaused = !gamePaused;
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    
+    if (gamePaused) {
+        // Pausar o jogo
+        pauseOverlay.style.display = 'flex';
+        
+        // Atualizar botão de pause para mostrar "continuar"
+        const pauseBtn = document.getElementById('pauseBtnGame');
+        if (pauseBtn) {
+            pauseBtn.textContent = '▶️';
+            pauseBtn.title = 'Continuar (ESC)';
+        }
+        
+        // Pausar música se estiver tocando (opcional - pode comentar se não quiser)
+        // if (currentMusic && !currentMusic.paused) {
+        //     currentMusic.pause();
+        // }
+    } else {
+        // Despausar o jogo
+        pauseOverlay.style.display = 'none';
+        
+        // Atualizar botão de pause para mostrar "pausar"
+        const pauseBtn = document.getElementById('pauseBtnGame');
+        if (pauseBtn) {
+            pauseBtn.textContent = '⏸️';
+            pauseBtn.title = 'Pausar (ESC)';
+        }
+        
+        // Retomar música se estava tocando (opcional)
+        // if (currentMusic && currentMusic.paused && !musicMuted) {
+        //     currentMusic.play().catch(() => {});
+        // }
+        
+        // Garantir que o gameLoop continue
+        if (window.gameLoopAnimFrame) {
+            cancelAnimationFrame(window.gameLoopAnimFrame);
+        }
+        window.gameLoopAnimFrame = requestAnimationFrame(gameLoop);
+    }
+}
+
+// Continuar o jogo (despausar)
+function resumeGame() {
+    if (gamePaused) {
+        togglePause();
+    }
+}
+
+// Desistir do jogo (voltar ao menu)
+function quitGame() {
+    if (!gamePaused) return; // Só pode desistir se estiver pausado
+    
+    // Confirmar se o jogador quer desistir
+    if (confirm('Tem certeza que deseja desistir? Você perderá o progresso desta partida.')) {
+        gamePaused = false;
+        gameRunning = false;
+        gameStarted = false;
+        
+        // Esconder menu de pausa
+        const pauseOverlay = document.getElementById('pauseOverlay');
+        pauseOverlay.style.display = 'none';
+        
+        // Limpar timer
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+        
+        // Cancelar gameLoop
+        if (window.gameLoopAnimFrame) {
+            cancelAnimationFrame(window.gameLoopAnimFrame);
+            window.gameLoopAnimFrame = null;
+        }
+        
+        // Voltar ao menu
+        goToMenu();
+        
+        // Perder uma vida por desistir
+        loseLife();
+        saveProgress();
+    }
 }
 
 // Mostrar aviso de tempo
@@ -16135,7 +18891,7 @@ let wormSpawnInterval = null;
 
 // Spawn de comida periódico (1 a 5 de cada vez)
 foodSpawnInterval = setInterval(() => {
-    if (gameRunning && !isBonusStage) {
+    if (gameRunning && !gamePaused && !isBonusStage && !isPassageStage) {
         // Garantir que frutas aparecem em todas as áreas, incluindo pântano
         const quantidade = 1 + Math.floor(Math.random() * 5); // 1 a 5
         for (let i = 0; i < quantidade; i++) {
@@ -16146,21 +18902,21 @@ foodSpawnInterval = setInterval(() => {
 
 // Spawn de comida especial (a cada 8-15 segundos)
 specialFoodSpawnInterval = setInterval(() => {
-    if (gameRunning && !isBonusStage) {
+    if (gameRunning && !gamePaused && !isBonusStage && !isPassageStage) {
         spawnSpecialFood();
     }
 }, 8000 + Math.random() * 7000);
 
 // Spawn de item de velocidade (a cada 10-18 segundos)
 speedItemSpawnInterval = setInterval(() => {
-    if (gameRunning && !isBonusStage) {
+    if (gameRunning && !gamePaused && !isBonusStage && !isPassageStage) {
         spawnSpeedItem();
     }
 }, 10000 + Math.random() * 8000);
 
 // Spawn de minhocas (fase bônus - a cada 0.3-0.8 segundos)
 wormSpawnInterval = setInterval(() => {
-    if (gameRunning && isBonusStage) {
+    if (gameRunning && !gamePaused && isBonusStage) {
         spawnWorm();
     }
 }, 300 + Math.random() * 500);
@@ -16174,37 +18930,37 @@ function preWarmStageFunctions() {
         
         // Chamar a função de background uma vez para "aquecer" o código
         if (currentArea === 1) {
-            if (currentSubstage === 7) {
+            if (isBossStage() || (isPassageStage && passageState && passageState.night)) {
                 drawNightForestBackground();
             } else {
                 drawForestBackground();
             }
         } else if (currentArea === 2) {
-            if (currentSubstage === 7) {
+            if (isBossStage()) {
                 drawExtremeSwampBackground();
             } else {
                 drawSwampBackground();
             }
         } else if (currentArea === 3) {
-            if (currentSubstage === 7) {
+            if (isBossStage()) {
                 drawExtremeTropicalBackground();
             } else {
                 drawTropicalBackground();
             }
         } else if (currentArea === 4) {
-            if (currentSubstage === 7) {
+            if (isBossStage()) {
                 drawExtremeDesertBackground();
             } else {
                 drawDesertBackground();
             }
         } else if (currentArea === 5) {
-            if (currentSubstage === 7) {
+            if (isBossStage()) {
                 drawExtremeMetropolisBackground();
             } else {
                 drawMetropolisBackground();
             }
         } else if (currentArea === 7) {
-            if (currentSubstage === 7) {
+            if (isBossStage()) {
                 drawExtremeIceBackground();
             } else {
                 drawIceBackground();
@@ -16221,7 +18977,7 @@ function preWarmStageFunctions() {
         ctx.restore();
         
         // Pre-warm de funções de desenho de comida (se não for fase bônus)
-        if (!isBonusStage) {
+        if (!isBonusStage && !isPassageStage) {
             drawFood();
         }
         
@@ -16299,7 +19055,10 @@ function preWarmCanvas() {
 // Loop principal do jogo
 let firstFrame = true; // Flag para otimizar primeiro frame
 function gameLoop() {
-    if (!gameRunning) return;
+    if (!gameRunning) {
+        window.gameLoopAnimFrame = null;
+        return;
+    }
 
     // OTIMIZAÇÃO: No primeiro frame, fazer uma renderização mais leve
     // Isso ajuda especialmente no mobile onde a primeira renderização pode ser lenta
@@ -16312,108 +19071,119 @@ function gameLoop() {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         // Desenhar pássaros em posição inicial (mais leve)
         drawBird(player, true);
-        drawBird(cpu, false);
+        if (!isPassageStage) drawBird(cpu, false);
         // Desenhar UI básica
         drawGameUI();
-        requestAnimationFrame(gameLoop);
+        window.gameLoopAnimFrame = requestAnimationFrame(gameLoop);
         return;
     }
 
     // OTIMIZAÇÃO: Cachear Date.now() uma vez por frame (usado 40+ vezes)
     const currentTime = Date.now();
 
-    updatePlayer();
-
-    if (isBonusStage) {
-        if (currentArea === 7) {
-            // Fase bônus do gelo - frutas congeladas
-            updateFrozenFruits();
-            checkFrozenFruitCollisions();
-            updateWormEatEffects(); // Reutilizar efeitos visuais
-        } else if (currentArea === 4) {
-            // Fase bônus do deserto - frutos de cactos
-            updateCactusFruits();
-            checkCactusFruitCollisions();
-            updateWormEatEffects(); // Reutilizar efeitos visuais
-        } else if (currentArea === 5) {
-            // Fase bônus da Metrópole - pães
-            updateMetropolisBread();
-            checkMetropolisBreadCollisions();
-            updateWormEatEffects(); // Reutilizar efeitos visuais
-        } else if (currentArea === 3) {
-            // Fase bônus da Ilha Tropical - peixes
-            updateTropicalFish();
-            checkTropicalFishCollisions();
-            updateWormEatEffects(); // Reutilizar efeitos visuais
-        } else if (currentArea === 2) {
-            // Fase bônus do pântano - insetos
-            updateSwampInsects();
-            checkSwampInsectCollisions();
-            updateWormEatEffects(); // Reutilizar efeitos visuais
+    // Não atualizar nada se o jogo estiver pausado
+    if (!gamePaused) {
+        if (isPassageStage) {
+            updatePassage();
         } else {
-            // Fase bônus genérica - apenas minhocas (outras áreas)
-            updateWorms();
-            checkWormCollisions();
-            updateWormEatEffects();
-        }
-    } else {
-        // Fase normal - CPU e comidas
-        updateCPU();
-        updateFood();
-        updateBat();
-        updateHawk();
-        checkBirdCollision();
-        checkCollisions();
+        updatePlayer();
+        if (isBonusStage) {
+            if (currentArea === 7) {
+                // Fase bônus do gelo - frutas congeladas
+                updateFrozenFruits();
+                checkFrozenFruitCollisions();
+                updateWormEatEffects(); // Reutilizar efeitos visuais
+            } else if (currentArea === 4) {
+                // Fase bônus do deserto - frutos de cactos
+                updateCactusFruits();
+                checkCactusFruitCollisions();
+                updateWormEatEffects(); // Reutilizar efeitos visuais
+            } else if (currentArea === 5) {
+                // Fase bônus da Metrópole - pães
+                updateMetropolisBread();
+                checkMetropolisBreadCollisions();
+                updateWormEatEffects(); // Reutilizar efeitos visuais
+            } else if (currentArea === 3) {
+                // Fase bônus da Ilha Tropical - peixes
+                updateTropicalFish();
+                checkTropicalFishCollisions();
+                updateWormEatEffects(); // Reutilizar efeitos visuais
+            } else if (currentArea === 2) {
+                // Fase bônus do pântano - insetos
+                updateSwampInsects();
+                checkSwampInsectCollisions();
+                updateWormEatEffects(); // Reutilizar efeitos visuais
+            } else {
+                // Fase bônus genérica - apenas minhocas (outras áreas)
+                updateWorms();
+                checkWormCollisions();
+                updateWormEatEffects();
+            }
+        } else {
+            // Fase normal - CPU e comidas
+            updateCPU();
+            updateBossStunInput();
+            updatePassageBoostButton();
+            updateFood();
+            updateBat();
+            updateHawk();
+            checkBirdCollision();
+            checkCollisions();
 
-        // Atualizar gotas de suor no deserto e ilha tropical
-        updateSweatDrops();
+            // Atualizar gotas de suor no deserto e ilha tropical
+            updateSweatDrops();
 
-        // Atualizar gotas de água no pântano
-        updateWaterDrops();
+            // Atualizar gotas de água no pântano
+            updateWaterDrops();
 
-        // Atualizar chuva na floresta
-        updateRain();
+            // Atualizar chuva na floresta
+            updateRain();
 
-        // Atualizar elementos decorativos do gelo
-        if (currentArea === 7) {
-            updateIceDecorations();
-            updateColdEffects();
-        }
-
-        // Verificar expiração do stun carregado (5 segundos)
-        if (player.stunCharge >= player.stunChargeMax && !player.stunned) {
-            const oldSeconds = Math.ceil(player.stunChargeTimer / 60);
-            player.stunChargeTimer--;
-            const newSeconds = Math.ceil(player.stunChargeTimer / 60);
-
-            // Só atualiza UI quando muda o segundo (não a cada frame)
-            if (oldSeconds !== newSeconds) {
-                updateStunUI();
+            // Atualizar elementos decorativos do gelo
+            if (currentArea === 7) {
+                updateIceDecorations();
+                updateColdEffects();
             }
 
-            if (player.stunChargeTimer <= 0) {
-                player.stunCharge = 0;
-                player.stunChargeTimer = 0;
-                updateStunUI();
+            if (player.stunShow > 0) player.stunShow--;
+
+            // Verificar expiração do stun carregado (5 segundos)
+            if (!isBossStage() && player.stunCharge >= player.stunChargeMax && !player.stunned) {
+                const oldSeconds = Math.ceil(player.stunChargeTimer / 60);
+                player.stunChargeTimer--;
+                const newSeconds = Math.ceil(player.stunChargeTimer / 60);
+
+                // Só atualiza UI quando muda o segundo (não a cada frame)
+                if (oldSeconds !== newSeconds) {
+                    updateStunUI();
+                }
+
+                if (player.stunChargeTimer <= 0) {
+                    player.stunCharge = 0;
+                    player.stunChargeTimer = 0;
+                    updateStunUI();
+                }
+            }
+            if (cpu.stunCharge >= cpu.stunChargeMax && !cpu.stunned) {
+                cpu.stunChargeTimer--;
+                if (cpu.stunChargeTimer <= 0) {
+                    cpu.stunCharge = 0;
+                    cpu.stunChargeTimer = 0;
+                }
             }
         }
-        if (cpu.stunCharge >= cpu.stunChargeMax && !cpu.stunned) {
-            cpu.stunChargeTimer--;
-            if (cpu.stunChargeTimer <= 0) {
-                cpu.stunCharge = 0;
-                cpu.stunChargeTimer = 0;
-            }
+        }
+
+        // Atualizar animações do placar (apenas se não estiver pausado)
+        if (playerScoreAnimation > 0) {
+            playerScoreAnimation--;
+        }
+        if (cpuScoreAnimation > 0) {
+            cpuScoreAnimation--;
         }
     }
 
-    // Atualizar animações do placar
-    if (playerScoreAnimation > 0) {
-        playerScoreAnimation--;
-    }
-    if (cpuScoreAnimation > 0) {
-        cpuScoreAnimation--;
-    }
-
+    // Sempre desenhar (mesmo quando pausado)
     draw();
 
     // Atualizar contador de FPS se modo debug estiver ativo
@@ -16421,7 +19191,11 @@ function gameLoop() {
         updateFPS();
     }
 
-    requestAnimationFrame(gameLoop);
+    if (!gameRunning) {
+        window.gameLoopAnimFrame = null;
+        return;
+    }
+    window.gameLoopAnimFrame = requestAnimationFrame(gameLoop);
 }
 
 // Atualizar contador de FPS (com média móvel e atualização mais frequente)
@@ -16489,6 +19263,26 @@ if (!gameProgress.stageStars) {
 if (!gameProgress.unlockedStages[1]) {
     gameProgress.unlockedStages[1] = [1];
 }
+
+function migrateForestPassages() {
+    if (gameProgress.forestPassageMigrated) return;
+    if (!gameProgress.stageStars) gameProgress.stageStars = {};
+    if (!gameProgress.completedStages[1]) gameProgress.completedStages[1] = [];
+    const completed = gameProgress.completedStages[1];
+    const beatOldBoss = completed.includes(7);
+    const bossStars = gameProgress.stageStars['1-7'] || 0;
+    for (let i = 1; i <= 7; i++) {
+        delete gameProgress.stageStars['1-' + i];
+    }
+    gameProgress.completedStages[1] = beatOldBoss ? [12] : [];
+    gameProgress.unlockedStages[1] = beatOldBoss ? [1, 12] : [1];
+    if (beatOldBoss && bossStars) {
+        gameProgress.stageStars['1-12'] = bossStars;
+    }
+    gameProgress.forestPassageMigrated = true;
+    saveProgress();
+}
+migrateForestPassages();
 
 // Sistema de Vidas e Moedas
 const MAX_LIVES = 5;
@@ -16694,7 +19488,7 @@ function updateRoadmapVisual() {
             progressEl = document.createElement('div');
             progressEl.className = 'area-progress';
             progressEl.id = 'areaProgress' + i;
-            progressEl.textContent = '0/7';
+            progressEl.textContent = `0/${getAreaStageCount(i)}`;
 
             areaEl.appendChild(lockDiv);
             areaEl.appendChild(nameDiv);
@@ -16709,7 +19503,7 @@ function updateRoadmapVisual() {
                 progressEl = document.createElement('div');
                 progressEl.className = 'area-progress';
                 progressEl.id = 'areaProgress' + i;
-                progressEl.textContent = '0/7';
+                progressEl.textContent = `0/${getAreaStageCount(i)}`;
                 areaEl.appendChild(progressEl);
             } else {
                 progressEl.id = 'areaProgress' + i;
@@ -16717,10 +19511,34 @@ function updateRoadmapVisual() {
         }
 
         const config = areaConfig[i];
-        const isUnlocked = gameProgress.unlockedAreas.includes(i);
+        const isUnlocked = gameProgress.unlockedAreas.includes(i) && isAreaPlayable(i);
         const completed = gameProgress.completedStages[i] ? gameProgress.completedStages[i].length : 0;
-        const isCompleted = completed >= 7;
+        const totalStages = getAreaStageCount(i);
+        const isCompleted = completed >= totalStages;
         const isCurrentArea = currentArea === i;
+
+        // Calcular progresso de limpeza da maldição na área
+        const curseProgress = isUnlocked ? (1 - (completed / totalStages)) : 1; // 1 = totalmente amaldiçoado, 0 = totalmente limpo
+        
+        // Determinar classe de maldição baseada no progresso
+        let curseClass = '';
+        if (isCompleted) {
+            curseClass = ''; // 0% amaldiçoado (tudo completado)
+        } else if (curseProgress > 0.75) {
+            curseClass = ''; // 100% amaldiçoado (padrão)
+        } else if (curseProgress > 0.5) {
+            curseClass = 'curse-75'; // 75% amaldiçoado
+        } else if (curseProgress > 0.25) {
+            curseClass = 'curse-50'; // 50% amaldiçoado
+        } else if (curseProgress > 0) {
+            curseClass = 'curse-25'; // 25% amaldiçoado
+        }
+
+        // Remover classes de maldição antigas
+        areaEl.classList.remove('curse-25', 'curse-50', 'curse-75');
+        if (curseClass) {
+            areaEl.classList.add(curseClass);
+        }
 
         // Aplicar cor de fundo da área
         if (isUnlocked) {
@@ -16735,7 +19553,7 @@ function updateRoadmapVisual() {
 
         if (isUnlocked) {
             // Área desbloqueada
-            areaEl.classList.remove('locked');
+            areaEl.classList.remove('locked', 'construction');
             areaEl.classList.add('unlocked');
             areaEl.onclick = () => openArea(i);
 
@@ -16794,15 +19612,19 @@ function updateRoadmapVisual() {
             }
 
             // Atualizar progresso
-            progressEl.textContent = `${completed}/7`;
+            progressEl.textContent = `${completed}/${totalStages}`;
         } else {
-            // Área trancada
-            areaEl.classList.remove('unlocked', 'completed', 'current-area');
+            const building = !isAreaPlayable(i);
+            areaEl.classList.remove('unlocked', 'completed', 'current-area', 'construction');
             areaEl.classList.add('locked');
+            if (building) areaEl.classList.add('construction');
             areaEl.onclick = null;
             areaEl.style.boxShadow = '';
+            if (building) {
+                areaEl.style.backgroundColor = 'rgba(44, 62, 80, 0.72)';
+                areaEl.style.borderColor = '#7f8c8d';
+            }
 
-            // Atualizar nome da área mesmo quando trancada
             let nameEl = areaEl.querySelector('.area-name');
             if (!nameEl) {
                 nameEl = document.createElement('div');
@@ -16810,22 +19632,28 @@ function updateRoadmapVisual() {
                 areaEl.appendChild(nameEl);
             }
             nameEl.textContent = config.name;
-            // Garantir que o texto seja branco e visível
             nameEl.style.color = '#ffffff';
             nameEl.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.8)';
 
-            // Mostrar cadeado
+            const mark = building ? '🚧' : '🔒';
             const iconEl = areaEl.querySelector('.area-icon');
+            const lockEl = areaEl.querySelector('.area-lock');
             const completionEl = areaEl.querySelector('.area-completion');
             if (iconEl) {
-                iconEl.outerHTML = `<div class="area-lock">🔒</div>`;
+                iconEl.outerHTML = `<div class="area-lock">${mark}</div>`;
+            } else if (lockEl) {
+                lockEl.textContent = mark;
+            } else {
+                const lockDiv = document.createElement('div');
+                lockDiv.className = 'area-lock';
+                lockDiv.textContent = mark;
+                areaEl.insertBefore(lockDiv, areaEl.firstChild);
             }
             if (completionEl) {
                 completionEl.remove();
             }
 
-            // Resetar progresso
-            progressEl.textContent = '0/7';
+            progressEl.textContent = building ? 'Em construção' : `0/${getAreaStageCount(i)}`;
         }
     }
 }
@@ -16885,17 +19713,10 @@ function showTouchControls() {
     const isMobile = isMobileDevice();
     
     if (isMobile && gameRunning) {
-        // Se estiver em modo de arrasto, esconder o joystick
-        if (touchControls.dragMode) {
-            touchControlsElement.style.setProperty('display', 'none', 'important');
-            touchControlsElement.style.setProperty('pointer-events', 'none', 'important');
-        } else {
-        // Forçar visibilidade usando setProperty com important
-            touchControlsElement.style.setProperty('display', 'flex', 'important');
-            touchControlsElement.style.setProperty('pointer-events', 'auto', 'important');
-            touchControlsElement.style.setProperty('visibility', 'visible', 'important');
-            touchControlsElement.style.setProperty('opacity', '1', 'important');
-        }
+        touchControlsElement.style.setProperty('display', 'flex', 'important');
+        touchControlsElement.style.setProperty('pointer-events', 'auto', 'important');
+        touchControlsElement.style.setProperty('visibility', 'visible', 'important');
+        touchControlsElement.style.setProperty('opacity', '1', 'important');
     } else {
         touchControlsElement.style.setProperty('display', 'none', 'important');
         touchControlsElement.style.setProperty('pointer-events', 'none', 'important');
@@ -16947,7 +19768,7 @@ function closeRoadmap() {
 
 // Abrir área (mostrar sub-fases)
 function openArea(area) {
-    if (!gameProgress.unlockedAreas.includes(area)) return;
+    if (!isAreaPlayable(area) || !gameProgress.unlockedAreas.includes(area)) return;
 
     currentArea = area;
     const config = areaConfig[area];
@@ -17089,14 +19910,39 @@ function openArea(area) {
         gameProgress.completedStages[area] = [];
     }
 
-    for (let i = 1; i <= 7; i++) {
-        const substage = substageConfig[i];
+    // Calcular progresso de limpeza da maldição na área
+    const completedCount = gameProgress.completedStages[area] ? gameProgress.completedStages[area].length : 0;
+    const totalStages = getAreaStageCount(area);
+    const curseProgress = 1 - (completedCount / totalStages); // 1 = totalmente amaldiçoado, 0 = totalmente limpo
+    
+    // Determinar classe de maldição baseada no progresso
+    let curseClass = '';
+    if (curseProgress > 0.75) {
+        curseClass = ''; // 100% amaldiçoado (padrão)
+    } else if (curseProgress > 0.5) {
+        curseClass = 'curse-75'; // 75% amaldiçoado
+    } else if (curseProgress > 0.25) {
+        curseClass = 'curse-50'; // 50% amaldiçoado
+    } else if (curseProgress > 0) {
+        curseClass = 'curse-25'; // 25% amaldiçoado
+    } else {
+        curseClass = ''; // 0% amaldiçoado (tudo completado, não precisa de classe)
+    }
+
+    const totalStageCards = getAreaStageCount(area);
+    for (let i = 1; i <= totalStageCards; i++) {
+        const stageDef = getAreaStageDef(area, i);
+        const substage = stageDef
+            ? { isBoss: stageDef.type === 'boss', isBonus: stageDef.type === 'bonus', name: stageDef.name }
+            : substageConfig[i];
         const isUnlocked = gameProgress.unlockedStages[area].includes(i);
         const isCompleted = gameProgress.completedStages[area].includes(i);
         const stars = gameProgress.stageStars[`${area}-${i}`] || 0;
 
         const card = document.createElement('div');
-        card.className = `substage-card ${substage.isBoss ? 'boss' : ''} ${substage.isBonus ? 'bonus' : ''} ${isUnlocked ? 'unlocked' : 'locked'} ${isCompleted ? 'completed' : ''}`;
+        // Adicionar classe de maldição baseada no progresso da área (exceto se o card específico estiver completo)
+        let curseCardClass = isCompleted ? '' : curseClass;
+        card.className = `substage-card ${substage.isBoss ? 'boss' : ''} ${substage.isBonus ? 'bonus' : ''} ${isUnlocked ? 'unlocked' : 'locked'} ${isCompleted ? 'completed' : ''} ${curseCardClass}`.trim();
 
         if (isUnlocked) {
             card.onclick = () => selectSubstage(area, i);
@@ -17104,7 +19950,9 @@ function openArea(area) {
 
         // Usar nome da fase se disponível, senão usar numeração genérica
         let displayName;
-        if (substage.isBoss) {
+        if (stageDef && stageDef.type === 'passage') {
+            displayName = stageDef.name;
+        } else if (substage.isBoss) {
             // Mostrar nome do boss específico da área
             const bossType = bossCpuTypes[area];
             if (bossType && bossType.name) {
@@ -17113,8 +19961,9 @@ function openArea(area) {
                 displayName = '👑 CHEFE';
             }
         } else if (substage.isBonus) {
-            // Personalizar texto do bônus baseado na área
-            if (area === 7) { // Gelo
+            if (stageDef && stageDef.name) {
+                displayName = `🪱 ${stageDef.name}`;
+            } else if (area === 7) { // Gelo
                 displayName = '❄️ BÔNUS';
             } else if (area === 4) { // Deserto
                 displayName = '🌵 BÔNUS';
@@ -17178,11 +20027,13 @@ function closeSubstages() {
 
 // Configurar CPU para a sub-fase
 function setCpuForSubstage(area, substage) {
-    const baseConfig = substageConfig[substage];
+    const stageDef = getAreaStageDef(area, substage);
+    const bossFight = stageDef ? stageDef.type === 'boss' : !!(substageConfig[substage] && substageConfig[substage].isBoss);
+    const baseConfig = bossFight ? substageConfig[7] : (substageConfig[substage] || substageConfig[1]);
     const config = applyDifficultyToConfig(baseConfig);
     const diffMod = difficultyModifiers[gameDifficulty];
 
-    if (baseConfig.isBoss) {
+    if (bossFight) {
         // Usar chefe da área
         const bossType = bossCpuTypes[area];
         cpu.color = bossType.color;
@@ -17236,6 +20087,18 @@ function setCpuForSubstage(area, substage) {
 // Atualizar UI baseado no tipo de fase
 // Calcular estrelas baseado na performance atual
 function calculateCurrentStars() {
+    if (isPassageStage && passageState) {
+        const total = passageState.totalFruits || 1;
+        const ratio = playerScore / total;
+        const hits = passageState.hits || 0;
+        let stars = 1;
+        if (ratio >= 0.45) stars = 2;
+        if (ratio >= 0.7) stars = 3;
+        if (ratio >= 0.9) stars = 4;
+        if (ratio >= 0.99 && hits === 0) stars = 5;
+        if (hits >= 2) stars = Math.max(1, stars - 1);
+        return stars;
+    }
     if (isBonusStage) {
         const config = substageConfig[currentSubstage];
         const extra = playerScore - config.goalScore;
@@ -17308,6 +20171,7 @@ function updateStageUI() {
 
 // Selecionar sub-fase
 function selectSubstage(area, substage) {
+    if (!isAreaPlayable(area)) return;
     if (!gameProgress.unlockedStages[area] || !gameProgress.unlockedStages[area].includes(substage)) return;
 
     // Parar som de vespas se estiver tocando (ao mudar de fase)
@@ -17341,6 +20205,7 @@ function selectSubstage(area, substage) {
     // Zerar stun ao iniciar nova fase
     player.stunCharge = 0;
     player.stunChargeTimer = 0;
+    player.stunShow = 0;
     player.stunned = false;
     player.stunTime = 0;
     // Resetar gordura do jogador ao mudar de fase
@@ -17410,12 +20275,18 @@ function selectSubstage(area, substage) {
     firstFrame = true; // Resetar flag para otimizar primeiro frame da nova fase
 
     // Configurar dificuldade (aplicar modificadores)
-    const baseConfig = substageConfig[substage];
+    const stageDef = getAreaStageDef(area, substage);
+    isPassageStage = !!(stageDef && stageDef.type === 'passage');
+    isBonusStage = stageDef ? stageDef.type === 'bonus' : !!(substageConfig[substage] && substageConfig[substage].isBonus);
+    const baseConfig = (stageDef && stageDef.type === 'boss')
+        ? substageConfig[7]
+        : (substageConfig[substage] || substageConfig[1]);
     const config = applyDifficultyToConfig(baseConfig);
     timeLeft = config.time;
 
-    // Verificar se é fase bônus
-    isBonusStage = baseConfig.isBonus || false;
+    if (isPassageStage) {
+        initPassage(stageDef);
+    }
 
     if (isBonusStage) {
         if (currentArea === 7) {
@@ -17473,7 +20344,7 @@ function selectSubstage(area, substage) {
     const timerEl = document.getElementById('timer');
     if (timerEl) timerEl.textContent = timeLeft;
 
-    if (!isBonusStage) {
+    if (!isBonusStage && !isPassageStage) {
         setCpuForSubstage(area, substage);
     }
 
@@ -17494,6 +20365,19 @@ function selectSubstage(area, substage) {
     
     // Esconder overlay de rotação quando o jogo iniciar
     checkOrientation();
+    
+    // Mostrar botão de pause quando o jogo iniciar
+    const pauseBtn = document.getElementById('pauseBtnGame');
+    if (pauseBtn) {
+        pauseBtn.style.display = 'flex';
+    }
+    
+    // Resetar estado de pausa ao iniciar nova fase
+    gamePaused = false;
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    if (pauseOverlay) {
+        pauseOverlay.style.display = 'none';
+    }
 
     if (menuAnimFrame) {
         cancelAnimationFrame(menuAnimFrame);
@@ -17521,11 +20405,11 @@ function startGame() {
 }
 
 // Desenhar pássaro no canvas de countdown
-function drawCountdownBird(ctxC, x, y, color, facingRight, time, wingColor = null, type = null, beakColor = null, eyeColor = null) {
+function drawCountdownBird(ctxC, x, y, color, facingRight, time, wingColor = null, type = null, beakColor = null, eyeColor = null, sceneScale = 1.8) {
     ctxC.save();
 
     const shake = Math.sin(time / 50) * 3;
-    const scale = 1.8; // Maior para a cena
+    const scale = sceneScale;
 
     ctxC.translate(x + shake, y);
     if (!facingRight) {
@@ -17776,10 +20660,6 @@ function drawCountdownBird(ctxC, x, y, color, facingRight, time, wingColor = nul
     ctxC.beginPath();
     ctxC.ellipse(-10, wingY, 20, 12 + Math.cos(time / 80) * 6, -0.3 + wingFlap, 0, Math.PI * 2);
     ctxC.fill();
-
-    // Símbolos de raiva
-    ctxC.font = '16px Arial';
-    ctxC.fillText('💢', -25, -30 + Math.sin(time / 150) * 3);
 
     ctxC.restore();
 }
@@ -19573,14 +22453,357 @@ function drawCountdownBoss(ctxC, x, y, color, wingColor, type, time) {
     ctxC.restore();
 }
 
+function passageHasEnemies(stageDef) {
+    if (!stageDef) return false;
+    if (stageDef.layout && stageDef.layout.enemies && stageDef.layout.enemies.length > 0) return true;
+    return !!(stageDef.chunks && stageDef.chunks.indexOf('bat') !== -1);
+}
+
+function drawPassageCountdown(ctxC, time) {
+    const stageDef = getAreaStageDef(currentArea, currentSubstage);
+    const layout = stageDef && stageDef.layout ? passageLayoutForDifficulty(stageDef.layout) : null;
+    const night = !!(stageDef && stageDef.night);
+    const river = !!(layout && layout.river);
+    const roots = !!(layout && layout.obstacles && layout.obstacles.some((obstacle) => obstacle.kind === 'root'));
+    const swarms = !!(layout && layout.swarms && layout.swarms.length);
+    const snakes = !!(layout && layout.snakes && layout.snakes.length);
+    const bats = !!(layout && layout.enemies && layout.enemies.length);
+    const branches = !!(layout && layout.obstacles && layout.obstacles.some((obstacle) => obstacle.kind === 'branch'));
+    const trees = !!(layout && layout.obstacles && layout.obstacles.some((obstacle) => obstacle.kind === 'tree'));
+    const gusts = !!(layout && layout.gusts && layout.gusts.length);
+    const shadows = !!(layout && layout.shadows && layout.shadows.length);
+    const owl = !!(layout && layout.owl);
+    const birds = (layout && layout.birds) || [];
+    const frogs = !!(layout && layout.frogs && layout.frogs.length);
+    const lowBirds = birds.some((bird) => bird.y >= 260);
+
+    const sky = ctxC.createLinearGradient(0, 0, 0, 200);
+    if (night) {
+        sky.addColorStop(0, '#0c1024');
+        sky.addColorStop(1, '#243456');
+    } else if (river) {
+        sky.addColorStop(0, '#7fb3d5');
+        sky.addColorStop(1, '#d6eaf8');
+    } else {
+        sky.addColorStop(0, '#87CEEB');
+        sky.addColorStop(1, '#d5f5e3');
+    }
+    ctxC.fillStyle = sky;
+    ctxC.fillRect(0, 0, 600, 200);
+
+    if (night) {
+        ctxC.fillStyle = '#f7f3d8';
+        ctxC.beginPath();
+        ctxC.arc(500, 34, 14, 0, Math.PI * 2);
+        ctxC.fill();
+        ctxC.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        for (let i = 0; i < 14; i++) ctxC.fillRect((i * 83) % 560 + 10, (i * 41) % 80 + 8, 2, 2);
+    }
+
+    if (river) {
+        ctxC.fillStyle = '#1a5276';
+        ctxC.beginPath();
+        ctxC.moveTo(0, 170);
+        ctxC.lineTo(150, 170);
+        ctxC.lineTo(230, 96);
+        ctxC.lineTo(330, 96);
+        ctxC.lineTo(410, 170);
+        ctxC.lineTo(600, 170);
+        ctxC.lineTo(600, 200);
+        ctxC.lineTo(0, 200);
+        ctxC.fill();
+        ctxC.fillStyle = 'rgba(174, 214, 241, 0.45)';
+        ctxC.fillRect(230, 96, 100, 5);
+    } else if (roots) {
+        ctxC.fillStyle = '#0e2a24';
+        ctxC.fillRect(0, 156, 600, 44);
+        ctxC.fillStyle = 'rgba(186, 220, 198, 0.28)';
+        ctxC.fillRect(0, 156, 600, 5);
+    } else {
+        ctxC.fillStyle = night ? '#0e3b24' : '#1e8449';
+        ctxC.beginPath();
+        ctxC.moveTo(0, 168);
+        ctxC.quadraticCurveTo(180, 138, 340, 164);
+        ctxC.quadraticCurveTo(480, 188, 600, 148);
+        ctxC.lineTo(600, 200);
+        ctxC.lineTo(0, 200);
+        ctxC.fill();
+    }
+
+    if (bats) {
+        ctxC.save();
+        ctxC.translate(250, 58 + Math.sin(time / 260) * 8);
+        ctxC.fillStyle = '#d5d8dc';
+        ctxC.beginPath();
+        ctxC.moveTo(0, 0);
+        ctxC.quadraticCurveTo(-26, -16, -34, 4);
+        ctxC.quadraticCurveTo(-14, 8, 0, 3);
+        ctxC.quadraticCurveTo(14, 8, 34, 4);
+        ctxC.quadraticCurveTo(26, -16, 0, 0);
+        ctxC.fill();
+        ctxC.fillStyle = '#1b2631';
+        ctxC.beginPath();
+        ctxC.ellipse(0, 2, 9, 6, 0, 0, Math.PI * 2);
+        ctxC.fill();
+        ctxC.fillStyle = '#e74c3c';
+        ctxC.beginPath();
+        ctxC.arc(-3, 0, 1.7, 0, Math.PI * 2);
+        ctxC.arc(3, 0, 1.7, 0, Math.PI * 2);
+        ctxC.fill();
+        ctxC.restore();
+    }
+
+    if (snakes) {
+        ctxC.fillStyle = '#1a1a1a';
+        ctxC.beginPath();
+        ctxC.ellipse(400, 176, 24, 9, 0, 0, Math.PI * 2);
+        ctxC.fill();
+        ctxC.fillStyle = '#d4ac0d';
+        ctxC.beginPath();
+        ctxC.ellipse(394, 174, 11, 4.5, -0.3, 0, Math.PI * 2);
+        ctxC.fill();
+        ctxC.fillStyle = '#e74c3c';
+        ctxC.beginPath();
+        ctxC.arc(412, 170, 2.1, 0, Math.PI * 2);
+        ctxC.fill();
+    }
+
+    if (roots) {
+        ctxC.strokeStyle = '#4e342e';
+        ctxC.lineWidth = 7;
+        ctxC.lineCap = 'round';
+        ctxC.beginPath();
+        ctxC.moveTo(300, 184);
+        ctxC.quadraticCurveTo(318, 118, 346, 156);
+        ctxC.stroke();
+        ctxC.lineWidth = 5;
+        ctxC.beginPath();
+        ctxC.moveTo(328, 186);
+        ctxC.quadraticCurveTo(344, 138, 366, 170);
+        ctxC.stroke();
+        drawPassageBlockerBird({
+            cx: 430,
+            cy: 78 + Math.sin(time / 240) * 18,
+            radius: 16,
+            wing: time / 120,
+            facing: -1,
+            color: '#f7f9f9',
+            wingColor: '#95a5a6',
+            beak: '#f4d03f'
+        }, ctxC);
+    }
+
+    if (swarms) {
+        ctxC.fillStyle = 'rgba(244, 208, 63, 0.32)';
+        ctxC.beginPath();
+        ctxC.ellipse(300, 64, 42, 24, 0, 0, Math.PI * 2);
+        ctxC.fill();
+        ctxC.fillStyle = '#f4d03f';
+        for (let i = 0; i < 6; i++) {
+            const angle = time / 280 + i * 1.05;
+            const bx = 300 + Math.cos(angle) * 24;
+            const by = 64 + Math.sin(angle) * 12;
+            ctxC.beginPath();
+            ctxC.ellipse(bx, by, 5, 3, angle, 0, Math.PI * 2);
+            ctxC.fill();
+            ctxC.fillStyle = '#e74c3c';
+            ctxC.beginPath();
+            ctxC.arc(bx + 3, by - 1, 1.1, 0, Math.PI * 2);
+            ctxC.fill();
+            ctxC.fillStyle = '#f4d03f';
+        }
+    }
+
+    if (shadows || owl) {
+        ctxC.fillStyle = '#1a120c';
+        ctxC.fillRect(150, 92, 10, 96);
+        ctxC.fillRect(430, 108, 10, 80);
+        ctxC.fillStyle = '#0e3b24';
+        ctxC.beginPath();
+        ctxC.moveTo(155, 48);
+        ctxC.lineTo(214, 112);
+        ctxC.lineTo(96, 112);
+        ctxC.closePath();
+        ctxC.fill();
+        ctxC.beginPath();
+        ctxC.moveTo(435, 64);
+        ctxC.lineTo(492, 124);
+        ctxC.lineTo(378, 124);
+        ctxC.closePath();
+        ctxC.fill();
+        if (owl) {
+            ctxC.fillStyle = 'rgba(0, 0, 0, 0.28)';
+            ctxC.beginPath();
+            ctxC.ellipse(300, 176, 48, 9, 0, 0, Math.PI * 2);
+            ctxC.fill();
+            ctxC.fillStyle = 'rgba(0, 0, 0, 0.62)';
+            ctxC.beginPath();
+            ctxC.ellipse(300, 176, 32, 6, 0, 0, Math.PI * 2);
+            ctxC.fill();
+        } else {
+            drawPassageShadow({
+                x: 300,
+                y: 78,
+                cx: 300,
+                cy: 78 + Math.sin(time / 220) * 16,
+                radius: 26,
+                phase: time / 180
+            }, ctxC);
+        }
+    } else if (branches) {
+        [236, 286, 336].forEach((x) => {
+            ctxC.fillStyle = '#6d4c41';
+            ctxC.fillRect(x, 118, 7, 62);
+            ctxC.fillStyle = '#196f3d';
+            ctxC.beginPath();
+            ctxC.arc(x + 3, 110, 14, 0, Math.PI * 2);
+            ctxC.fill();
+        });
+    } else if (gusts) {
+        ctxC.fillStyle = '#6d4c41';
+        ctxC.fillRect(168, 78, 12, 112);
+        ctxC.fillRect(430, 96, 12, 94);
+        ctxC.fillStyle = '#145a32';
+        ctxC.beginPath();
+        ctxC.moveTo(174, 34);
+        ctxC.lineTo(236, 104);
+        ctxC.lineTo(112, 104);
+        ctxC.closePath();
+        ctxC.fill();
+        ctxC.beginPath();
+        ctxC.moveTo(436, 52);
+        ctxC.lineTo(498, 118);
+        ctxC.lineTo(374, 118);
+        ctxC.closePath();
+        ctxC.fill();
+        ctxC.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+        ctxC.lineWidth = 2;
+        ctxC.lineCap = 'round';
+        for (let i = 0; i < 5; i++) {
+            const shift = (time / 10 + i * 28) % 70;
+            ctxC.beginPath();
+            ctxC.moveTo(250 + shift, 46 + i * 16);
+            ctxC.lineTo(296 + shift, 36 + i * 16);
+            ctxC.stroke();
+        }
+        drawPassageBlockerBird({
+            cx: 330,
+            cy: 78 + Math.sin(time / 180) * 18,
+            radius: 18,
+            facing: -1,
+            wing: time / 30,
+            color: '#1a5276',
+            wingColor: '#154360',
+            beak: '#f4d03f'
+        }, ctxC);
+    } else if (trees && !swarms && !bats) {
+        ctxC.fillStyle = '#6d4c41';
+        ctxC.fillRect(286, 96, 12, 86);
+        ctxC.fillStyle = '#145a32';
+        ctxC.beginPath();
+        ctxC.moveTo(292, 42);
+        ctxC.lineTo(352, 118);
+        ctxC.lineTo(232, 118);
+        ctxC.closePath();
+        ctxC.fill();
+    } else if (swarms && trees) {
+        ctxC.fillStyle = '#6d4c41';
+        ctxC.fillRect(468, 118, 10, 64);
+        ctxC.fillStyle = '#145a32';
+        ctxC.beginPath();
+        ctxC.moveTo(473, 78);
+        ctxC.lineTo(514, 128);
+        ctxC.lineTo(432, 128);
+        ctxC.closePath();
+        ctxC.fill();
+    }
+
+    if (birds.length && !bats && !roots && !swarms) {
+        drawPassageBlockerBird({
+            cx: branches ? 420 : 250,
+            cy: 50 + Math.sin(time / 280) * 6,
+            radius: 16,
+            wing: time / 120,
+            facing: -1,
+            color: '#5d6d7e',
+            wingColor: '#34495e',
+            beak: '#e67e22'
+        }, ctxC);
+        if (lowBirds) {
+            drawPassageBlockerBird({
+                cx: 360,
+                cy: 148,
+                radius: 11,
+                wing: time / 140,
+                facing: -1,
+                color: '#7f8c8d',
+                wingColor: '#566573',
+                beak: '#f5b041'
+            }, ctxC);
+        }
+    }
+
+    if (frogs && !snakes && !roots) {
+        drawPassageFrog({
+            cx: river ? 470 : 430,
+            cy: river ? 158 : 176,
+            radius: 15,
+            facing: -1,
+            squash: 1,
+            color: '#1e8449',
+            belly: '#7dcea0'
+        }, ctxC);
+    }
+
+    if (layout && layout.bigFruits) {
+        const bob = Math.sin(time / 220) * 3;
+        ctxC.save();
+        ctxC.globalAlpha = 1;
+        ctxC.fillStyle = '#ffffff';
+        ctxC.font = '26px Arial';
+        ctxC.textAlign = 'center';
+        ctxC.textBaseline = 'middle';
+        ctxC.fillText('🍉', 168, 40 + bob);
+        ctxC.restore();
+    }
+    if (layout && layout.stars) {
+        drawPassagePowerInsect({ x: 118, y: 42 }, ctxC);
+    }
+
+    const pulse = 3 + Math.sin(time / 180) * 2;
+    ctxC.strokeStyle = '#f1c40f';
+    ctxC.lineWidth = 4;
+    ctxC.beginPath();
+    ctxC.arc(552, 104, 18 + pulse, 0, Math.PI * 2);
+    ctxC.stroke();
+
+    drawCountdownBird(ctxC, 64, 112 + Math.sin(time / 200) * 6, selectedPlayerColor, true, time, null, null, null, null, 0.62);
+}
+
+function setCountdownCard(tone, kicker, title, chips, hint) {
+    const overlay = document.getElementById('countdownOverlay');
+    overlay.dataset.tone = tone;
+    document.getElementById('countdownKicker').textContent = kicker;
+    document.getElementById('countdownVs').textContent = title;
+    const chipsEl = document.getElementById('countdownStageInfo');
+    chipsEl.replaceChildren();
+    chips.forEach((label) => {
+        const chip = document.createElement('span');
+        chip.className = 'countdown-chip';
+        chip.textContent = label;
+        chipsEl.appendChild(chip);
+    });
+    const hintEl = document.getElementById('countdownHint');
+    hintEl.textContent = hint || '';
+    hintEl.hidden = !hint;
+}
+
 // Contagem regressiva
 function showCountdown() {
     const overlay = document.getElementById('countdownOverlay');
     const numberEl = document.getElementById('countdownNumber');
     const effectsEl = document.getElementById('countdownEffects');
     const particlesEl = document.getElementById('countdownParticles');
-    const stageInfoEl = document.getElementById('countdownStageInfo');
-    const vsEl = document.getElementById('countdownVs');
     const countdownCanvas = document.getElementById('countdownCanvas');
     const ctxC = countdownCanvas.getContext('2d');
 
@@ -19589,47 +22812,103 @@ function showCountdown() {
     particlesEl.innerHTML = '';
 
     // Atualizar informações da fase
-    const config = substageConfig[currentSubstage];
+    const stageDef = getAreaStageDef(currentArea, currentSubstage);
+    const config = (stageDef && stageDef.type === 'boss')
+        ? substageConfig[7]
+        : (substageConfig[currentSubstage] || substageConfig[1]);
     const areaConfigData = areaConfig[currentArea];
-    const stageName = substageNames[currentArea] && substageNames[currentArea][currentSubstage]
-        ? substageNames[currentArea][currentSubstage]
-        : `${currentArea}-${currentSubstage}`;
+    const stageName = (stageDef && stageDef.name)
+        || (substageNames[currentArea] && substageNames[currentArea][currentSubstage])
+        || `${currentArea}-${currentSubstage}`;
     const difficultyNames = {
         easy: 'Fácil',
         normal: 'Normal',
         hard: 'Difícil'
     };
 
-    if (config.isBoss) {
-        vsEl.textContent = '⚔️ BOSS FIGHT! ⚔️';
-        stageInfoEl.innerHTML = `
-                    <div class="stage-name">${areaConfigData.icon} ${areaConfigData.name} - ${stageName}</div>
-                    <div class="difficulty">Dificuldade: ${difficultyNames[gameDifficulty]}</div>
-                `;
+    // Verificar se a fase já foi completada (para justificar na lore o replay)
+    const stageKey = `${currentArea}-${currentSubstage}`;
+    const isStageAlreadyCompleted = gameProgress.completedStages[currentArea] && 
+                                   gameProgress.completedStages[currentArea].includes(currentSubstage);
+
+    const kicker = `${areaConfigData.icon} ${areaConfigData.name}`;
+    if (isBossStage()) {
+        const bossType = bossCpuTypes[currentArea];
+        const bossName = bossType && bossType.name ? bossType.name : 'Guardião';
+        setCountdownCard(
+            'boss',
+            kicker,
+            bossName,
+            [difficultyNames[gameDifficulty], '60s'],
+            'O seu stun fica guardado. Shift solta o golpe perto dele.'
+        );
     } else if (isBonusStage) {
-        vsEl.textContent = '🌟 FASE BÔNUS! 🌟';
-        // Personalizar emoji do bônus baseado na área
         let bonusEmoji = '🪱';
         if (currentArea === 7) bonusEmoji = '❄️';
         else if (currentArea === 5) bonusEmoji = '🍞';
         else if (currentArea === 4) bonusEmoji = '🌵';
         else if (currentArea === 3) bonusEmoji = '🐟';
         else if (currentArea === 2) bonusEmoji = '🦟';
-        
-        stageInfoEl.innerHTML = `
-                    <div class="stage-name">${areaConfigData.icon} ${areaConfigData.name} - ${stageName}</div>
-                    <div class="difficulty">${bonusEmoji} Meta: ${config.goalScore} em ${config.time}s</div>
-                `;
+        setCountdownCard(
+            'bonus',
+            kicker,
+            stageName,
+            [`${bonusEmoji} ${config.goalScore}`, `${config.time}s`],
+            isStageAlreadyCompleted ? 'Um treino rápido.' : 'Pegue o máximo antes do tempo.'
+        );
+    } else if (isPassageStage) {
+        const layoutNow = stageDef && stageDef.layout ? passageLayoutForDifficulty(stageDef.layout) : null;
+        const chunkList = (stageDef && stageDef.chunks) || [];
+        const birdList = (layoutNow && layoutNow.birds) || [];
+        const hasHighBirds = birdList.some((bird) => bird.y < 260) || chunkList.indexOf('top') !== -1 || chunkList.indexOf('narrow') !== -1;
+        const hasLowBirds = birdList.some((bird) => bird.y >= 260);
+        const hasFrogs = !!(layoutNow && layoutNow.frogs && layoutNow.frogs.length)
+            || chunkList.indexOf('bottom') !== -1 || chunkList.indexOf('trunk') !== -1;
+        const hasBranches = !!(layoutNow && layoutNow.obstacles && layoutNow.obstacles.some((obstacle) => obstacle.kind === 'branch'));
+        const hasTrees = !!(layoutNow && layoutNow.obstacles && layoutNow.obstacles.some((obstacle) => obstacle.kind === 'tree'));
+        const hasRiver = !!(layoutNow && layoutNow.river);
+        const hasSwarms = !!(layoutNow && layoutNow.swarms && layoutNow.swarms.length);
+        const hasSnakes = !!(layoutNow && layoutNow.snakes && layoutNow.snakes.length);
+        const hasBats = !!(layoutNow && layoutNow.enemies && layoutNow.enemies.length);
+        const hasRoots = !!(layoutNow && layoutNow.obstacles && layoutNow.obstacles.some((obstacle) => obstacle.kind === 'root'));
+        const hasGusts = !!(layoutNow && layoutNow.gusts && layoutNow.gusts.length);
+        const hasShadows = !!(layoutNow && layoutNow.shadows && layoutNow.shadows.length);
+        const hasOwl = !!(layoutNow && layoutNow.owl);
+        const hasEnemies = passageHasEnemies(stageDef);
+        let passageHint = 'Voe até a saída.';
+        if (hasOwl) passageHint = 'Morcegos e cobras na noite, e a sombra no chão marca a descida da coruja.';
+        else if (hasShadows) passageHint = 'Por cima da árvore e por baixo da sombra.';
+        else if (hasGusts) passageHint = 'O vento empurra, e o pássaro sobe e desce no vão.';
+        else if (hasBats && hasSnakes) passageHint = 'Morcego no céu, cobra no chão.';
+        else if (hasRoots) passageHint = 'Sobe na raiz e desvia da garça.';
+        else if (hasRiver) passageHint = 'Sobe com a cachoeira e desce do outro lado.';
+        else if (hasSwarms && hasTrees) passageHint = 'Desce na nuvem e sobe na árvore.';
+        else if (hasSwarms) passageHint = 'Passe por fora da nuvem.';
+        else if (hasBranches && hasHighBirds) passageHint = 'Por cima dos galhos. Desce nos vãos.';
+        else if (hasBranches) passageHint = 'O caminho passa por cima dos galhos.';
+        else if (hasTrees && hasHighBirds) passageHint = 'Sobe na árvore e desce no pássaro.';
+        else if (hasHighBirds && hasLowBirds) passageHint = 'Pássaro grande em cima, menor embaixo.';
+        else if (hasHighBirds && hasFrogs) passageHint = 'Pássaro no alto, sapo no chão.';
+        else if (hasHighBirds) passageHint = 'Desvie dos pássaros no alto.';
+        else if (hasLowBirds) passageHint = 'Desvie dos pássaros embaixo.';
+        else if (hasFrogs) passageHint = 'Desvie dos sapos no chão.';
+        else if (hasEnemies) passageHint = 'Desvie dos inimigos até a saída.';
+        const chips = [difficultyNames[gameDifficulty], `${timeLeft}s`, '3 vidas'];
+        if (layoutNow && layoutNow.bigFruits) chips.push('🍉 vale 3');
+        if (layoutNow && layoutNow.stars) chips.push('🪲 invencível');
+        setCountdownCard(stageDef && stageDef.night ? 'night' : 'passage', kicker, stageName, chips, passageHint);
     } else {
-        vsEl.textContent = '⚔️ PREPARE-SE PARA A BATALHA ⚔️';
-        stageInfoEl.innerHTML = `
-                    <div class="stage-name">${areaConfigData.icon} ${areaConfigData.name} - ${stageName}</div>
-                    <div class="difficulty">Dificuldade: ${difficultyNames[gameDifficulty]} | Tempo: 60s</div>
-                `;
+        setCountdownCard(
+            'duel',
+            kicker,
+            stageName,
+            [difficultyNames[gameDifficulty], '60s'],
+            isStageAlreadyCompleted ? 'A maldição tenta voltar.' : 'Vença para quebrar o feitiço.'
+        );
     }
 
     // Tocar som especial do boss coruja se for a fase do boss coruja
-    if (config.isBoss && currentArea === 1) {
+    if ((stageDef ? stageDef.type === 'boss' : config.isBoss) && currentArea === 1) {
         const bossType = bossCpuTypes[currentArea];
         if (bossType && bossType.type === 'owl' && sounds.owl && !sfxMuted) {
             sounds.owl.currentTime = 0;
@@ -19646,11 +22925,21 @@ function showCountdown() {
 
     // Animação dos pássaros se encarando
     let animFrame;
+    // Armazenar animFrame no canvas para poder cancelar se necessário
+    countdownCanvas.animFrame = null;
+    
     function animateBirds() {
         const time = Date.now();
 
         // Limpar canvas
         ctxC.clearRect(0, 0, countdownCanvas.width, countdownCanvas.height);
+
+        if (isPassageStage) {
+            drawPassageCountdown(ctxC, time);
+            animFrame = requestAnimationFrame(animateBirds);
+            countdownCanvas.animFrame = animFrame;
+            return;
+        }
 
         // Fundo com gradiente
         const gradient = ctxC.createLinearGradient(0, 0, countdownCanvas.width, 0);
@@ -19690,20 +22979,10 @@ function showCountdown() {
         if (isBonusStage) {
             // Fase bônus - layout especial
             ctxC.shadowBlur = 0;
-
-            const config = substageConfig[currentSubstage];
+            ctxC.textAlign = 'center';
+            ctxC.textBaseline = 'middle';
 
             if (currentArea === 3) {
-                // Fase bônus da Ilha Tropical - peixes
-                // Título no topo
-                ctxC.font = 'bold 28px Arial';
-                ctxC.fillStyle = '#16a085';
-                ctxC.textAlign = 'center';
-                ctxC.shadowColor = '#0e6655';
-                ctxC.shadowBlur = 10;
-                ctxC.fillText('🐟 CAÇA AOS PEIXES! 🐟', 300, 35);
-                ctxC.shadowBlur = 0;
-
                 // Pássaro no centro (mais abaixo)
                 drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
 
@@ -19755,21 +23034,7 @@ function showCountdown() {
                     ctxC.restore();
                 }
 
-                // Meta de peixes
-                ctxC.font = 'bold 18px Arial';
-                ctxC.fillStyle = '#16a085';
-                ctxC.fillText(`Meta: ${config.goalScore} peixes em ${config.time}s!`, 300, 195);
             } else if (currentArea === 7) {
-                // Fase bônus do gelo - frutas congeladas
-                // Título no topo
-                ctxC.font = 'bold 28px Arial';
-                ctxC.fillStyle = '#87CEEB';
-                ctxC.textAlign = 'center';
-                ctxC.shadowColor = '#5DADE2';
-                ctxC.shadowBlur = 10;
-                ctxC.fillText('❄️ FRUTAS CONGELADAS! ❄️', 300, 35);
-                ctxC.shadowBlur = 0;
-
                 // Pássaro no centro (mais abaixo)
                 drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
 
@@ -19805,21 +23070,7 @@ function showCountdown() {
                     ctxC.restore();
                 }
 
-                // Meta de frutas
-                ctxC.font = 'bold 18px Arial';
-                ctxC.fillStyle = '#87CEEB';
-                ctxC.fillText(`Meta: ${config.goalScore} frutas em ${config.time}s!`, 300, 195);
             } else if (currentArea === 4) {
-                // Fase bônus do deserto - frutos de cactos
-                // Título no topo
-                ctxC.font = 'bold 28px Arial';
-                ctxC.fillStyle = '#f39c12';
-                ctxC.textAlign = 'center';
-                ctxC.shadowColor = '#d2691e';
-                ctxC.shadowBlur = 10;
-                ctxC.fillText('🌵 FRUTOS DE CACTOS! 🌵', 300, 35);
-                ctxC.shadowBlur = 0;
-
                 // Pássaro no centro (mais abaixo)
                 drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
 
@@ -19849,34 +23100,9 @@ function showCountdown() {
                     ctxC.restore();
                 }
 
-                // Meta de frutos
-                ctxC.font = 'bold 18px Arial';
-                ctxC.fillStyle = '#f39c12';
-                ctxC.fillText(`Meta: ${config.goalScore} frutos em ${config.time}s!`, 300, 195);
-            } else if (currentArea === 2) {
-                // Fase bônus do pântano - insetos
-                // Título no topo
-                ctxC.font = 'bold 28px Arial';
-                ctxC.fillStyle = '#2ecc71';
-                ctxC.textAlign = 'center';
-                ctxC.shadowColor = '#27ae60';
-                ctxC.shadowBlur = 10;
-                ctxC.fillText('🦟 CAÇA AOS INSETOS! 🦟', 300, 35);
-                ctxC.shadowBlur = 0;
-
-                // Pássaro no centro (mais abaixo)
-                drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
             } else if (currentArea === 5) {
                 // Fase bônus da Metrópole - pães
                 // Título no topo
-                ctxC.font = 'bold 28px Arial';
-                ctxC.fillStyle = '#34495e';
-                ctxC.textAlign = 'center';
-                ctxC.shadowColor = '#2c3e50';
-                ctxC.shadowBlur = 10;
-                ctxC.fillText('🍞 CAÇA AOS PÃES! 🍞', 300, 35);
-                ctxC.shadowBlur = 0;
-
                 // Pássaro no centro (mais abaixo)
                 drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
 
@@ -19895,21 +23121,7 @@ function showCountdown() {
                     ctxC.fillText('🍞', breadX, breadY);
                 }
 
-                // Meta de pães
-                ctxC.font = 'bold 18px Arial';
-                ctxC.fillStyle = '#34495e';
-                ctxC.fillText(`Meta: ${config.goalScore} pães em ${config.time}s!`, 300, 195);
             } else if (currentArea === 2) {
-                // Fase bônus do pântano - insetos
-                // Título no topo
-                ctxC.font = 'bold 28px Arial';
-                ctxC.fillStyle = '#2ecc71';
-                ctxC.textAlign = 'center';
-                ctxC.shadowColor = '#27ae60';
-                ctxC.shadowBlur = 10;
-                ctxC.fillText('🦟 CAÇA AOS INSETOS! 🦟', 300, 35);
-                ctxC.shadowBlur = 0;
-
                 // Pássaro no centro (mais abaixo)
                 drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
 
@@ -19934,21 +23146,7 @@ function showCountdown() {
                     ctxC.restore();
                 }
 
-                // Meta de insetos
-                ctxC.font = 'bold 18px Arial';
-                ctxC.fillStyle = '#2ecc71';
-                ctxC.fillText(`Meta: ${config.goalScore} insetos em ${config.time}s!`, 300, 195);
             } else {
-                // Fase bônus - minhocas (outras áreas)
-                // Título no topo
-                ctxC.font = 'bold 28px Arial';
-                ctxC.fillStyle = '#9b59b6';
-                ctxC.textAlign = 'center';
-                ctxC.shadowColor = '#8e44ad';
-                ctxC.shadowBlur = 10;
-                ctxC.fillText('🪱 CAÇA ÀS MINHOCAS! 🪱', 300, 35);
-                ctxC.shadowBlur = 0;
-
                 // Pássaro no centro (mais abaixo)
                 drawCountdownBird(ctxC, 300, 95, selectedPlayerColor, true, time);
 
@@ -19964,52 +23162,20 @@ function showCountdown() {
                     ctxC.fillText('🪱', 0, 0);
                     ctxC.restore();
                 }
-
-                // Meta de minhocas
-                ctxC.font = 'bold 18px Arial';
-                ctxC.fillStyle = '#f1c40f';
-                ctxC.fillText(`Meta: ${config.goalScore} minhocas em ${config.time}s!`, 300, 195);
             }
-        } else {
-            const config = substageConfig[currentSubstage];
-
-            if (config.isBoss) {
-                // Fase do BOSS - layout especial
-                ctxC.font = 'bold 22px Arial';
-                ctxC.fillStyle = '#e74c3c';
-                ctxC.shadowColor = '#c0392b';
-                ctxC.shadowBlur = 15;
-                ctxC.fillText('⚔️ BOSS FIGHT! ⚔️', 300, 25);
-                ctxC.shadowBlur = 0;
-
-                // VS no centro
-                ctxC.font = 'bold 35px Arial';
-                ctxC.fillStyle = '#f1c40f';
-                ctxC.shadowColor = '#f39c12';
-                ctxC.shadowBlur = 10;
-                ctxC.fillText('VS', 300, 100);
-                ctxC.shadowBlur = 0;
-
-                // Desenhar pássaro do jogador (esquerda, menor)
+        } else if (isBossStage()) {
                 drawCountdownBird(ctxC, 100, 100, selectedPlayerColor, true, time);
-
-                // Desenhar BOSS (direita, MAIOR) - usar bossCpuTypes diretamente para garantir que está correto
                 const bossType = bossCpuTypes[currentArea];
                 if (bossType) {
                     drawCountdownBoss(ctxC, 480, 95, bossType.color, bossType.wingColor, bossType.type, time);
-
-                    // Nome do boss
-                    ctxC.font = 'bold 16px Arial';
-                    ctxC.fillStyle = '#e74c3c';
-                    ctxC.fillText(`👑 ${bossType.name}`, 480, 175);
                 } else {
-                    // Fallback caso não encontre o boss
                     drawCountdownBoss(ctxC, 480, 95, cpu.color, cpu.wingColor, cpu.type, time);
-                    ctxC.font = 'bold 16px Arial';
-                    ctxC.fillStyle = '#e74c3c';
-                    ctxC.fillText(`👑 Boss`, 480, 175);
                 }
             } else {
+                ctxC.font = 'bold 30px Arial';
+                ctxC.fillStyle = '#f1c40f';
+                ctxC.textAlign = 'center';
+                ctxC.textBaseline = 'middle';
                 ctxC.fillText('VS', 300, 100);
                 ctxC.shadowBlur = 0;
 
@@ -20020,19 +23186,22 @@ function showCountdown() {
                 // Desenhar pássaro da CPU com todos os detalhes específicos
                 drawCountdownBird(ctxC, 500, 100, cpu.color, false, time, cpu.wingColor, cpu.type, cpu.beakColor, cpu.eyeColor);
             }
-        }
 
         animFrame = requestAnimationFrame(animateBirds);
+        countdownCanvas.animFrame = animFrame;
     }
 
     animateBirds();
 
     // Adicionar faíscas entre os pássaros
     function addSparks() {
+        const sparkIcons = isPassageStage
+            ? ['🍃', '🍎', '✨', '🌿']
+            : ['⚡', '✨', '💥', '🔥', '⭐', '🌟'];
         for (let i = 0; i < 8; i++) {
             const spark = document.createElement('div');
             spark.className = 'spark';
-            spark.textContent = ['⚡', '✨', '💥', '🔥', '⭐', '🌟'][Math.floor(Math.random() * 6)];
+            spark.textContent = sparkIcons[Math.floor(Math.random() * sparkIcons.length)];
             spark.style.setProperty('--x', (Math.random() - 0.5) * 300 + 'px');
             spark.style.setProperty('--y', (Math.random() - 0.5) * 200 + 'px');
             effectsEl.appendChild(spark);
@@ -20067,7 +23236,8 @@ function showCountdown() {
     // 🔊 Tocar som do countdown apenas uma vez
     playSound('countdown');
 
-    const countInterval = setInterval(() => {
+    // Armazenar interval globalmente para poder cancelar se necessário
+    window.countdownInterval = setInterval(() => {
         count--;
         addSparks();
         addParticles();
@@ -20093,14 +23263,29 @@ function showCountdown() {
             }
             addParticles();
         } else {
-            clearInterval(countInterval);
-            cancelAnimationFrame(animFrame);
+            clearInterval(window.countdownInterval);
+            window.countdownInterval = null;
+            if (animFrame) {
+                cancelAnimationFrame(animFrame);
+            }
+            if (countdownCanvas && countdownCanvas.animFrame) {
+                cancelAnimationFrame(countdownCanvas.animFrame);
+                countdownCanvas.animFrame = null;
+            }
             overlay.style.display = 'none';
 
             // Agora inicia o jogo de verdade
             gameStarted = true;
             gameRunning = true;
+            gamePaused = false; // Garantir que não está pausado ao iniciar
             firstFrame = true; // Resetar flag para otimizar primeiro frame
+            
+            // Atualizar botão de pause para mostrar "pausar"
+            const pauseBtn = document.getElementById('pauseBtnGame');
+            if (pauseBtn) {
+                pauseBtn.textContent = '⏸️';
+                pauseBtn.title = 'Pausar (ESC)';
+            }
             
             // Reinicializar controles touch quando o jogo começar (importante para landscape)
             // Chamar imediatamente e depois com delays
@@ -20131,7 +23316,7 @@ function showCountdown() {
             // Recriar intervals de spawn (podem ter sido limpos em endGame anterior)
             if (!foodSpawnInterval) {
                 foodSpawnInterval = setInterval(() => {
-                    if (gameRunning && !isBonusStage) {
+                    if (gameRunning && !isBonusStage && !isPassageStage) {
                         const quantidade = 1 + Math.floor(Math.random() * 5);
                         for (let i = 0; i < quantidade; i++) {
                             spawnFood();
@@ -20141,14 +23326,14 @@ function showCountdown() {
             }
             if (!specialFoodSpawnInterval) {
                 specialFoodSpawnInterval = setInterval(() => {
-                    if (gameRunning && !isBonusStage) {
+                    if (gameRunning && !isBonusStage && !isPassageStage) {
                         spawnSpecialFood();
                     }
                 }, 8000 + Math.random() * 7000);
             }
             if (!speedItemSpawnInterval) {
                 speedItemSpawnInterval = setInterval(() => {
-                    if (gameRunning && !isBonusStage) {
+                    if (gameRunning && !isBonusStage && !isPassageStage) {
                         spawnSpeedItem();
                     }
                 }, 10000 + Math.random() * 8000);
@@ -20171,11 +23356,16 @@ function showCountdown() {
                 if (fpsCounter) fpsCounter.style.display = 'block';
             }
 
-            spawnFood();
-            spawnFood();
-            spawnFood();
-            gameLoop();
+            if (!isPassageStage) {
+                spawnFood();
+                spawnFood();
+                spawnFood();
+            }
             startTimer();
+            if (window.gameLoopAnimFrame) {
+                cancelAnimationFrame(window.gameLoopAnimFrame);
+            }
+            window.gameLoopAnimFrame = requestAnimationFrame(gameLoop);
         }
     }, 800);
 }
@@ -20211,6 +23401,26 @@ function goToMenu() {
     const winnerCanvas = document.getElementById('winnerCanvas');
     if (winnerCanvas && winnerCanvas.animFrame) {
         cancelAnimationFrame(winnerCanvas.animFrame);
+        winnerCanvas.animFrame = null;
+    }
+
+    // Parar animação do countdown se estiver rodando
+    const countdownCanvas = document.getElementById('countdownCanvas');
+    if (countdownCanvas && countdownCanvas.animFrame) {
+        cancelAnimationFrame(countdownCanvas.animFrame);
+        countdownCanvas.animFrame = null;
+    }
+
+    // Esconder overlay do countdown
+    const countdownOverlay = document.getElementById('countdownOverlay');
+    if (countdownOverlay) {
+        countdownOverlay.style.display = 'none';
+    }
+
+    // Limpar qualquer interval do countdown que possa estar rodando
+    if (window.countdownInterval) {
+        clearInterval(window.countdownInterval);
+        window.countdownInterval = null;
     }
 
     // Parar som de vitória do boss se estiver tocando (efeito sonoro)
@@ -20226,16 +23436,56 @@ function goToMenu() {
     // Atualizar cor da CPU para ser diferente
     updateCpuColor();
 
+    // Cancelar qualquer animação do menu anterior antes de reiniciar
+    // Cancelar animação do menu anterior
+    if (menuAnimFrame) {
+        cancelAnimationFrame(menuAnimFrame);
+        menuAnimFrame = null;
+    }
+
+    // Cancelar gameLoop se estiver rodando
+    if (window.gameLoopAnimFrame) {
+        cancelAnimationFrame(window.gameLoopAnimFrame);
+        window.gameLoopAnimFrame = null;
+    }
+
+    // Limpar canvas do menu antes de reiniciar
+    const menuCanvas = document.getElementById('menuCanvas');
+    if (menuCanvas) {
+        const ctxM = menuCanvas.getContext('2d');
+        ctxM.clearRect(0, 0, menuCanvas.width, menuCanvas.height);
+    }
+
     // Resetar tempo de espera e reiniciar animação do menu
     resetMenuWaitTime();
     animateMenu();
 
     // Reset completo
     gameRunning = false;
+    gameStarted = false;
+    gamePaused = false; // Resetar estado de pausa
     firstFrame = true; // Resetar flag para próxima execução
+    
+    // Limpar timer se estiver rodando
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    
+    // Esconder menu de pausa se estiver visível
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    if (pauseOverlay) {
+        pauseOverlay.style.display = 'none';
+    }
+    
+    // Cancelar gameLoop se estiver rodando
+    if (window.gameLoopAnimFrame) {
+        cancelAnimationFrame(window.gameLoopAnimFrame);
+        window.gameLoopAnimFrame = null;
+    }
+    
     // Esconder controles touch quando o jogo parar
     hideTouchControls();
-    gameStarted = false;
     playerScore = 0;
     cpuScore = 0;
     timeLeft = 60;
@@ -20246,6 +23496,7 @@ function goToMenu() {
     player.y = canvas.height / 2;
     player.stunCharge = 0;
     player.stunChargeTimer = 0;
+    player.stunShow = 0;
     player.speed = player.baseSpeed;
     player.speedBoost = 0;
     cpu.x = canvas.width - 100;
@@ -20675,6 +23926,15 @@ function toggleCredits() {
     creditsOverlay.classList.remove('active');
 }
 
+function toggleStory() {
+    const storyOverlay = document.getElementById('storyOverlay');
+    if (storyOverlay.classList.contains('active')) {
+        storyOverlay.classList.remove('active');
+    } else {
+        storyOverlay.classList.add('active');
+    }
+}
+
 // Animação do preview de cor
 let previewAnimFrame;
 
@@ -20834,39 +24094,10 @@ function selectDifficulty(difficulty) {
     document.getElementById('difficultyDesc').textContent = difficultyModifiers[difficulty].description;
 }
 
-// Selecionar modo de controle mobile
-function selectControlMode(mode) {
-    touchControls.dragMode = (mode === 'drag');
-    
-    // Salvar preferência
-    if (!gameProgress.settings) {
-        gameProgress.settings = {};
-    }
-    gameProgress.settings.controlMode = mode;
-    localStorage.setItem('birdGameProgress', JSON.stringify(gameProgress));
-
-    // Atualizar visual dos botões
-    document.querySelectorAll('.control-btn').forEach(btn => {
-        btn.classList.remove('selected');
-        if (btn.dataset.control === mode) {
-            btn.classList.add('selected');
-        }
-    });
-
-    // Atualizar descrição
-    const controlDesc = document.getElementById('controlDesc');
-    if (controlDesc) {
-        if (mode === 'drag') {
-            controlDesc.textContent = 'Toque e arraste o pássaro diretamente pela tela.';
-        } else {
-            controlDesc.textContent = 'Use o joystick virtual para controlar o pássaro.';
-        }
-    }
-    
-    // Atualizar visibilidade do joystick
-    if (gameRunning) {
-        showTouchControls();
-    }
+// No celular o voo é só pelo joystick.
+function selectControlMode() {
+    touchControls.dragMode = false;
+    if (gameRunning) showTouchControls();
 }
 
 // Aplicar dificuldade à configuração de fase
@@ -20895,7 +24126,8 @@ function resetProgress() {
         stageStars: {},
         lives: MAX_LIVES,
         coins: 0,
-        lastLifeLossTime: null
+        lastLifeLossTime: null,
+        forestPassageMigrated: true
     };
 
     localStorage.setItem('birdGameProgress', JSON.stringify(gameProgress));
@@ -20927,36 +24159,7 @@ function initDifficultyUI() {
 
 // Inicializar UI de controle mobile
 function initControlUI() {
-    // Carregar preferência salva
-    const savedMode = (gameProgress.settings && gameProgress.settings.controlMode) || 'drag';
-    touchControls.dragMode = (savedMode === 'drag');
-    
-    // Esconder seção de controle mobile no desktop
-    const controlSelection = document.getElementById('controlSelection');
-    if (controlSelection) {
-        const isMobile = isMobileDevice();
-        controlSelection.style.display = isMobile ? 'block' : 'none';
-    }
-    
-    // Atualizar visual dos botões
-    document.querySelectorAll('.control-btn').forEach(btn => {
-        btn.classList.remove('selected');
-        if (btn.dataset.control === savedMode) {
-            btn.classList.add('selected');
-        }
-    });
-    
-    // Atualizar descrição
-    const controlDesc = document.getElementById('controlDesc');
-    if (controlDesc) {
-        if (savedMode === 'drag') {
-            controlDesc.textContent = 'Toque e arraste o pássaro diretamente pela tela.';
-        } else {
-            controlDesc.textContent = 'Use o joystick virtual para controlar o pássaro.';
-        }
-    }
-    
-    // Atualizar botão de tela cheia
+    touchControls.dragMode = false;
     updateFullscreenOptionButton();
 }
 
@@ -21186,15 +24389,6 @@ document.addEventListener('fullscreenchange', handleFullscreenChange);
 document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
 document.addEventListener('mozfullscreenchange', handleFullscreenChange);
 document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-
-// Atualizar visibilidade da seção de controle mobile quando redimensionar
-window.addEventListener('resize', function() {
-    const controlSelection = document.getElementById('controlSelection');
-    if (controlSelection) {
-        const isMobile = isMobileDevice();
-        controlSelection.style.display = isMobile ? 'block' : 'none';
-    }
-});
 
 function updateFullscreenButton() {
     const fullscreenBtn = document.getElementById('fullscreenBtn');
