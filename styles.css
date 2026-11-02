@@ -2593,33 +2593,78 @@
                 position: relative;
             }
 
+            .dpad {
+                display: grid;
+                grid-template-columns: 52px 52px 52px;
+                grid-template-rows: 52px 52px 52px;
+                gap: 6px;
+                pointer-events: auto;
+            }
+
+            .dpad-up { grid-column: 2; grid-row: 1; }
+            .dpad-left { grid-column: 1; grid-row: 2; }
+            .dpad-right { grid-column: 3; grid-row: 2; }
+            .dpad-down { grid-column: 2; grid-row: 3; }
+
+            .dpad-btn,
+            .accel-btn,
+            .passage-boost-btn {
+                touch-action: none;
+                user-select: none;
+                -webkit-user-select: none;
+                pointer-events: auto;
+            }
+
+            .dpad-btn,
+            .accel-btn {
+                border: 3px solid rgba(255, 255, 255, 0.35);
+                border-radius: 14px;
+                background: rgba(10, 16, 28, 0.72);
+                color: #ffffff;
+                font-size: 22px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .dpad-btn.held,
+            .accel-btn.held {
+                background: rgba(46, 204, 113, 0.85);
+                border-color: #ffffff;
+            }
+
+            .flight-actions {
+                position: absolute;
+                right: 18px;
+                bottom: 28px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                pointer-events: auto;
+            }
+
+            .accel-btn {
+                width: 84px;
+                height: 84px;
+                border-radius: 50%;
+                font-size: 34px;
+            }
+
             .passage-boost-btn {
                 display: none;
-                position: absolute;
-                right: 24px;
-                bottom: 28px;
-                width: 76px;
-                height: 76px;
+                width: 64px;
+                height: 64px;
                 border: 3px solid #f1c40f;
                 border-radius: 50%;
-                background: rgba(20, 20, 20, 0.72);
-                color: #f1c40f;
-                font-size: 32px;
-                pointer-events: auto;
+                background: rgba(241, 196, 15, 0.9);
+                color: #1a1208;
+                font-size: 28px;
                 align-items: center;
                 justify-content: center;
             }
 
             .passage-boost-btn.ready {
                 display: flex;
-                animation: passageBoostPulse 0.65s ease-in-out infinite;
-                box-shadow: 0 0 18px #f1c40f;
-                background: rgba(241, 196, 15, 0.28);
-            }
-
-            @keyframes passageBoostPulse {
-                0%, 100% { transform: scale(1); }
-                50% { transform: scale(1.16); }
             }
 
             .joystick-base {
@@ -2648,6 +2693,21 @@
         }
 
         @media screen and (max-width: 500px) {
+            .dpad {
+                grid-template-columns: 46px 46px 46px;
+                grid-template-rows: 46px 46px 46px;
+            }
+
+            .accel-btn {
+                width: 72px;
+                height: 72px;
+            }
+
+            .passage-boost-btn {
+                width: 54px;
+                height: 54px;
+            }
+
             .joystick-base {
                 width: 100px;
                 height: 100px;

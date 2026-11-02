@@ -2659,24 +2659,13 @@ function drawPassageHUD() {
     const boostFull = boostRatio >= 1 && player.speedBoost <= 0;
     const boostWidth = player.speedBoost > 0 ? 140 * (player.speedBoost / 180) : 140 * boostRatio;
     if (boostFull) {
-        const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 110);
-        const barH = 14 + pulse * 8;
-        const barY = 57 - barH / 2;
-        ctx.save();
-        ctx.shadowColor = '#f1c40f';
-        ctx.shadowBlur = 16 + pulse * 18;
-        ctx.fillStyle = `rgba(241, 196, 15, ${0.28 + pulse * 0.35})`;
-        ctx.fillRect(padding - 6, barY - 6, 152, barH + 12);
-        ctx.fillStyle = pulse > 0.45 ? '#ffe56a' : '#f39c12';
-        ctx.fillRect(padding, barY, 140, barH);
-        ctx.restore();
-        const labelSize = 18 + Math.round(pulse * 8);
-        ctx.font = `bold ${labelSize}px Arial`;
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#f1c40f';
+        ctx.fillRect(padding, 48, 140, 12);
+        ctx.font = 'bold 18px Arial';
         ctx.textAlign = 'left';
         ctx.fillStyle = '#fff8d0';
-        ctx.shadowColor = '#f1c40f';
-        ctx.shadowBlur = 12;
-        ctx.fillText('⚡ SHIFT', padding + 150, 58);
+        ctx.fillText('SHIFT', padding + 150, 56);
         ctx.shadowBlur = 4;
     } else {
         ctx.shadowBlur = 0;
@@ -5576,7 +5565,8 @@ let touchControls = {
     dragMode: false,
     dragActive: false,
     dragTargetX: 0,
-    dragTargetY: 0
+    dragTargetY: 0,
+    pad: { up: false, down: false, left: false, right: false, accel: false }
 };
 
 
@@ -5777,7 +5767,58 @@ document.addEventListener('keyup', (e) => {
 });
 
 // Controles Touch (Mobile)
+function bindHoldButton(button, onPress, onRelease) {
+    if (!button || button.dataset.holdBound === '1') return;
+    button.dataset.holdBound = '1';
+    const press = (event) => {
+        event.preventDefault();
+        if (event.pointerId !== undefined && button.setPointerCapture) {
+            button.setPointerCapture(event.pointerId);
+        }
+        onPress();
+        button.classList.add('held');
+    };
+    const release = (event) => {
+        if (event) event.preventDefault();
+        onRelease();
+        button.classList.remove('held');
+    };
+    button.addEventListener('pointerdown', press);
+    button.addEventListener('pointerup', release);
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('contextmenu', (event) => event.preventDefault());
+}
+
+function initFlightPad() {
+    document.querySelectorAll('.dpad-btn').forEach((button) => {
+        const dir = button.dataset.dir;
+        if (!dir || !touchControls.pad) return;
+        bindHoldButton(button, () => {
+            touchControls.pad[dir] = true;
+        }, () => {
+            touchControls.pad[dir] = false;
+        });
+    });
+    const accel = document.getElementById('accelBtn');
+    bindHoldButton(accel, () => {
+        touchControls.pad.accel = true;
+    }, () => {
+        touchControls.pad.accel = false;
+    });
+    const passageBoostBtn = document.getElementById('passageBoostBtn');
+    if (passageBoostBtn && passageBoostBtn.dataset.boostBound !== '1') {
+        passageBoostBtn.dataset.boostBound = '1';
+        passageBoostBtn.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (isBossStage()) tryPlayerBossStun();
+            else activatePassageBoost();
+        });
+    }
+}
+
 function initTouchControls() {
+    initFlightPad();
     const joystickBase = document.getElementById('joystickBase');
     const joystickStick = document.getElementById('joystickStick');
     
@@ -5954,17 +5995,6 @@ function initTouchControls() {
     document.addEventListener('touchend', handleTouchEnd, { passive: false, capture: true });
     document.addEventListener('touchcancel', handleTouchEnd, { passive: false, capture: true });
 
-    const passageBoostBtn = document.getElementById('passageBoostBtn');
-    if (passageBoostBtn) {
-        const usePassageBoost = (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (isBossStage()) tryPlayerBossStun();
-            else activatePassageBoost();
-        };
-        passageBoostBtn.addEventListener('pointerdown', usePassageBoost);
-    }
-    
     // Listener adicional no canvas para modo de arrasto
     canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
     canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -8074,6 +8104,18 @@ function updatePlayer() {
             else if (normalizedX < 0) player.facingRight = false;
     }
     }
+    else if (isMobile && touchControls.pad && (touchControls.pad.up || touchControls.pad.down || touchControls.pad.left || touchControls.pad.right || touchControls.pad.accel)) {
+        const pad = touchControls.pad;
+        if (pad.up) moveY = -player.speed;
+        else if (pad.down) moveY = player.speed;
+        if (pad.accel || pad.right) {
+            moveX = player.speed;
+            player.facingRight = true;
+        } else if (pad.left) {
+            moveX = -player.speed;
+            player.facingRight = false;
+        }
+    }
     // Touch (Joystick - modo antigo) - apenas no mobile
     else if (touchControls.joystickActive && !touchControls.dragMode && isMobile) {
         const joystickX = touchControls.joystickX;
@@ -8787,12 +8829,16 @@ function drawBird(bird, isPlayer) {
         ctx.ellipse(bird.x, helmetY, helmetSize * 0.9, helmetSize * 0.6, 0, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Símbolo de raio no capacete
         ctx.fillStyle = '#f1c40f';
-        ctx.font = `${Math.floor(helmetSize * 0.4)}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('⚡', bird.x, helmetY);
+        ctx.beginPath();
+        ctx.moveTo(bird.x - helmetSize * 0.16, helmetY - helmetSize * 0.34);
+        ctx.lineTo(bird.x + helmetSize * 0.08, helmetY - helmetSize * 0.02);
+        ctx.lineTo(bird.x - helmetSize * 0.02, helmetY - helmetSize * 0.02);
+        ctx.lineTo(bird.x + helmetSize * 0.2, helmetY + helmetSize * 0.36);
+        ctx.lineTo(bird.x - helmetSize * 0.06, helmetY + helmetSize * 0.04);
+        ctx.lineTo(bird.x + helmetSize * 0.04, helmetY + helmetSize * 0.04);
+        ctx.closePath();
+        ctx.fill();
     }
 
     // Detalhes especiais para cada tipo de CPU

@@ -278,13 +278,16 @@
 
         <!-- Controles Touch (apenas para mobile) -->
         <div class="touch-controls" id="touchControls">
-            <!-- Joystick Virtual -->
-            <div class="joystick-container">
-                <div class="joystick-base" id="joystickBase">
-                    <div class="joystick-stick" id="joystickStick"></div>
-                </div>
+            <div class="dpad" id="dpad">
+                <button type="button" class="dpad-btn dpad-up" data-dir="up" aria-label="Subir">▲</button>
+                <button type="button" class="dpad-btn dpad-left" data-dir="left" aria-label="Esquerda">◀</button>
+                <button type="button" class="dpad-btn dpad-right" data-dir="right" aria-label="Direita">▶</button>
+                <button type="button" class="dpad-btn dpad-down" data-dir="down" aria-label="Descer">▼</button>
             </div>
-            <button type="button" class="passage-boost-btn" id="passageBoostBtn" aria-label="Usar boost">⚡</button>
+            <div class="flight-actions">
+                <button type="button" class="passage-boost-btn" id="passageBoostBtn" aria-label="Usar turbo">⚡</button>
+                <button type="button" class="accel-btn" id="accelBtn" aria-label="Acelerar">➤</button>
+            </div>
         </div>
 
         <!-- Painel de Debug -->
