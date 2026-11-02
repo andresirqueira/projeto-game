@@ -8104,31 +8104,16 @@ function updatePlayer() {
             else if (normalizedX < 0) player.facingRight = false;
     }
     }
-    else if (isMobile && touchControls.pad && (touchControls.pad.up || touchControls.pad.down || touchControls.pad.left || touchControls.pad.right || touchControls.pad.accel)) {
-        const pad = touchControls.pad;
-        if (pad.up) moveY = -player.speed;
-        else if (pad.down) moveY = player.speed;
-        if (pad.accel || pad.right) {
-            moveX = player.speed;
-            player.facingRight = true;
-        } else if (pad.left) {
-            moveX = -player.speed;
-            player.facingRight = false;
-        }
-    }
-    // Touch (Joystick - modo antigo) - apenas no mobile
     else if (touchControls.joystickActive && !touchControls.dragMode && isMobile) {
+        const accelerating = touchControls.pad && touchControls.pad.accel;
         const joystickX = touchControls.joystickX;
         const joystickY = touchControls.joystickY;
         const distance = Math.sqrt(joystickX * joystickX + joystickY * joystickY);
-        
-        if (distance > 5) { // Dead zone
+        if (accelerating && distance > 5) {
             const normalizedX = joystickX / distance;
             const normalizedY = joystickY / distance;
             moveX = normalizedX * player.speed;
             moveY = normalizedY * player.speed;
-            
-            // Atualizar direção
             if (normalizedX > 0) player.facingRight = true;
             else if (normalizedX < 0) player.facingRight = false;
         }
