@@ -5811,21 +5811,93 @@ function initFlightPad() {
         });
     });
     const accel = document.getElementById('accelBtn');
-    bindHoldButton(accel, () => {
-        touchControls.pad.accel = true;
-    }, () => {
-        touchControls.pad.accel = false;
-    });
     const passageBoostBtn = document.getElementById('passageBoostBtn');
-    if (passageBoostBtn && passageBoostBtn.dataset.boostBound !== '1') {
-        passageBoostBtn.dataset.boostBound = '1';
-        passageBoostBtn.addEventListener('pointerdown', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (isBossStage()) tryPlayerBossStun();
-            else activatePassageBoost();
-        });
+    if (!accel || !passageBoostBtn || accel.dataset.flightBound === '1') return;
+    accel.dataset.flightBound = '1';
+    passageBoostBtn.dataset.boostBound = '1';
+
+    let accelId = null;
+    let boostId = null;
+    let boostFired = false;
+    let slideStartX = 0;
+
+    function syncAccel() {
+        touchControls.pad.accel = accelId !== null || boostId !== null;
+        accel.classList.toggle('held', accelId !== null || boostId !== null);
     }
+
+    function fireSpecial() {
+        if (boostFired || !passageBoostBtn.classList.contains('ready')) return;
+        if (isBossStage()) {
+            if (!playerBossStunReady() || !birdsWithinStunReach()) return;
+            boostFired = true;
+            tryPlayerBossStun();
+            return;
+        }
+        activatePassageBoost();
+        if (player.speedBoost > 0) boostFired = true;
+    }
+
+    function clearBoostLatch() {
+        if (accelId === null && boostId === null) boostFired = false;
+    }
+
+    function overBoost(event) {
+        const rect = passageBoostBtn.getBoundingClientRect();
+        if (rect.width < 2) return false;
+        const pad = 18;
+        return event.clientX >= rect.left - pad && event.clientX <= rect.right + pad
+            && event.clientY >= rect.top - pad && event.clientY <= rect.bottom + pad;
+    }
+
+    accel.addEventListener('pointerdown', (event) => {
+        if (accelId !== null) return;
+        event.preventDefault();
+        accelId = event.pointerId;
+        boostFired = false;
+        slideStartX = event.clientX;
+        try {
+            if (accel.setPointerCapture) accel.setPointerCapture(event.pointerId);
+        } catch (error) {}
+        syncAccel();
+    });
+    accel.addEventListener('pointermove', (event) => {
+        if (event.pointerId !== accelId) return;
+        event.preventDefault();
+        if (overBoost(event) || event.clientX <= slideStartX - 36) fireSpecial();
+    });
+    function releaseAccel(event) {
+        if (!event || event.pointerId !== accelId) return;
+        event.preventDefault();
+        accelId = null;
+        syncAccel();
+        clearBoostLatch();
+    }
+    accel.addEventListener('pointerup', releaseAccel);
+    accel.addEventListener('pointercancel', releaseAccel);
+    accel.addEventListener('contextmenu', (event) => event.preventDefault());
+
+    passageBoostBtn.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (boostId !== null) return;
+        boostId = event.pointerId;
+        try {
+            if (passageBoostBtn.setPointerCapture) passageBoostBtn.setPointerCapture(event.pointerId);
+        } catch (error) {}
+        syncAccel();
+        fireSpecial();
+    });
+    function releaseBoost(event) {
+        if (!event || event.pointerId !== boostId) return;
+        event.preventDefault();
+        boostId = null;
+        syncAccel();
+        clearBoostLatch();
+    }
+    passageBoostBtn.addEventListener('pointerup', releaseBoost);
+    passageBoostBtn.addEventListener('pointercancel', releaseBoost);
+    passageBoostBtn.addEventListener('contextmenu', (event) => event.preventDefault());
 }
 
 function initTouchControls() {
