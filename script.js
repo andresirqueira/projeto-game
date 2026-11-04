@@ -846,12 +846,253 @@ function buildPassageFromChunks(chunks, enemySpeed) {
     };
 }
 
+function passagePointBlocked(obstacles, x, y, radius) {
+    for (let i = 0; i < obstacles.length; i++) {
+        const obstacle = obstacles[i];
+        if (obstacle.kind === 'tree' || obstacle.kind === 'trunk') {
+            if (passageCircleHitsTree(x, y, radius, obstacle)) return true;
+        } else if (obstacle.kind === 'root') {
+            if (passageCircleHitsRoot(x, y, radius, obstacle)) return true;
+        } else if (obstacle.w && obstacle.h) {
+            if (passageCircleHitsRect(x, y, radius, obstacle)) return true;
+        }
+    }
+    return false;
+}
+
+function passageSurfaceAt(falls, x) {
+    let surface = PASSAGE_RIVER_Y;
+    let ceiling = 0;
+    let inside = false;
+    for (const fall of falls || []) {
+        if (x < fall.x0 || x > fall.x3) continue;
+        inside = true;
+        const climb = fall.x1 - fall.x0 || 1;
+        const drop = fall.x3 - fall.x2 || 1;
+        let rise;
+        if (x < fall.x1) rise = passageRiverSmooth((x - fall.x0) / climb);
+        else if (x <= fall.x2) rise = 1;
+        else rise = 1 - passageRiverSmooth((x - fall.x2) / drop);
+        surface = PASSAGE_RIVER_Y + (fall.top - PASSAGE_RIVER_Y) * rise;
+        ceiling = (fall.ceil || 0) * rise;
+    }
+    return { surface: surface, ceiling: ceiling, inside: inside };
+}
+
+function passageOpenY(built, x, radius) {
+    let low = 48;
+    let high = 448;
+    if (built.river) {
+        const profile = passageSurfaceAt(built.falls, x);
+        if (profile.inside) {
+            if (profile.ceiling > 0) low = Math.max(low, profile.ceiling + radius + 8);
+            high = Math.min(high, profile.surface - radius - 8);
+        } else {
+            high = Math.min(high, PASSAGE_RIVER_Y - radius - 10);
+        }
+    }
+    if (high - low < 36) return null;
+    return low + Math.random() * (high - low);
+}
+
+function scatterPassageActors(built) {
+    const obstacles = built.obstacles || [];
+    const minX = 400;
+    const maxX = Math.max(minX + 120, (built.length || 2000) - 280);
+    const markers = [];
+
+    function track(sourceX, sourceY, reach, lockY, radius, water, apply) {
+        markers.push({
+            x: sourceX,
+            y: sourceY,
+            reach: reach || 0,
+            lockY: !!lockY,
+            radius: radius || 18,
+            water: !!water,
+            apply: apply
+        });
+    }
+
+    (built.birds || []).forEach((bird) => {
+        const vertical = bird.axis === 'y';
+        track(bird.x, bird.y, vertical ? 0 : (bird.range || 0), vertical, bird.radius || 36, false, (x, y) => {
+            bird.x = x;
+            bird.cx = x;
+            if (!vertical) {
+                bird.y = y;
+                bird.cy = y;
+            }
+            bird.phase = Math.random() * Math.PI * 2;
+        });
+    });
+    (built.frogs || []).forEach((frog) => {
+        track(frog.x, frog.y, frog.range || 0, true, frog.radius || 28, !!built.river, (x) => {
+            frog.x = x;
+            frog.cx = x;
+            frog.jumpFrom = x;
+            frog.landX = x;
+            frog.phase = Math.random() * Math.PI * 2;
+            frog.timer = Math.round(frog.phase * 36);
+            frog.pad = Math.random() < 0.5 ? 1 : -1;
+        });
+    });
+    (built.fishes || []).forEach((fish) => {
+        track(fish.x, PASSAGE_RIVER_Y, 0, true, fish.radius || 18, true, (x) => {
+            fish.x = x;
+            fish.cx = x;
+            fish.phase = Math.random() * Math.PI * 2;
+        });
+    });
+    (built.swarms || []).forEach((swarm) => {
+        const vertical = swarm.axis !== 'x';
+        track(swarm.x, swarm.y, vertical ? 0 : (swarm.range || 0), vertical, swarm.radius || 40, false, (x, y) => {
+            swarm.x = x;
+            swarm.cx = x;
+            if (!vertical) {
+                swarm.y = y;
+                swarm.cy = y;
+            }
+            swarm.phase = Math.random() * Math.PI * 2;
+        });
+    });
+    (built.snakes || []).forEach((snake) => {
+        track(snake.x, snake.y, snake.lunge || 24, true, snake.radius || 16, false, (x) => {
+            snake.x = x;
+            snake.headX = x;
+            snake.phase = Math.random() * Math.PI * 2;
+            snake.timer = Math.round(snake.phase * 28);
+            snake.facing = Math.random() < 0.5 ? 1 : -1;
+        });
+    });
+    (built.enemies || []).forEach((enemy) => {
+        track(enemy.x, enemy.y, 0, true, 24, false, (x) => {
+            enemy.x = x;
+            const span = (enemy.maxY || enemy.y) - (enemy.minY || enemy.y);
+            if (span > 4) enemy.y = (enemy.minY || enemy.y) + Math.random() * span;
+            enemy.dir = Math.random() < 0.5 ? 1 : -1;
+            enemy.wing = Math.random() * 6;
+        });
+    });
+    (built.shadows || []).forEach((shadow) => {
+        track(shadow.x, shadow.y, shadow.range || 0, false, shadow.radius || 24, false, (x, y) => {
+            shadow.x = x;
+            shadow.cx = x;
+            shadow.y = y;
+            shadow.cy = y;
+            shadow.phase = Math.random() * Math.PI * 2;
+        });
+    });
+
+    markers.sort((a, b) => a.x - b.x);
+    const clusters = [];
+    markers.forEach((marker) => {
+        const last = clusters[clusters.length - 1];
+        const markerLeft = marker.x - marker.reach;
+        if (last && markerLeft - last.maxX < 190) {
+            last.items.push(marker);
+            last.maxX = Math.max(last.maxX, marker.x + marker.reach);
+            last.minX = Math.min(last.minX, markerLeft);
+        } else {
+            clusters.push({
+                items: [marker],
+                minX: markerLeft,
+                maxX: marker.x + marker.reach
+            });
+        }
+    });
+
+    for (let i = clusters.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const swap = clusters[i];
+        clusters[i] = clusters[j];
+        clusters[j] = swap;
+    }
+
+    function markerBlocked(marker, x, y) {
+        if (x < minX || x > maxX) return true;
+        if (marker.water && (built.falls || []).some((fall) => x >= fall.x0 && x <= fall.x3)) return true;
+        return passagePointBlocked(obstacles, x, y, Math.min(marker.radius, 30));
+    }
+
+    const placed = [];
+    clusters.forEach((cluster) => {
+        const width = Math.max(36, cluster.maxX - cluster.minX);
+        const gap = 120;
+        function fits(left) {
+            if (left < minX || left + width > maxX) return false;
+            const right = left + width;
+            if (placed.some((box) => left < box.right + gap && right > box.left - gap)) return false;
+            const dxTry = left - cluster.minX;
+            return cluster.items.every((marker) => !markerBlocked(marker, marker.x + dxTry, marker.y));
+        }
+        let chosen = null;
+        for (let attempt = 0; attempt < 64; attempt++) {
+            const left = minX + Math.random() * Math.max(1, maxX - minX - width);
+            if (!fits(left)) continue;
+            chosen = left;
+            break;
+        }
+        if (chosen === null) {
+            for (let left = minX; left <= maxX - width; left += 36) {
+                if (!fits(left)) continue;
+                chosen = left;
+                break;
+            }
+        }
+        if (chosen === null) chosen = cluster.minX;
+        const dx = chosen - cluster.minX;
+        cluster.items.forEach((marker) => {
+            let x = marker.x + dx;
+            let y = marker.y;
+            if (!marker.lockY && cluster.items.length === 1) {
+                const low = marker.y < 210 ? 58 : marker.y > 330 ? 330 : 150;
+                const high = marker.y < 210 ? 200 : marker.y > 330 ? 448 : 330;
+                const candidate = low + Math.random() * (high - low);
+                if (!markerBlocked(marker, x, candidate)) y = candidate;
+            }
+            x = Math.max(minX, Math.min(maxX, x));
+            marker.apply(x, y);
+        });
+        placed.push({ left: chosen, right: chosen + width });
+    });
+
+    const taken = [];
+    function placePickup(item, radius) {
+        let spot = null;
+        for (let n = 0; n < 70; n++) {
+            const x = minX + Math.random() * (maxX - minX);
+            const y = passageOpenY(built, x, radius);
+            if (y === null) continue;
+            if (passagePointBlocked(obstacles, x, y, radius)) continue;
+            if (taken.some((point) => Math.hypot(point.x - x, point.y - y) < 68)) continue;
+            spot = { x: x, y: y };
+            break;
+        }
+        if (!spot) {
+            for (let n = 0; n < 40; n++) {
+                const x = minX + Math.random() * (maxX - minX);
+                const y = passageOpenY(built, x, radius);
+                if (y === null || passagePointBlocked(obstacles, x, y, radius)) continue;
+                spot = { x: x, y: y };
+                break;
+            }
+        }
+        if (!spot) return;
+        item.x = spot.x;
+        item.y = spot.y;
+        taken.push(spot);
+    }
+    (built.fruits || []).forEach((fruit) => placePickup(fruit, fruit.big ? 22 : 14));
+    (built.stars || []).forEach((star) => placePickup(star, 16));
+}
+
 function initPassage(stageDef) {
     const theme = passageThemes[stageDef.theme] || passageThemes.forest;
     const layout = passageLayoutForDifficulty(stageDef.layout);
     const built = layout
         ? buildPassageFromLayout(layout)
         : buildPassageFromChunks(stageDef.chunks || ['open'], stageDef.enemySpeed);
+    scatterPassageActors(built);
     const fruitEmojis = theme.fruits;
     passageState = {
         scroll: 0,
@@ -897,6 +1138,7 @@ function initPassage(stageDef) {
         slow: 0
     };
     timeLeft = stageDef.time || (layout && layout.time) || 28;
+    passageState.timeTotal = timeLeft;
     player.x = 140;
     player.y = canvas.height / 2;
     player.speedBoost = 0;
@@ -1181,7 +1423,8 @@ function updatePassageFrogs() {
     for (const frog of passageState.frogs) {
         const pace = 0.04 / Math.max(0.02, frog.speed);
         const restFrames = Math.round(58 * pace);
-        const hopFrames = Math.max(16, Math.round(28 * pace));
+        const hopHeight = Math.max(42, (frog.hop || 18) * 2.2);
+        const hopFrames = Math.max(24, Math.round(40 * pace));
         const ground = passageFrogGround(frog);
         const left = frog.x - frog.range;
         const right = frog.x + frog.range;
@@ -1210,7 +1453,7 @@ function updatePassageFrogs() {
                 frog.squash = 0.68;
             } else {
                 frog.cx = frog.jumpFrom + (frog.landX - frog.jumpFrom) * t;
-                frog.cy = ground - Math.sin(t * Math.PI) * frog.hop;
+                frog.cy = ground - Math.sin(t * Math.PI) * hopHeight;
                 frog.squash = 1.08;
             }
         }
@@ -2056,47 +2299,95 @@ function drawPassageFrog(frog, context) {
     drawCtx.save();
     drawCtx.translate(frog.cx, frog.cy);
     drawCtx.scale(frog.facing || 1, squash);
+    drawCtx.rotate(jumping ? -0.55 : 0.08);
 
-    const legY = jumping ? -radius * 0.02 : radius * 0.2;
-    drawCtx.fillStyle = '#196f3d';
-    drawCtx.beginPath();
-    drawCtx.ellipse(-radius * 0.62, legY, radius * 0.42, radius * 0.26, jumping ? -1.15 : -0.45, 0, Math.PI * 2);
-    drawCtx.fill();
-    drawCtx.beginPath();
-    drawCtx.ellipse(radius * 0.55, jumping ? radius * 0.02 : radius * 0.22, radius * 0.34, radius * 0.2, jumping ? 0.9 : 0.35, 0, Math.PI * 2);
-    drawCtx.fill();
-
-    drawCtx.fillStyle = frog.color || '#1e8449';
-    drawCtx.beginPath();
-    drawCtx.ellipse(0, 0, radius, radius * 0.68, 0, 0, Math.PI * 2);
-    drawCtx.fill();
-
-    drawCtx.fillStyle = frog.belly || '#7dcea0';
-    drawCtx.beginPath();
-    drawCtx.ellipse(radius * 0.12, radius * 0.12, radius * 0.46, radius * 0.34, 0, 0, Math.PI * 2);
-    drawCtx.fill();
-
-    drawCtx.fillStyle = '#ffffff';
-    drawCtx.beginPath();
-    drawCtx.arc(radius * 0.22, -radius * 0.52, radius * 0.28, 0, Math.PI * 2);
-    drawCtx.arc(-radius * 0.16, -radius * 0.5, radius * 0.24, 0, Math.PI * 2);
-    drawCtx.fill();
-    drawCtx.fillStyle = '#e74c3c';
-    drawCtx.beginPath();
-    drawCtx.arc(radius * 0.3, -radius * 0.5, radius * 0.12, 0, Math.PI * 2);
-    drawCtx.arc(-radius * 0.08, -radius * 0.48, radius * 0.1, 0, Math.PI * 2);
-    drawCtx.fill();
-    drawCtx.fillStyle = '#7b241c';
-    drawCtx.beginPath();
-    drawCtx.arc(radius * 0.33, -radius * 0.48, radius * 0.05, 0, Math.PI * 2);
-    drawCtx.arc(-radius * 0.05, -radius * 0.46, radius * 0.04, 0, Math.PI * 2);
-    drawCtx.fill();
-
-    drawCtx.strokeStyle = '#145a32';
-    drawCtx.lineWidth = Math.max(2, radius * 0.08);
+    const skin = frog.color || '#1e8449';
+    const belly = frog.belly || '#d5f5e3';
+    const dark = '#0e4d2c';
+    drawCtx.fillStyle = dark;
+    drawCtx.strokeStyle = dark;
+    drawCtx.lineWidth = Math.max(3, radius * 0.16);
     drawCtx.lineCap = 'round';
+    drawCtx.lineJoin = 'round';
+
+    function hindLeg(side, folded) {
+        drawCtx.beginPath();
+        if (folded) {
+            drawCtx.moveTo(-radius * 0.15, radius * 0.15);
+            drawCtx.quadraticCurveTo(-radius * (0.85 + side * 0.15), radius * 0.55, -radius * 0.35, radius * 0.72);
+            drawCtx.quadraticCurveTo(-radius * 0.05, radius * 0.42, -radius * 0.05, radius * 0.22);
+        } else {
+            drawCtx.moveTo(-radius * 0.1, radius * 0.05);
+            drawCtx.quadraticCurveTo(-radius * 0.95, radius * 0.35, -radius * 1.25, radius * 0.55);
+        }
+        drawCtx.stroke();
+        const footX = folded ? -radius * 0.35 : -radius * 1.25;
+        const footY = folded ? radius * 0.72 : radius * 0.55;
+        drawCtx.beginPath();
+        drawCtx.moveTo(footX, footY);
+        drawCtx.lineTo(footX - radius * 0.22, footY + radius * 0.08);
+        drawCtx.moveTo(footX, footY);
+        drawCtx.lineTo(footX - radius * 0.08, footY + radius * 0.2);
+        drawCtx.moveTo(footX, footY);
+        drawCtx.lineTo(footX + radius * 0.12, footY + radius * 0.16);
+        drawCtx.stroke();
+    }
+    hindLeg(0, !jumping);
+    hindLeg(1, !jumping);
+
+    drawCtx.fillStyle = skin;
     drawCtx.beginPath();
-    drawCtx.arc(radius * 0.18, radius * 0.02, radius * 0.26, 0.25, Math.PI - 0.5);
+    drawCtx.ellipse(0, radius * 0.08, radius * 0.92, radius * 0.62, 0, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.fillStyle = belly;
+    drawCtx.beginPath();
+    drawCtx.ellipse(radius * 0.08, radius * 0.22, radius * 0.48, radius * 0.32, 0, 0, Math.PI * 2);
+    drawCtx.fill();
+
+    drawCtx.fillStyle = skin;
+    drawCtx.beginPath();
+    drawCtx.ellipse(radius * 0.42, -radius * 0.08, radius * 0.46, radius * 0.38, 0.2, 0, Math.PI * 2);
+    drawCtx.fill();
+
+    function eye(ex, ey, s) {
+        drawCtx.fillStyle = skin;
+        drawCtx.beginPath();
+        drawCtx.arc(ex, ey, s * 1.15, 0, Math.PI * 2);
+        drawCtx.fill();
+        drawCtx.fillStyle = '#f4f6f7';
+        drawCtx.beginPath();
+        drawCtx.arc(ex, ey, s, 0, Math.PI * 2);
+        drawCtx.fill();
+        drawCtx.fillStyle = '#1a1a1a';
+        drawCtx.beginPath();
+        drawCtx.ellipse(ex + s * 0.15, ey, s * 0.28, s * 0.55, 0, 0, Math.PI * 2);
+        drawCtx.fill();
+        drawCtx.fillStyle = '#ffffff';
+        drawCtx.beginPath();
+        drawCtx.arc(ex - s * 0.15, ey - s * 0.25, s * 0.18, 0, Math.PI * 2);
+        drawCtx.fill();
+    }
+    eye(radius * 0.22, -radius * 0.48, radius * 0.24);
+    eye(radius * 0.62, -radius * 0.42, radius * 0.2);
+
+    drawCtx.fillStyle = dark;
+    drawCtx.beginPath();
+    drawCtx.arc(radius * 0.78, -radius * 0.02, radius * 0.045, 0, Math.PI * 2);
+    drawCtx.arc(radius * 0.9, radius * 0.06, radius * 0.04, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.strokeStyle = '#145a32';
+    drawCtx.lineWidth = Math.max(2, radius * 0.07);
+    drawCtx.beginPath();
+    drawCtx.arc(radius * 0.35, radius * 0.08, radius * 0.28, 0.15, Math.PI - 0.35);
+    drawCtx.stroke();
+
+    drawCtx.strokeStyle = dark;
+    drawCtx.lineWidth = Math.max(2, radius * 0.1);
+    drawCtx.beginPath();
+    drawCtx.moveTo(radius * 0.55, radius * 0.22);
+    drawCtx.quadraticCurveTo(radius * 1.05, radius * 0.55, radius * 1.2, radius * 0.32);
+    drawCtx.moveTo(radius * 0.28, radius * 0.38);
+    drawCtx.quadraticCurveTo(radius * 0.75, radius * 0.72, radius * 0.95, radius * 0.48);
     drawCtx.stroke();
     drawCtx.restore();
 }
@@ -2608,7 +2899,7 @@ function drawPassageFish(fish) {
 
     ctx.save();
     ctx.translate(fish.cx, fish.cy);
-    ctx.rotate(Math.cos(fish.phase) * 0.9);
+    ctx.rotate(-Math.cos(fish.phase) * 1.15);
     ctx.fillStyle = fish.color || '#e67e22';
     ctx.beginPath();
     ctx.ellipse(0, 0, fish.radius * 1.35, fish.radius * 0.7, 0, 0, Math.PI * 2);
@@ -2639,80 +2930,256 @@ function drawPassageFish(fish) {
     ctx.restore();
 }
 
+function drawHudRound(x, y, w, h, r) {
+    const radius = Math.max(0, Math.min(r, h / 2, w / 2));
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(x, y, w, h, radius);
+        return;
+    }
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+}
+
+function drawHudBolt(x, y, s) {
+    ctx.beginPath();
+    ctx.moveTo(x + s * 0.55, y);
+    ctx.lineTo(x + s * 0.18, y + s * 0.52);
+    ctx.lineTo(x + s * 0.46, y + s * 0.52);
+    ctx.lineTo(x + s * 0.32, y + s);
+    ctx.lineTo(x + s * 0.88, y + s * 0.36);
+    ctx.lineTo(x + s * 0.54, y + s * 0.36);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawHudTimer(centerX, centerY, seconds) {
+    const urgent = seconds <= 10;
+    const label = `${seconds}s`;
+    ctx.save();
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = Math.max(68, ctx.measureText(label).width + 24);
+    const h = 30;
+    const x = centerX - w / 2;
+    const y = centerY - h / 2;
+    const pulse = urgent ? 0.55 + 0.45 * Math.abs(Math.sin(Date.now() / 160)) : 1;
+    ctx.fillStyle = urgent ? 'rgba(110, 22, 16, 0.88)' : 'rgba(8, 12, 20, 0.62)';
+    drawHudRound(x, y, w, h, 9);
+    ctx.fill();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = urgent ? '#ff6b6b' : 'rgba(255, 255, 255, 0.38)';
+    ctx.lineWidth = urgent ? 2.5 : 1.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = urgent ? '#ffe4e0' : '#ffffff';
+    ctx.fillText(label, centerX, centerY + 1);
+    ctx.restore();
+}
+
+function drawPowerMeter(x, y, w, h, ratio, mode, label, boltSide) {
+    const amount = Math.max(0, Math.min(1, ratio || 0));
+    const ready = mode === 'ready' || mode === 'urgent';
+    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 130);
+    ctx.save();
+    if (ready) {
+        ctx.globalAlpha = 0.28 + pulse * 0.5;
+        ctx.strokeStyle = mode === 'urgent' ? '#ff7675' : '#ffe56a';
+        ctx.lineWidth = 3;
+        const pad = 3 + pulse * 4;
+        drawHudRound(x - pad, y - pad, w + pad * 2, h + pad * 2, h);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = 'rgba(6, 10, 16, 0.78)';
+    drawHudRound(x, y, w, h, h / 2);
+    ctx.fill();
+    ctx.strokeStyle = ready ? (mode === 'urgent' ? '#ffb4b0' : '#fff1a8') : 'rgba(255, 255, 255, 0.32)';
+    ctx.lineWidth = ready ? 2 : 1.5;
+    ctx.stroke();
+
+    const inset = 3;
+    const fillW = (w - inset * 2) * amount;
+    ctx.save();
+    drawHudRound(x + inset, y + inset, w - inset * 2, h - inset * 2, h / 2);
+    ctx.clip();
+    if (mode === 'active') ctx.fillStyle = '#e67e22';
+    else if (mode === 'urgent') ctx.fillStyle = '#e74c3c';
+    else if (mode === 'ready') ctx.fillStyle = '#f1c40f';
+    else if (mode === 'progress') ctx.fillStyle = '#2ecc71';
+    else ctx.fillStyle = '#3498db';
+    ctx.fillRect(x + inset, y + inset, fillW, h - inset * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.38)';
+    ctx.fillRect(x + inset, y + inset, fillW, (h - inset * 2) * 0.42);
+    if (amount > 0.04) {
+        const travel = fillW + 18;
+        const sweep = ((Date.now() % (ready ? 700 : 1200)) / (ready ? 700 : 1200)) * travel - 8;
+        ctx.fillStyle = ready ? 'rgba(255, 255, 255, 0.72)' : 'rgba(255, 255, 255, 0.4)';
+        ctx.fillRect(x + inset + sweep, y + inset, ready ? 14 : 8, h - inset * 2);
+    }
+    ctx.restore();
+
+    if (ready && label) {
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = mode === 'urgent' ? '#fff5f4' : '#3a2a08';
+        ctx.fillText(label, x + w / 2, y + h / 2 + 0.5);
+        ctx.globalAlpha = 0.45 + pulse * 0.55;
+        ctx.fillStyle = mode === 'urgent' ? '#ffd0cc' : '#ffe56a';
+        const boltX = boltSide === 'left' ? x - (h + 8) : x + w + 6;
+        drawHudBolt(boltX, y - 1, h + 2);
+    }
+    ctx.restore();
+}
+
+function drawBonusCatchIcon(x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (currentArea === 7) {
+        ctx.fillStyle = '#87CEEB';
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (currentArea === 2) {
+        ctx.fillStyle = '#8e44ad';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 9, 5, 0.4, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (currentArea === 3) {
+        ctx.fillStyle = '#16a085';
+        ctx.beginPath();
+        ctx.ellipse(-2, 0, 9, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(6, 0);
+        ctx.lineTo(13, -4);
+        ctx.lineTo(13, 4);
+        ctx.closePath();
+        ctx.fill();
+    } else if (currentArea === 4) {
+        ctx.fillStyle = '#27ae60';
+        ctx.fillRect(-3, -9, 6, 18);
+        ctx.fillRect(-8, -2, 5, 4);
+        ctx.fillRect(3, 1, 5, 4);
+    } else if (currentArea === 5) {
+        ctx.fillStyle = '#f5cba7';
+        drawHudRound(-8, -5, 16, 11, 4);
+        ctx.fill();
+    } else {
+        ctx.fillStyle = '#E8B4B8';
+        ctx.beginPath();
+        ctx.ellipse(-7, 2, 5, 3.4, 0.25, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 5, 3.4, -0.05, 0, Math.PI * 2);
+        ctx.ellipse(6, 1, 5, 3.4, 0.15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#D4A5A5';
+        ctx.beginPath();
+        ctx.arc(11, -1, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#2c1810';
+        ctx.beginPath();
+        ctx.arc(10, -2, 1, 0, Math.PI * 2);
+        ctx.arc(13, -2, 1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
+function drawBonusScoreboard() {
+    const config = (typeof substageConfig !== 'undefined' && substageConfig[currentSubstage]) || {};
+    const goal = config.goalScore || 25;
+    const ratio = Math.max(0, Math.min(1, playerScore / goal));
+    const ready = ratio >= 1;
+    const label = `${playerScore}/${goal}`;
+    const padding = 16;
+    ctx.save();
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const plateW = Math.max(118, ctx.measureText(label).width + 52);
+    ctx.fillStyle = 'rgba(8, 12, 20, 0.62)';
+    drawHudRound(padding, 14, plateW, 32, 9);
+    ctx.fill();
+    ctx.strokeStyle = ready ? '#ffe56a' : 'rgba(255, 255, 255, 0.28)';
+    ctx.lineWidth = ready ? 2 : 1.5;
+    ctx.stroke();
+    drawBonusCatchIcon(padding + 20, 30);
+    const pop = playerScoreAnimation > 0 ? 1 + (playerScoreAnimation / 30) * 0.16 : 1;
+    ctx.save();
+    ctx.translate(padding + 40, 30);
+    ctx.scale(pop, pop);
+    ctx.fillStyle = ready ? '#ffe56a' : '#ffffff';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+    drawPowerMeter(padding, 52, 180, 16, ratio, ready ? 'ready' : 'progress', ready ? 'META' : '');
+    ctx.restore();
+}
+
 function drawPassageHUD() {
     if (!passageState) return;
     const padding = 16;
     ctx.save();
+    ctx.shadowBlur = 0;
     ctx.font = 'bold 22px Arial';
     ctx.textBaseline = 'middle';
-    ctx.shadowBlur = 0;
+    ctx.textAlign = 'left';
+    const scoreLabel = `${playerScore}/${passageState.totalFruits}`;
+    const scoreW = Math.max(92, ctx.measureText(scoreLabel).width + 36);
+    ctx.fillStyle = 'rgba(8, 12, 20, 0.62)';
+    drawHudRound(padding, 14, scoreW, 30, 9);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
     ctx.fillStyle = '#e74c3c';
     ctx.beginPath();
-    ctx.arc(padding + 8, 32, 8, 0, Math.PI * 2);
+    ctx.arc(padding + 16, 29, 7, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${playerScore}/${passageState.totalFruits}`, padding + 22, 32);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = timeLeft <= 10 ? '#ff6b6b' : '#ffffff';
-    ctx.fillText(`${timeLeft}s`, canvas.width / 2, 32);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillText(scoreLabel, padding + 30, 30);
 
-    const boostRatio = Math.max(0, Math.min(1, passageState.boostCharge / passageState.boostNeeded));
-    const boostFull = boostRatio >= 1 && player.speedBoost <= 0;
-    const boostWidth = player.speedBoost > 0 ? 140 * (player.speedBoost / 180) : 140 * boostRatio;
-    if (boostFull) {
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = '#f1c40f';
-        ctx.fillRect(padding, 48, 140, 12);
-        ctx.font = 'bold 18px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillStyle = '#fff8d0';
-        ctx.fillText('SHIFT', padding + 150, 56);
-    } else {
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-        ctx.fillRect(padding, 52, 140, 10);
-        ctx.fillStyle = player.speedBoost > 0 ? '#f39c12' : '#3498db';
-        ctx.fillRect(padding, 52, boostWidth, 10);
-    }
+    drawHudTimer(canvas.width / 2, 29, timeLeft);
 
     const heartsLeft = PASSAGE_MAX_HITS - passageState.hits;
     for (let i = 0; i < PASSAGE_MAX_HITS; i++) {
         const hx = canvas.width - padding - (PASSAGE_MAX_HITS - 1 - i) * 22;
         ctx.fillStyle = i < heartsLeft ? '#e74c3c' : '#2c2c2c';
         ctx.beginPath();
-        ctx.arc(hx - 5, 30, 6, 0, Math.PI * 2);
-        ctx.arc(hx + 5, 30, 6, 0, Math.PI * 2);
+        ctx.arc(hx - 5, 27, 6, 0, Math.PI * 2);
+        ctx.arc(hx + 5, 27, 6, 0, Math.PI * 2);
         ctx.fill();
         ctx.beginPath();
-        ctx.moveTo(hx - 10, 32);
-        ctx.lineTo(hx, 42);
-        ctx.lineTo(hx + 10, 32);
+        ctx.moveTo(hx - 10, 29);
+        ctx.lineTo(hx, 39);
+        ctx.lineTo(hx + 10, 29);
         ctx.closePath();
         ctx.fill();
     }
+
+    const boostRatio = Math.max(0, Math.min(1, passageState.boostCharge / passageState.boostNeeded));
+    const boostFull = boostRatio >= 1 && player.speedBoost <= 0;
+    const boostMode = player.speedBoost > 0 ? 'active' : boostFull ? 'ready' : 'charge';
+    const boostAmount = player.speedBoost > 0 ? player.speedBoost / 180 : boostRatio;
+    drawPowerMeter(padding, 50, 168, 18, boostAmount, boostMode, boostFull ? 'TURBO' : '');
+
     if (passageStarActive()) {
         const left = Math.max(1, Math.ceil((passageState.starUntil - performance.now()) / 1000));
-        ctx.font = 'bold 22px Arial';
+        ctx.font = 'bold 18px Arial';
         ctx.fillStyle = '#f1c40f';
         ctx.beginPath();
-        ctx.ellipse(canvas.width - padding - 46, 62, 10, 6, 0, 0, Math.PI * 2);
+        ctx.ellipse(canvas.width - padding - 42, 58, 10, 6, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'right';
-        ctx.fillText(`${left}s`, canvas.width - padding, 62);
+        ctx.fillText(`${left}s`, canvas.width - padding, 58);
     }
-    ctx.shadowBlur = 0;
 
-    const progress = Math.max(0, Math.min(1, (player.x + passageState.scroll) / passageState.length));
-    const barX = padding;
-    const barY = canvas.height - 26;
-    const barW = canvas.width - padding * 2;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    ctx.fillRect(barX, barY, barW, 10);
-    ctx.fillStyle = '#2ecc71';
-    ctx.fillRect(barX, barY, barW * progress, 10);
     ctx.restore();
 }
 
@@ -3395,7 +3862,18 @@ function spawnWorm() {
         maxTimeVisible: isSnake ? 90 + Math.random() * 60 : 60 + Math.random() * 60, // Cobras ficam mais tempo
         retreating: false,
         eaten: false,
-        isSnake: isSnake // Marca se é cobra ou minhoca
+        isSnake: isSnake, // Marca se é cobra ou minhoca
+        launched: !isSnake && Math.random() < 0.42,
+        airborne: false,
+        airX: hole.x,
+        airY: hole.y - 10,
+        vx: 0,
+        vy: 0,
+        boost: 0,
+        thrust: 0,
+        jet: -Math.PI / 2,
+        puff: 0,
+        puffMax: 1
     });
 }
 
@@ -3415,6 +3893,53 @@ function updateWorms() {
 
         if (worm.eaten) {
             worms.splice(i, 1);
+            continue;
+        }
+
+        if (worm.puff > 0) worm.puff -= 1;
+
+        if (worm.airborne) {
+            if (worm.boost > 0) {
+                worm.boost -= 1;
+                worm.vy -= worm.thrust;
+                worm.vx += Math.sin(worm.boost * 0.9) * 0.05;
+                worm.vy += 0.08;
+            } else {
+                worm.vy += 0.17;
+            }
+            worm.airX += worm.vx;
+            worm.airY += worm.vy;
+            if (worm.airX < 24) {
+                worm.airX = 24;
+                worm.vx = Math.abs(worm.vx);
+            } else if (worm.airX > canvas.width - 24) {
+                worm.airX = canvas.width - 24;
+                worm.vx = -Math.abs(worm.vx);
+            }
+            if (worm.airY >= worm.y - 6) {
+                worm.airborne = false;
+                worm.retreating = true;
+                worm.emergeProgress = 0.45;
+            }
+            continue;
+        }
+
+        if (!worm.retreating && worm.launched) {
+            if (worm.emergeProgress < 0.55) {
+                worm.emergeProgress += 0.09;
+            } else {
+                worm.airborne = true;
+                worm.emergeProgress = 1;
+                worm.airX = worm.x;
+                worm.airY = worm.y - 12;
+                worm.vx = (Math.random() - 0.5) * 2.2;
+                worm.vy = -2.4;
+                worm.thrust = 0.3 + Math.random() * 0.24;
+                worm.boost = 14 + Math.floor(Math.random() * 8);
+                worm.jet = Math.atan2(worm.vy - worm.thrust * 4, worm.vx || 0.001);
+                worm.puffMax = worm.boost + 12;
+                worm.puff = worm.puffMax;
+            }
             continue;
         }
 
@@ -3449,10 +3974,11 @@ function checkWormCollisions() {
 
     for (let i = worms.length - 1; i >= 0; i--) {
         const worm = worms[i];
-        if (worm.eaten || worm.emergeProgress < 0.5) continue;
+        if (worm.eaten || (!worm.airborne && worm.emergeProgress < 0.5)) continue;
 
-        const wormY = worm.y - 20 * worm.emergeProgress;
-        const dist = Math.hypot(player.x - worm.x, player.y - wormY);
+        const wormX = worm.airborne ? worm.airX : worm.x;
+        const wormY = worm.airborne ? worm.airY : worm.y - 20 * worm.emergeProgress;
+        const dist = Math.hypot(player.x - wormX, player.y - wormY);
         if (dist < player.size + 20) {
             if (worm.isSnake) {
                 // Player tocou na COBRA - stunnar!
@@ -3464,7 +3990,7 @@ function checkWormCollisions() {
                     playSound('stun');
 
                     // Criar efeito visual de stun
-                    createSnakeStunEffect(worm.x, wormY);
+                createSnakeStunEffect(wormX, wormY);
                 }
 
                 // Cobra desaparece após atacar
@@ -3494,7 +4020,7 @@ function checkWormCollisions() {
                 player.eatEmoji = '🪱';
 
                 // Criar efeito visual de captura
-                createWormEatEffect(worm.x, wormY);
+                createWormEatEffect(wormX, wormY);
             }
         }
     }
@@ -4559,9 +5085,9 @@ function updateTropicalFish() {
 
         // Rotação baseada na direção do movimento
         if (fish.vy < 0) {
-            fish.rotation = Math.PI / 2; // Olhando para cima ao subir
+            fish.rotation = -Math.PI / 2;
         } else if (fish.vy > 0) {
-            fish.rotation = -Math.PI / 2; // Olhando para baixo ao cair
+            fish.rotation = Math.PI / 2;
         }
 
         // Se caiu de volta na água, desaparece
@@ -5412,6 +5938,33 @@ function drawFrozenFruits() {
 }
 
 // Desenhar buracos e minhocas
+function drawWormAirJet(worm) {
+    if (!worm.puff) return;
+    const life = worm.puff / Math.max(1, worm.puffMax || worm.puff);
+    const angle = worm.jet || -Math.PI / 2;
+    const reach = 24 + life * 120;
+    const side = angle + Math.PI / 2;
+    ctx.save();
+    ctx.fillStyle = 'rgba(232, 220, 196, 0.9)';
+    ctx.beginPath();
+    ctx.ellipse(worm.x, worm.y - 4, 16 + life * 10, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const flow = (Date.now() / 50) % 1;
+    for (let i = 0; i < 8; i++) {
+        const t = (i / 8 + flow * 0.35) % 1;
+        const along = 8 + t * reach;
+        const wobble = Math.sin(Date.now() / 45 + i * 1.3) * (4 + t * 7);
+        const x = worm.x + Math.cos(angle) * along + Math.cos(side) * wobble;
+        const y = worm.y + Math.sin(angle) * along + Math.sin(side) * wobble;
+        ctx.globalAlpha = life * (1 - t) * 0.8;
+        ctx.fillStyle = i % 3 === 0 ? '#c4b092' : '#f7f1e6';
+        ctx.beginPath();
+        ctx.ellipse(x, y, 3 + (1 - t) * 6, 7 + t * 10, angle + Math.PI / 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
 function drawWormHoles() {
     if (!isBonusStage) return;
 
@@ -5439,9 +5992,37 @@ function drawWormHoles() {
         ctx.restore();
     });
 
-    // Desenhar minhocas e cobras
     worms.forEach(worm => {
-        if (worm.eaten) return;
+        if (worm.puff > 0) drawWormAirJet(worm);
+        if (worm.eaten || !worm.airborne) return;
+
+        ctx.save();
+        ctx.translate(worm.airX, worm.airY);
+        ctx.rotate(Math.atan2(worm.vy, worm.vx) + Math.PI / 2);
+        const stretch = worm.boost > 0 ? 1.35 : 1;
+        ctx.scale(1 / Math.sqrt(stretch), stretch);
+        const wiggle = Math.sin(Date.now() / (worm.boost > 0 ? 45 : 90));
+        ctx.fillStyle = '#E8B4B8';
+        for (let j = 0; j < 4; j++) {
+            ctx.beginPath();
+            ctx.ellipse(wiggle * (1 - j * 0.2), j * 8, 8, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.fillStyle = '#D4A5A5';
+        ctx.beginPath();
+        ctx.arc(wiggle, -6, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#2c1810';
+        ctx.beginPath();
+        ctx.arc(wiggle - 4, -8, 1.8, 0, Math.PI * 2);
+        ctx.arc(wiggle + 4, -8, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+
+    // Desenhar minhocas e cobras que ficam no buraco
+    worms.forEach(worm => {
+        if (worm.eaten || worm.airborne) return;
 
         ctx.save();
         ctx.translate(worm.x, worm.y);
@@ -16903,46 +17484,8 @@ function drawGameUI() {
     ctx.textBaseline = 'middle'; // Mudado para middle para centralizar verticalmente
 
     if (isBonusStage) {
-        // UI da fase bônus - Player esquerda, Tempo centro
-        ctx.textAlign = 'left';
-        let playerText;
-        let textColor;
-        if (currentArea === 7) {
-            playerText = `❄️ Frutas: ${playerScore} / 25`;
-            textColor = '#87CEEB';
-        } else if (currentArea === 2) {
-            playerText = `🦟 Insetos: ${playerScore} / 25`;
-            textColor = '#8e44ad';
-        } else if (currentArea === 3) {
-            playerText = `🐟 Peixes: ${playerScore} / 25`;
-            textColor = '#16a085';
-        } else if (currentArea === 4) {
-            playerText = `🌵 Frutos: ${playerScore} / 25`;
-            textColor = '#f39c12';
-        } else if (currentArea === 5) {
-            playerText = `🍞 Pães: ${playerScore} / 25`;
-            textColor = '#34495e';
-        } else {
-            playerText = `🪱 Minhocas: ${playerScore} / 25`;
-            textColor = '#f39c12';
-        }
-        ctx.fillStyle = textColor;
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 4;
-        ctx.fillText(playerText, padding, topY + boxHeight / 2);
-        ctx.shadowBlur = 0;
-
-        // Timer - Centro (apenas número, cor que se destaca do céu)
-        ctx.textAlign = 'center';
-        const timerText = `${timeLeft}s`;
-
-        // Cor amarela/laranja para se destacar do céu azul
-        ctx.fillStyle = timeLeft <= 10 ? '#ff4444' : '#ffaa00';
-        // Sombra para melhor visibilidade
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 6;
-        ctx.fillText(timerText, canvas.width / 2, topY + boxHeight / 2);
-        ctx.shadowBlur = 0;
+        drawBonusScoreboard();
+        drawHudTimer(canvas.width / 2, 30, timeLeft);
     } else {
         // Fase normal
         // Player - Superior esquerdo
@@ -16978,17 +17521,7 @@ function drawGameUI() {
         ctx.shadowBlur = 0;
         ctx.restore();
 
-        // Timer - Centro (apenas número, cor que se destaca do céu)
-        ctx.textAlign = 'center';
-        const timerText = `${timeLeft}s`;
-
-        // Cor amarela/laranja para se destacar do céu azul
-        ctx.fillStyle = timeLeft <= 10 ? '#ff4444' : '#ffaa00';
-        // Sombra para melhor visibilidade
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 6;
-        ctx.fillText(timerText, canvas.width / 2, topY + boxHeight / 2);
-        ctx.shadowBlur = 0;
+        drawHudTimer(canvas.width / 2, topY + boxHeight / 2, timeLeft);
 
         // CPU - Superior direito
         ctx.textAlign = 'right';
@@ -17025,65 +17558,28 @@ function drawGameUI() {
         ctx.textAlign = 'right'; // Restaurar alinhamento
 
         // Barra de Stun do Player - Abaixo do placar
-        const stunBarSpacing = 8; // Espaço entre placar e barra
-        const stunBarWidth = playerWidth * 0.8; // 80% da largura do placar
-        const stunBarHeight = 14; // Altura menor e proporcional
+        const stunBarSpacing = 8;
+        const stunBarWidth = Math.max(150, playerWidth * 0.8);
+        const stunBarHeight = 18;
         const stunBarX = padding;
         const stunBarY = topY + boxHeight + stunBarSpacing;
-
-        // Fundo da barra
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.fillRect(stunBarX, stunBarY, stunBarWidth, stunBarHeight);
-
-        // Preenchimento da barra
-        let playerStunProgress = player.stunCharge / player.stunChargeMax;
-        // Se o stun está pronto, a barra regride conforme o timer
-        if (!isBossStage() && player.stunCharge >= player.stunChargeMax && player.stunChargeTimer > 0) {
-            // Timer máximo é 300 frames (5 segundos), calcular progresso regressivo
-            const maxTimer = 300;
-            playerStunProgress = player.stunChargeTimer / maxTimer; // Regride de 1.0 para 0.0
+        const stunReady = player.stunCharge >= player.stunChargeMax;
+        let stunAmount = player.stunCharge / player.stunChargeMax;
+        let stunMode = 'charge';
+        if (stunReady && !isBossStage() && player.stunChargeTimer > 0) {
+            stunAmount = player.stunChargeTimer / 300;
+            stunMode = Math.ceil(player.stunChargeTimer / 60) <= 2 ? 'urgent' : 'ready';
+        } else if (stunReady) {
+            stunAmount = 1;
+            stunMode = 'ready';
         }
-        ctx.fillStyle = player.stunCharge >= player.stunChargeMax ? '#f39c12' : '#9b59b6';
-        ctx.fillRect(stunBarX, stunBarY, stunBarWidth * playerStunProgress, stunBarHeight);
-
-        // Borda da barra
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(stunBarX, stunBarY, stunBarWidth, stunBarHeight);
-
-        // Texto do stun (menor e proporcional)
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle'; // Centralizar verticalmente
-        ctx.font = `bold ${fontSize * 0.5}px Arial`;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        // Sombra para melhor visibilidade
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 4;
-        if (player.stunCharge >= player.stunChargeMax) {
-            // Mostrar timer quando stun está pronto. No chefe, a carga do jogador fica guardada.
-            const secondsLeft = Math.ceil(player.stunChargeTimer / 60);
-            ctx.fillText(isBossStage() ? 'SHIFT' : `💥 ${secondsLeft}s`, stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight / 2);
-            ctx.shadowBlur = 0;
-
-            // Aviso quando tempo está acabando
-            if (!isBossStage() && secondsLeft <= 2) {
-                ctx.fillStyle = '#e74c3c';
-                ctx.font = `bold ${fontSize * 0.6}px Arial`;
-                ctx.shadowBlur = 4;
-                ctx.fillText('⚠️', stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight + 12);
-                ctx.shadowBlur = 0;
-                ctx.font = `bold ${fontSize * 0.5}px Arial`;
-            } else if (!isBossStage()) {
-                ctx.fillStyle = '#2ecc71';
-                ctx.font = `bold ${fontSize * 0.6}px Arial`;
-                ctx.shadowBlur = 4;
-                ctx.fillText('⚡', stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight + 12);
-                ctx.shadowBlur = 0;
-                ctx.font = `bold ${fontSize * 0.5}px Arial`;
-            }
-        } else {
-            ctx.fillText(`💥 ${player.stunCharge}/${player.stunChargeMax}`, stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight / 2);
-            ctx.shadowBlur = 0;
+        drawPowerMeter(stunBarX, stunBarY, stunBarWidth, stunBarHeight, stunAmount, stunMode, stunReady ? 'PRONTO' : '');
+        if (!stunReady) {
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.font = `bold ${fontSize * 0.45}px Arial`;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`${player.stunCharge}/${player.stunChargeMax}`, stunBarX + stunBarWidth + 8, stunBarY + stunBarHeight / 2);
         }
 
         // Desenhar estrelas abaixo do contador de stun do player (apenas em fases normais)
@@ -17144,64 +17640,27 @@ function drawGameUI() {
         }
 
         // Barra de Stun da CPU - Abaixo do placar da CPU
-        const cpuStunBarWidth = cpuWidth * 0.8; // 80% da largura do placar
-        const cpuStunBarHeight = 14; // Mesma altura
-        const cpuStunBarX = canvas.width - padding - cpuWidth;
+        const cpuStunBarWidth = Math.max(150, cpuWidth * 0.8);
+        const cpuStunBarHeight = 18;
+        const cpuStunBarX = canvas.width - padding - cpuStunBarWidth;
         const cpuStunBarY = topY + boxHeight + stunBarSpacing;
-
-        // Fundo da barra
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.fillRect(cpuStunBarX, cpuStunBarY, cpuStunBarWidth, cpuStunBarHeight);
-
-        // Preenchimento da barra
-        let cpuStunProgress = cpu.stunCharge / cpu.stunChargeMax;
-        // Se o stun está pronto, a barra regride conforme o timer
-        if (cpu.stunCharge >= cpu.stunChargeMax && cpu.stunChargeTimer > 0) {
-            // Timer máximo é 300 frames (5 segundos), calcular progresso regressivo
-            const maxTimer = 300;
-            cpuStunProgress = cpu.stunChargeTimer / maxTimer; // Regride de 1.0 para 0.0
+        const cpuReady = cpu.stunCharge >= cpu.stunChargeMax;
+        let cpuAmount = cpu.stunCharge / cpu.stunChargeMax;
+        let cpuMode = 'charge';
+        if (cpuReady && cpu.stunChargeTimer > 0) {
+            cpuAmount = cpu.stunChargeTimer / 300;
+            cpuMode = Math.ceil(cpu.stunChargeTimer / 60) <= 2 ? 'urgent' : 'ready';
+        } else if (cpuReady) {
+            cpuAmount = 1;
+            cpuMode = 'ready';
         }
-        ctx.fillStyle = cpu.stunCharge >= cpu.stunChargeMax ? '#f39c12' : '#9b59b6';
-        ctx.fillRect(cpuStunBarX, cpuStunBarY, cpuStunBarWidth * cpuStunProgress, cpuStunBarHeight);
-
-        // Borda da barra
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(cpuStunBarX, cpuStunBarY, cpuStunBarWidth, cpuStunBarHeight);
-
-        // Texto do stun da CPU (menor e proporcional)
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle'; // Centralizar verticalmente
-        ctx.font = `bold ${fontSize * 0.5}px Arial`;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        // Sombra para melhor visibilidade
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 4;
-        if (cpu.stunCharge >= cpu.stunChargeMax) {
-            // Mostrar timer quando stun está pronto
-            const cpuSecondsLeft = Math.ceil(cpu.stunChargeTimer / 60);
-            ctx.fillText(`💥 ${cpuSecondsLeft}s`, cpuStunBarX - 8, cpuStunBarY + cpuStunBarHeight / 2);
-            ctx.shadowBlur = 0;
-
-            // Aviso quando tempo está acabando
-            if (cpuSecondsLeft <= 2) {
-                ctx.fillStyle = '#e74c3c';
-                ctx.font = `bold ${fontSize * 0.6}px Arial`;
-                ctx.shadowBlur = 4;
-                ctx.fillText('⚠️', cpuStunBarX - 8, cpuStunBarY + cpuStunBarHeight + 12);
-                ctx.shadowBlur = 0;
-                ctx.font = `bold ${fontSize * 0.5}px Arial`;
-            } else {
-                ctx.fillStyle = '#2ecc71';
-                ctx.font = `bold ${fontSize * 0.6}px Arial`;
-                ctx.shadowBlur = 4;
-                ctx.fillText('⚡', cpuStunBarX - 8, cpuStunBarY + cpuStunBarHeight + 12);
-                ctx.shadowBlur = 0;
-                ctx.font = `bold ${fontSize * 0.5}px Arial`;
-            }
-        } else {
-            ctx.fillText(`💥 ${cpu.stunCharge}/${cpu.stunChargeMax}`, cpuStunBarX - 8, cpuStunBarY + cpuStunBarHeight / 2);
-            ctx.shadowBlur = 0;
+        drawPowerMeter(cpuStunBarX, cpuStunBarY, cpuStunBarWidth, cpuStunBarHeight, cpuAmount, cpuMode, cpuReady ? 'PRONTO' : '', 'left');
+        if (!cpuReady) {
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.font = `bold ${fontSize * 0.45}px Arial`;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`${cpu.stunCharge}/${cpu.stunChargeMax}`, cpuStunBarX - 8, cpuStunBarY + cpuStunBarHeight / 2);
         }
     }
 
@@ -17620,48 +18079,90 @@ function drawHappyBird(ctxW, x, y, color, wingColor, scale, type = null) {
     // Detalhes específicos do tipo
     drawResultBirdTypeDetails(ctxW, type, 35, wingColor, color);
 
-    // Olho feliz
-    ctxW.fillStyle = 'white';
-    ctxW.beginPath();
-    ctxW.arc(10, -5, 10, 0, Math.PI * 2);
-    ctxW.fill();
+    if (type === 'owl') {
+        ctxW.strokeStyle = wingColor || '#5d4037';
+        ctxW.lineWidth = 2;
+        ctxW.beginPath();
+        ctxW.arc(4, -8, 12, 0, Math.PI * 2);
+        ctxW.stroke();
+        ctxW.beginPath();
+        ctxW.arc(22, -6, 10, 0, Math.PI * 2);
+        ctxW.stroke();
 
-    // Pupila - amarela para Bacurau, preta para outros
-    if (type === 'bacurau') {
-        ctxW.fillStyle = '#FFD700'; // Amarelo para Bacurau
+        ctxW.fillStyle = '#f7f3ea';
+        ctxW.beginPath();
+        ctxW.arc(4, -8, 10, 0, Math.PI * 2);
+        ctxW.arc(22, -6, 8, 0, Math.PI * 2);
+        ctxW.fill();
+
+        ctxW.fillStyle = '#2c2416';
+        ctxW.beginPath();
+        ctxW.arc(6, -8, 4.5, 0, Math.PI * 2);
+        ctxW.arc(23, -6, 3.5, 0, Math.PI * 2);
+        ctxW.fill();
+
+        ctxW.fillStyle = '#ffffff';
+        ctxW.beginPath();
+        ctxW.arc(4, -10, 1.6, 0, Math.PI * 2);
+        ctxW.arc(21, -8, 1.3, 0, Math.PI * 2);
+        ctxW.fill();
+
+        ctxW.strokeStyle = '#3e2723';
+        ctxW.lineWidth = 2;
+        ctxW.beginPath();
+        ctxW.arc(4, -18, 7, Math.PI * 0.15, Math.PI * 0.7);
+        ctxW.stroke();
+        ctxW.beginPath();
+        ctxW.arc(22, -16, 6, Math.PI * 0.2, Math.PI * 0.75);
+        ctxW.stroke();
+
+        ctxW.fillStyle = '#d2691e';
+        ctxW.beginPath();
+        ctxW.moveTo(28, -2);
+        ctxW.lineTo(42, 4);
+        ctxW.lineTo(28, 8);
+        ctxW.closePath();
+        ctxW.fill();
     } else {
-        ctxW.fillStyle = 'black';
+        // Olho feliz
+        ctxW.fillStyle = 'white';
+        ctxW.beginPath();
+        ctxW.arc(10, -5, 10, 0, Math.PI * 2);
+        ctxW.fill();
+
+        if (type === 'bacurau') {
+            ctxW.fillStyle = '#FFD700';
+        } else {
+            ctxW.fillStyle = 'black';
+        }
+        ctxW.beginPath();
+        ctxW.arc(12, -5, 5, 0, Math.PI * 2);
+        ctxW.fill();
+
+        ctxW.fillStyle = 'white';
+        ctxW.beginPath();
+        ctxW.arc(10, -7, 2, 0, Math.PI * 2);
+        ctxW.fill();
+
+        ctxW.strokeStyle = 'black';
+        ctxW.lineWidth = 2;
+        ctxW.beginPath();
+        ctxW.arc(12, -15, 8, Math.PI * 0.2, Math.PI * 0.8);
+        ctxW.stroke();
+
+        const isTuiuiu = type === 'tuiuiu';
+        const beakColor = isTuiuiu ? '#000000' : '#f39c12';
+        const beakLength = isTuiuiu ? 25 : 18;
+        const beakWidth = isTuiuiu ? 8 : 5;
+
+        ctxW.fillStyle = beakColor;
+        ctxW.beginPath();
+        ctxW.moveTo(30, -beakWidth / 2);
+        ctxW.lineTo(30 + beakLength, 3);
+        ctxW.lineTo(30, 8);
+        ctxW.closePath();
+        ctxW.fill();
     }
-    ctxW.beginPath();
-    ctxW.arc(12, -5, 5, 0, Math.PI * 2);
-    ctxW.fill();
-
-    // Brilho no olho
-    ctxW.fillStyle = 'white';
-    ctxW.beginPath();
-    ctxW.arc(10, -7, 2, 0, Math.PI * 2);
-    ctxW.fill();
-
-    // Sobrancelha feliz (arqueada para cima)
-    ctxW.strokeStyle = 'black';
-    ctxW.lineWidth = 2;
-    ctxW.beginPath();
-    ctxW.arc(12, -15, 8, Math.PI * 0.2, Math.PI * 0.8);
-    ctxW.stroke();
-
-    // Bico sorrindo (aberto) - ajustar para Tuiuiu (maior e preto)
-    const isTuiuiu = type === 'tuiuiu';
-    const beakColor = isTuiuiu ? '#000000' : '#f39c12';
-    const beakLength = isTuiuiu ? 25 : 18;
-    const beakWidth = isTuiuiu ? 8 : 5;
-
-    ctxW.fillStyle = beakColor;
-    ctxW.beginPath();
-    ctxW.moveTo(30, -beakWidth / 2);
-    ctxW.lineTo(30 + beakLength, 3);
-    ctxW.lineTo(30, 8);
-    ctxW.closePath();
-    ctxW.fill();
 
     // Bochecha rosada
     ctxW.fillStyle = 'rgba(255, 150, 150, 0.5)';
@@ -17855,122 +18356,69 @@ function drawCursedBird(ctxW, x, y, color, wingColor, scale, type = null) {
 function drawBossVictoryScene() {
     const winnerCanvas = document.getElementById('winnerCanvas');
     const ctxW = winnerCanvas.getContext('2d');
+    if (winnerCanvas.animFrame) cancelAnimationFrame(winnerCanvas.animFrame);
+    winnerCanvas.width = 480;
+    winnerCanvas.height = 200;
 
     let animFrame;
     let time = 0;
     const particles = [];
+    const boss = bossCpuTypes[currentArea] || bossCpuTypes[1];
 
-    // Criar partículas de fogos de artifício (reduzido para melhor performance)
-    for (let i = 0; i < 15; i++) { // Reduzido de 30 para 15
+    for (let i = 0; i < 18; i++) {
         particles.push({
-            x: 200 + (Math.random() - 0.5) * 100,
-            y: 50 + Math.random() * 50,
-            vx: (Math.random() - 0.5) * 3,
-            vy: (Math.random() - 0.5) * 3,
+            x: 80 + Math.random() * 320,
+            y: 30 + Math.random() * 80,
+            vx: (Math.random() - 0.5) * 2.2,
+            vy: (Math.random() - 0.5) * 2.2,
             life: 1,
-            decay: 0.015 + Math.random() * 0.02,
-            color: ['#FFD700', '#FF6347', '#FF1493', '#00CED1', '#FF4500'][Math.floor(Math.random() * 5)],
-            size: 2 + Math.random() * 3 // Reduzido tamanho
+            decay: 0.012 + Math.random() * 0.016,
+            color: ['#FFD700', '#f6e58d', '#ffbe76', '#dff9fb'][Math.floor(Math.random() * 4)],
+            size: 2 + Math.random() * 2
         });
     }
 
     function animate() {
-        time += 0.03; // Reduzido para melhor performance
+        time += 0.03;
         ctxW.clearRect(0, 0, winnerCanvas.width, winnerCanvas.height);
 
-        const scale = 1.5;
-        const bounce = Math.sin(time * 2) * 5;
+        const bounce = Math.sin(time * 2) * 7;
+        const owlBounce = Math.sin(time * 2 + 0.7) * 7;
 
-        // Fundo com gradiente dourado
         const gradient = ctxW.createLinearGradient(0, 0, 0, winnerCanvas.height);
-        gradient.addColorStop(0, 'rgba(255, 215, 0, 0.3)');
-        gradient.addColorStop(1, 'rgba(255, 140, 0, 0.2)');
+        gradient.addColorStop(0, 'rgba(255, 215, 0, 0.34)');
+        gradient.addColorStop(1, 'rgba(255, 140, 0, 0.16)');
         ctxW.fillStyle = gradient;
         ctxW.fillRect(0, 0, winnerCanvas.width, winnerCanvas.height);
 
-        // Coroa grande e brilhante
-        ctxW.font = '50px Arial';
-        ctxW.textAlign = 'center';
-        ctxW.shadowColor = '#FFD700';
-        ctxW.shadowBlur = 20;
-        ctxW.fillStyle = '#FFD700';
-        ctxW.fillText('👑', 200, 35 + bounce);
-        ctxW.shadowBlur = 0;
-
-        // Múltiplas coroas pequenas ao redor (reduzido para melhor performance)
-        for (let i = 0; i < 6; i++) { // Reduzido de 8 para 6
-            const angle = (i / 6) * Math.PI * 2 + time;
-            const dist = 80;
-            ctxW.font = '18px Arial'; // Reduzido tamanho da fonte
-            ctxW.globalAlpha = 0.6;
-            ctxW.fillText('👑', 200 + Math.cos(angle) * dist, 85 + Math.sin(angle) * dist * 0.5);
-        }
-        ctxW.globalAlpha = 1;
-
-        // Partículas de fogos de artifício (otimizado)
         for (let i = particles.length - 1; i >= 0; i--) {
             const p = particles[i];
             p.x += p.vx;
             p.y += p.vy;
-            p.vy += 0.08; // Gravidade reduzida
+            p.vy += 0.05;
             p.life -= p.decay;
-
             if (p.life > 0) {
                 ctxW.globalAlpha = p.life;
-                // Remover shadowBlur para melhor performance
                 ctxW.fillStyle = p.color;
                 ctxW.beginPath();
                 ctxW.arc(p.x, p.y, p.size, 0, Math.PI * 2);
                 ctxW.fill();
-
-                // Estrelas brilhantes (apenas se vida > 0.5 para reduzir desenho)
-                if (p.life > 0.5) {
-                    ctxW.font = '12px Arial'; // Fonte menor
-                    ctxW.fillText('⭐', p.x, p.y);
-                }
             } else {
-                // Reposicionar partícula
-                p.x = 200 + (Math.random() - 0.5) * 100;
-                p.y = 50 + Math.random() * 50;
-                p.vx = (Math.random() - 0.5) * 3;
-                p.vy = (Math.random() - 0.5) * 3;
+                p.x = 80 + Math.random() * 320;
+                p.y = 24 + Math.random() * 70;
+                p.vx = (Math.random() - 0.5) * 2.2;
+                p.vy = -0.4 - Math.random();
                 p.life = 1;
             }
         }
         ctxW.globalAlpha = 1;
 
-        // Pássaro do jogador grande e triunfante
-        drawHappyBird(ctxW, 200, 85 + bounce, selectedPlayerColor, selectedPlayerWing, scale);
-
-        // Aura dourada ao redor do pássaro (sem shadow para melhor performance)
-        ctxW.strokeStyle = '#FFD700';
-        ctxW.lineWidth = 2;
-        ctxW.globalAlpha = 0.5 + Math.sin(time * 2) * 0.2; // Animação mais suave
-        ctxW.beginPath();
-        ctxW.arc(200, 85 + bounce, 60, 0, Math.PI * 2);
-        ctxW.stroke();
-        ctxW.globalAlpha = 1;
-
-        // Texto "BOSS DERROTADO!"
-        ctxW.font = 'bold 18px Arial';
-        ctxW.fillStyle = '#FFD700';
-        ctxW.textAlign = 'center';
-        ctxW.shadowColor = '#000';
-        ctxW.shadowBlur = 3;
-        ctxW.fillText('⚔️ BOSS DERROTADO! ⚔️', 200, 140);
-        ctxW.shadowBlur = 0;
-
-        // Estrelas brilhantes ao redor (reduzido para melhor performance)
-        for (let i = 0; i < 8; i++) { // Reduzido de 12 para 8
-            const angle = (i / 8) * Math.PI * 2 + time * 1.5; // Rotação mais lenta
-            const dist = 90;
-            const starX = 200 + Math.cos(angle) * dist;
-            const starY = 85 + Math.sin(angle) * dist * 0.6;
-            ctxW.font = '16px Arial'; // Fonte menor
-            ctxW.globalAlpha = 0.7 + Math.sin(time * 3 + i) * 0.2; // Animação mais suave
-            ctxW.fillText('✨', starX, starY);
-        }
-        ctxW.globalAlpha = 1;
+        drawHappyBird(ctxW, 150, 112 + bounce, selectedPlayerColor, selectedPlayerWing, 1.05);
+        ctxW.save();
+        ctxW.translate(340, 108 + owlBounce);
+        ctxW.scale(-1, 1);
+        drawHappyBird(ctxW, 0, 0, boss.color || '#8B4513', boss.wingColor || '#654321', 1.18, boss.type || 'owl');
+        ctxW.restore();
 
         animFrame = requestAnimationFrame(animate);
     }
@@ -17980,9 +18428,87 @@ function drawBossVictoryScene() {
 }
 
 // Desenhar cena de resultado
+function drawStageVictoryScene() {
+    const winnerCanvas = document.getElementById('winnerCanvas');
+    const ctxW = winnerCanvas.getContext('2d');
+    if (winnerCanvas.animFrame) cancelAnimationFrame(winnerCanvas.animFrame);
+    winnerCanvas.width = 480;
+    winnerCanvas.height = 170;
+
+    let animFrame;
+    let time = 0;
+    const particles = [];
+    for (let i = 0; i < 16; i++) {
+        particles.push({
+            x: 140 + Math.random() * 200,
+            y: 20 + Math.random() * 70,
+            vx: (Math.random() - 0.5) * 2,
+            vy: (Math.random() - 0.5) * 2,
+            life: 1,
+            decay: 0.012 + Math.random() * 0.016,
+            color: ['#FFD700', '#f6e58d', '#ffbe76', '#dff9fb'][Math.floor(Math.random() * 4)],
+            size: 2 + Math.random() * 2
+        });
+    }
+
+    function animate() {
+        time += 0.03;
+        ctxW.clearRect(0, 0, winnerCanvas.width, winnerCanvas.height);
+        const bounce = Math.sin(time * 2) * 7;
+        const gradient = ctxW.createLinearGradient(0, 0, 0, winnerCanvas.height);
+        gradient.addColorStop(0, 'rgba(255, 215, 0, 0.34)');
+        gradient.addColorStop(1, 'rgba(255, 140, 0, 0.16)');
+        ctxW.fillStyle = gradient;
+        ctxW.fillRect(0, 0, winnerCanvas.width, winnerCanvas.height);
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.05;
+            p.life -= p.decay;
+            if (p.life > 0) {
+                ctxW.globalAlpha = p.life;
+                ctxW.fillStyle = p.color;
+                ctxW.beginPath();
+                ctxW.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctxW.fill();
+            } else {
+                p.x = 140 + Math.random() * 200;
+                p.y = 16 + Math.random() * 60;
+                p.vx = (Math.random() - 0.5) * 2;
+                p.vy = -0.4 - Math.random();
+                p.life = 1;
+            }
+        }
+        ctxW.globalAlpha = 1;
+        drawHappyBird(ctxW, 240, 96 + bounce, selectedPlayerColor, selectedPlayerWing, 1.15);
+        animFrame = requestAnimationFrame(animate);
+    }
+
+    animate();
+    winnerCanvas.animFrame = animFrame;
+}
+
+function victoryStarsMarkup(stars) {
+    let html = '<div class="victory-stars">';
+    for (let i = 0; i < 5; i++) {
+        html += i < stars ? '<span class="on">★</span>' : '<span class="off">☆</span>';
+    }
+    return html + '</div>';
+}
+
+function areaReturnLabel(area) {
+    if (area === 1) return 'Voltar pra Floresta';
+    const name = areaConfig[area] && areaConfig[area].name;
+    return name ? 'Voltar pra ' + name : 'Voltar';
+}
+
 function drawResultScene(playerWon, isDraw) {
     const winnerCanvas = document.getElementById('winnerCanvas');
     const ctxW = winnerCanvas.getContext('2d');
+    if (winnerCanvas.animFrame) cancelAnimationFrame(winnerCanvas.animFrame);
+    winnerCanvas.width = 400;
+    winnerCanvas.height = 150;
 
     let animFrame;
     let time = 0;
@@ -18270,7 +18796,7 @@ function endGame() {
         if (isBossStage()) {
             const bossType = bossCpuTypes[currentArea];
             const bossName = bossType && bossType.name ? bossType.name : 'Guardião';
-            resultTitle.textContent = '✨ PÁSSARO LIBERTADO! ✨';
+            resultTitle.textContent = `${bossName} livre`;
             resultTitle.className = 'win';
 
             // 🔊 Som especial de vitória do boss (efeito sonoro com loop)
@@ -18309,22 +18835,17 @@ function endGame() {
             const bossStars = calculateCurrentStars();
             window.victoryStars = bossStars; // Salvar para mostrar na tela
             drawBossVictoryScene();
-        } else if (isPassageStage) {
-            resultTitle.textContent = '🌳 PASSAGEM CONCLUÍDA!';
+        } else if (isPassageStage || isBonusStage) {
+            const stageDef = getAreaStageDef(currentArea, currentSubstage);
+            resultTitle.textContent = (stageDef && stageDef.name) || 'Fase concluída';
             resultTitle.className = 'win';
             playSound('win');
             const victoryStars = calculateCurrentStars();
             window.victoryStars = victoryStars;
-            drawResultScene(true, false);
+            drawStageVictoryScene();
         } else {
-            resultTitle.textContent = isBonusStage ?
-                (currentArea === 7 ? '❄️ BÔNUS COMPLETO! ❄️' :
-                    currentArea === 5 ? '🍞 BÔNUS COMPLETO! 🍞' :
-                        currentArea === 4 ? '🌵 BÔNUS COMPLETO! 🌵' :
-                            currentArea === 3 ? '🐟 BÔNUS COMPLETO! 🐟' :
-                                currentArea === 2 ? '🦟 BÔNUS COMPLETO! 🦟' :
-                                    '🪱 BÔNUS COMPLETO! 🪱') :
-                '✨ MALDIÇÃO QUEBRADA! ✨';
+            const stageDef = getAreaStageDef(currentArea, currentSubstage);
+            resultTitle.textContent = (stageDef && stageDef.name) || 'Vitória';
             resultTitle.className = 'win';
 
             // 🔊 Som de vitória normal
@@ -18332,8 +18853,8 @@ function endGame() {
 
             // Calcular estrelas antes de desenhar
             const victoryStars = calculateCurrentStars();
-            window.victoryStars = victoryStars; // Salvar para mostrar na tela
-            drawResultScene(true, false);
+            window.victoryStars = victoryStars;
+            drawStageVictoryScene();
         }
 
         // Marcar sub-fase como completada
@@ -18459,93 +18980,17 @@ function endGame() {
         const coinsEarned = window.lastCoinsEarned || 0;
         const stars = window.victoryStars || calculateCurrentStars();
 
-        // Criar HTML das estrelas
-        let starsHTML = '<div style="display: flex; justify-content: center; gap: 8px; margin-top: 15px; font-size: 2em;">';
-        for (let i = 0; i < 5; i++) {
-            if (i < stars) {
-                starsHTML += '<span style="color: #f1c40f; text-shadow: 0 0 10px #f39c12;">★</span>';
-            } else {
-                starsHTML += '<span style="color: rgba(255, 255, 255, 0.3);">☆</span>';
-            }
-        }
-        starsHTML += '</div>';
-
         if (isBossStage()) {
-            // Boss derrotado - libertado
-            const bossType = bossCpuTypes[currentArea];
-            const bossName = bossType && bossType.name ? bossType.name : 'Guardião';
-            const areaName = areaConfig[currentArea] ? areaConfig[currentArea].name : 'área';
             const nextArea = currentArea + 1;
             const maxAreas = Object.keys(areaConfig).length;
-            let liberationMessage = '';
-            
-            // Verificar se área foi completamente libertada
-            const completedCount = gameProgress.completedStages[currentArea] ? gameProgress.completedStages[currentArea].length : 0;
-            
-            // Verificar se já foi completado antes (replay)
-            const stageKeyBoss = `${currentArea}-${currentSubstage}`;
-            const wasAlreadyCompleted = !isFirstVictory;
-            
-            if (completedCount >= getAreaStageCount(currentArea)) {
-                // Área completamente libertada!
-                if (wasAlreadyCompleted) {
-                    liberationMessage = `<br><span style="color: #2ecc71; font-size: 1.2em; margin-top: 10px; display: block; font-weight: bold;">✨ LIBERTAÇÃO REFORÇADA! ✨</span><span style="color: #bb8fce; font-size: 1em; margin-top: 8px; display: block;">💪 O feitiço de libertação foi fortalecido na memória da batalha!</span><span style="color: #f39c12; font-size: 0.95em; margin-top: 5px; display: block;">🧠 Revivendo a vitória mantém a maldição afastada...</span>`;
-                } else {
-                    liberationMessage = `<br><span style="color: #2ecc71; font-size: 1.2em; margin-top: 10px; display: block; font-weight: bold;">✨ ${areaName.toUpperCase()} COMPLETAMENTE LIBERTADA! ✨</span><span style="color: #bb8fce; font-size: 1em; margin-top: 8px; display: block;">🕊️ Todos os pássaros da ${areaName} foram libertados da maldição!</span><span style="color: #2ecc71; font-size: 1em; margin-top: 5px; display: block;">🪄 ${bossName} foi o último a ser libertado!</span>`;
-                }
-                if (nextArea <= maxAreas && isAreaPlayable(nextArea)) {
-                    const nextAreaName = areaConfig[nextArea] ? areaConfig[nextArea].name : 'próxima área';
-                    liberationMessage += `<span style="color: #3498db; font-size: 1em; margin-top: 8px; display: block;">🗺️ Nova área desbloqueada: ${nextAreaName}</span>`;
-                } else if (nextArea <= maxAreas) {
-                    liberationMessage += `<span style="color: #95a5a6; font-size: 1em; margin-top: 8px; display: block;">🚧 As outras áreas estão em construção.</span>`;
-                }
-            } else {
-                // Boss libertado, mas área ainda não completa
-                if (wasAlreadyCompleted) {
-                    liberationMessage = `<br><span style="color: #2ecc71; font-size: 1.1em; margin-top: 10px; display: block;">💪 Libertação reforçada!</span><span style="color: #f39c12; font-size: 0.95em; margin-top: 5px; display: block;">🧠 A memória desta batalha fortalece o feitiço de proteção...</span>`;
-                } else {
-                    liberationMessage = `<br><span style="color: #2ecc71; font-size: 1.1em; margin-top: 10px; display: block;">🕊️ ${bossName} foi libertado da maldição!</span>`;
-                }
-                if (nextArea <= maxAreas && isAreaPlayable(nextArea)) {
-                    const nextAreaName = areaConfig[nextArea] ? areaConfig[nextArea].name : 'próxima área';
-                    liberationMessage += `<span style="color: #3498db; font-size: 1em; margin-top: 5px; display: block;">🗺️ Nova área desbloqueada: ${nextAreaName}</span>`;
-                } else if (nextArea <= maxAreas) {
-                    liberationMessage += `<span style="color: #95a5a6; font-size: 1em; margin-top: 5px; display: block;">🚧 As outras áreas estão em construção.</span>`;
-                }
-                liberationMessage += `<span style="color: #f39c12; font-size: 0.95em; margin-top: 5px; display: block;">📊 Progresso da ${areaName}: ${completedCount}/${getAreaStageCount(currentArea)} fases completadas</span>`;
+            let nextLine = '';
+            if (nextArea <= maxAreas && isAreaPlayable(nextArea)) {
+                const nextAreaName = areaConfig[nextArea] ? areaConfig[nextArea].name : 'próxima área';
+                nextLine = `<span class="boss-next">${nextAreaName} aberta</span>`;
             }
-            resultText.innerHTML = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎${liberationMessage}<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
-        } else if (isBonusStage) {
-            if (currentArea === 7) {
-                resultText.innerHTML = `Frutas: ${playerScore} / ${config.goalScore} ❄️<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
-            } else if (currentArea === 7) {
-                resultText.innerHTML = `Frutas: ${playerScore} / ${config.goalScore} ❄️<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
-            } else if (currentArea === 4) {
-                resultText.innerHTML = `Frutos: ${playerScore} / ${config.goalScore} 🌵<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
-            } else if (currentArea === 5) {
-                resultText.innerHTML = `Pães: ${playerScore} / ${config.goalScore} 🍞<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
-            } else if (currentArea === 3) {
-                resultText.innerHTML = `Peixes: ${playerScore} / ${config.goalScore} 🐟<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
-            } else if (currentArea === 2) {
-                resultText.innerHTML = `Insetos: ${playerScore} / ${config.goalScore} 🦟<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
-            } else {
-                resultText.innerHTML = `Minhocas: ${playerScore} / ${config.goalScore} 🪱<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
-            }
-        } else if (isPassageStage && passageState) {
-            resultText.innerHTML = `Frutas: ${playerScore} / ${passageState.totalFruits} 🍎<br><span style="color: #2ecc71; font-size: 1em; margin-top: 10px; display: block;">🌳 Você atravessou o caminho!</span><br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
+            resultText.innerHTML = `<span class="boss-coins">+${coinsEarned} moedas</span>${nextLine}${victoryStarsMarkup(stars)}`;
         } else {
-            // Verificar se já foi completado antes (replay)
-            const stageKeyNormal = `${currentArea}-${currentSubstage}`;
-            const wasAlreadyCompleted = !isFirstVictory;
-            
-            let normalMessage = '';
-            if (wasAlreadyCompleted) {
-                normalMessage = `<br><span style="color: #2ecc71; font-size: 1em; margin-top: 10px; display: block;">💪 Libertação reforçada!</span><span style="color: #f39c12; font-size: 0.95em; margin-top: 5px; display: block;">🧠 A memória desta batalha fortalece o feitiço de proteção...</span>`;
-            } else {
-                normalMessage = `<br><span style="color: #2ecc71; font-size: 1em; margin-top: 10px; display: block;">🕊️ Você quebrou o feitiço que controlava o pássaro!</span>`;
-            }
-            
-            resultText.innerHTML = `Você: ${playerScore} 🍎 | CPU: ${cpuScore} 🍎${normalMessage}<br><span style="color: #f1c40f; font-size: 1.1em; margin-top: 10px; display: block;">🪙 Ganhou ${coinsEarned} moedas!</span>${starsHTML}`;
+            resultText.innerHTML = `<span class="boss-coins">+${coinsEarned} moedas</span>${victoryStarsMarkup(stars)}`;
         }
         window.lastCoinsEarned = null; // Limpar
         window.victoryStars = null; // Limpar
@@ -18605,21 +19050,11 @@ function endGame() {
                 <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
                     `;
         } else {
-            // Vitória normal - Próxima fase ou Roadmap
-            const hasNextStage = currentSubstage < getAreaStageCount(currentArea);
-
-            if (hasNextStage) {
-                resultButtons.innerHTML = `
-                    <button class="result-btn next" onclick="goToNextStage()">➡️ Próxima Fase</button>
-                    <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
-                        `;
-            } else {
-                // Completou tudo!
-                resultButtons.innerHTML = `
-                    <button class="result-btn retry" onclick="restartGame()">🔄 Jogar Novamente</button>
-                    <button class="result-btn menu" onclick="goToRoadmap()">🗺️ Roadmap</button>
-                        `;
-            }
+            const backLabel = areaReturnLabel(currentArea);
+            resultButtons.innerHTML = `
+                <button class="result-btn retry" onclick="restartGame()">Jogar novamente</button>
+                <button class="result-btn menu" onclick="goToAreaStages()">${backLabel}</button>
+            `;
         }
     } else if (cpuScore > playerScore || ((isBonusStage || isPassageStage) && !isVictory)) {
         // Derrota - Tentar novamente ou Roadmap (incluindo boss)
@@ -18644,7 +19079,41 @@ function endGame() {
                 `;
     }
 
+    gameOverDiv.classList.toggle('boss-victory', isVictory && isBossStage());
+    gameOverDiv.classList.toggle('stage-victory', isVictory && !isBossStage());
     gameOverDiv.style.display = 'block';
+}
+
+// Volta para a lista de fases da área atual
+function goToAreaStages() {
+    const area = currentArea;
+    const winnerCanvas = document.getElementById('winnerCanvas');
+    if (winnerCanvas && winnerCanvas.animFrame) {
+        cancelAnimationFrame(winnerCanvas.animFrame);
+    }
+    updateLivesFromTime();
+    updateLivesUI();
+    document.getElementById('gameOver').style.display = 'none';
+    document.getElementById('gameContainer').classList.remove('active');
+    hideTouchControls();
+    const menuOverlay = document.getElementById('menuOverlay');
+    if (menuOverlay) menuOverlay.style.removeProperty('display');
+    checkOrientation();
+    const roadmapOverlay = document.getElementById('roadmapOverlay');
+    if (roadmapOverlay) roadmapOverlay.classList.remove('active');
+    const debugPanel = document.getElementById('debugPanel');
+    if (debugPanel) debugPanel.classList.remove('active');
+    const fpsCounter = document.getElementById('fpsCounter');
+    if (fpsCounter) fpsCounter.style.display = 'none';
+    if (menuOverlay && !menuAnimFrame) {
+        resetMenuWaitTime();
+        animateMenu();
+    }
+    if (isAreaPlayable(area)) {
+        openArea(area);
+    } else {
+        goToRoadmap();
+    }
 }
 
 // Ir para próxima fase
@@ -19966,10 +20435,10 @@ function openArea(area) {
         // Aplicar cores personalizadas via estilo inline
         const areaStyles = {
             1: { // Floresta
-                overlayBg: 'rgba(26, 61, 14, 0.95)',
-                boxBg: 'linear-gradient(135deg, #1a3d0e 0%, #2d5016 100%)',
-                borderColor: '#27ae60',
-                titleColor: '#2ecc71'
+                overlayBg: '#07160c',
+                boxBg: 'linear-gradient(180deg, #1b4324 0%, #12301a 100%)',
+                borderColor: '#82e0aa',
+                titleColor: '#eafaf1'
             },
             2: { // Deserto
                 overlayBg: 'rgba(139, 69, 19, 0.95)',
@@ -20090,6 +20559,11 @@ function openArea(area) {
         curseClass = ''; // 0% amaldiçoado (tudo completado, não precisa de classe)
     }
 
+    const progressEl = document.getElementById('substagesProgress');
+    if (progressEl) {
+        progressEl.textContent = completedCount + ' de ' + totalStages + ' concluídas';
+    }
+
     const totalStageCards = getAreaStageCount(area);
     for (let i = 1; i <= totalStageCards; i++) {
         const stageDef = getAreaStageDef(area, i);
@@ -20103,15 +20577,20 @@ function openArea(area) {
         const card = document.createElement('div');
         // Adicionar classe de maldição baseada no progresso da área (exceto se o card específico estiver completo)
         let curseCardClass = isCompleted ? '' : curseClass;
-        card.className = `substage-card ${substage.isBoss ? 'boss' : ''} ${substage.isBonus ? 'bonus' : ''} ${isUnlocked ? 'unlocked' : 'locked'} ${isCompleted ? 'completed' : ''} ${curseCardClass}`.trim();
+        card.className = `substage-card stage-${i} ${substage.isBoss ? 'boss' : ''} ${substage.isBonus ? 'bonus' : ''} ${stageDef && stageDef.night ? 'night' : ''} ${isUnlocked ? 'unlocked' : 'locked'} ${isCompleted ? 'completed' : ''} ${curseCardClass}`.trim();
 
         if (isUnlocked) {
             card.onclick = () => selectSubstage(area, i);
         }
 
+        let kind = 'Passagem';
+        if (substage.isBoss) kind = 'Chefe';
+        else if (substage.isBonus) kind = 'Bônus';
+        else if (stageDef && stageDef.night) kind = 'Noite';
+
         // Usar nome da fase se disponível, senão usar numeração genérica
         let displayName;
-        if (stageDef && stageDef.type === 'passage') {
+        if (stageDef && stageDef.name) {
             displayName = stageDef.name;
         } else if (substage.isBoss) {
             // Mostrar nome do boss específico da área
@@ -20156,16 +20635,21 @@ function openArea(area) {
             }
         }
 
+        const indexLabel = String(i).padStart(2, '0');
         card.innerHTML = `
-                    <div class="substage-number">${displayName}</div>
-                    <div class="substage-stars">
+            <div class="substage-index">${indexLabel}</div>
+            <div class="substage-copy">
+                <div class="substage-number">${displayName}</div>
+                <div class="substage-kind">${kind}</div>
+            </div>
+            <div class="substage-stars">
                 <span class="${stars >= 1 ? 'filled' : ''}">${stars >= 1 ? '★' : '☆'}</span>
                 <span class="${stars >= 2 ? 'filled' : ''}">${stars >= 2 ? '★' : '☆'}</span>
                 <span class="${stars >= 3 ? 'filled' : ''}">${stars >= 3 ? '★' : '☆'}</span>
                 <span class="${stars >= 4 ? 'filled' : ''}">${stars >= 4 ? '★' : '☆'}</span>
                 <span class="${stars >= 5 ? 'filled' : ''}">${stars >= 5 ? '★' : '☆'}</span>
-                    </div>
-                `;
+            </div>
+        `;
 
         grid.appendChild(card);
     }
@@ -20250,13 +20734,16 @@ function setCpuForSubstage(area, substage) {
 function calculateCurrentStars() {
     if (isPassageStage && passageState) {
         const total = passageState.totalFruits || 1;
-        const ratio = playerScore / total;
+        const fruit = Math.max(0, Math.min(1, playerScore / total));
+        const budget = passageState.timeTotal || timeLeft || 1;
+        const pace = Math.max(0, Math.min(1, (timeLeft / budget) / 0.25));
+        const blend = fruit * (0.62 + 0.38 * pace);
         const hits = passageState.hits || 0;
         let stars = 1;
-        if (ratio >= 0.45) stars = 2;
-        if (ratio >= 0.7) stars = 3;
-        if (ratio >= 0.9) stars = 4;
-        if (ratio >= 0.99 && hits === 0) stars = 5;
+        if (blend >= 0.34) stars = 2;
+        if (blend >= 0.55) stars = 3;
+        if (blend >= 0.78) stars = 4;
+        if (blend >= 0.95 && hits === 0) stars = 5;
         if (hits >= 2) stars = Math.max(1, stars - 1);
         return stars;
     }
