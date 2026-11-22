@@ -912,6 +912,120 @@
             transform: scale(1.05);
         }
 
+        .lore-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            z-index: 1200;
+            background: rgba(4, 12, 8, 0.94);
+        }
+
+        .lore-overlay[data-tone="night"] {
+            background: rgba(6, 8, 16, 0.94);
+        }
+
+        .lore-overlay[data-tone="boss"] {
+            background: rgba(18, 6, 8, 0.94);
+        }
+
+        .lore-overlay[data-tone="bonus"] {
+            background: rgba(16, 12, 4, 0.94);
+        }
+
+        .lore-overlay[data-tone="after"] {
+            background: rgba(10, 14, 6, 0.94);
+        }
+
+        .lore-card {
+            width: min(440px, 100%);
+            max-height: 92vh;
+            overflow: auto;
+            text-align: center;
+            color: #eafaf1;
+            padding: 14px 16px 16px;
+            border-radius: 18px;
+            border: 3px solid #82e0aa;
+            background: linear-gradient(160deg, #1b4324, #12301a);
+        }
+
+        .lore-overlay[data-tone="night"] .lore-card {
+            border-color: #d2b4de;
+            background: linear-gradient(160deg, #24183a, #120c22);
+        }
+
+        .lore-overlay[data-tone="boss"] .lore-card {
+            border-color: #e6b0aa;
+            background: linear-gradient(160deg, #4a2030, #2a1218);
+        }
+
+        .lore-overlay[data-tone="after"] .lore-card {
+            border-color: #f9e79f;
+            background: linear-gradient(160deg, #3d3418, #1b4324);
+        }
+
+        .lore-kicker {
+            min-height: 1.2em;
+            color: #f9e79f;
+            font-size: 0.85rem;
+            letter-spacing: 0.04em;
+        }
+
+        #loreCanvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            margin: 6px 0;
+        }
+
+        .lore-who {
+            display: none;
+            margin-bottom: 4px;
+            color: #f1c40f;
+            font-weight: 700;
+        }
+
+        .lore-line {
+            min-height: 3.2em;
+            margin: 0 0 12px;
+            font-size: 1.15rem;
+            line-height: 1.35;
+            cursor: pointer;
+        }
+
+        .lore-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .lore-skip,
+        .lore-next {
+            min-width: 120px;
+            min-height: 44px;
+            border-radius: 10px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .lore-skip {
+            color: #d5f5e3;
+            background: transparent;
+            border: 2px solid rgba(255, 255, 255, 0.35);
+        }
+
+        .lore-next {
+            color: white;
+            font-weight: 700;
+            background: #27ae60;
+            border: none;
+        }
+
         /* Menu de Pausa */
         .pause-overlay {
             position: fixed;
@@ -1876,6 +1990,22 @@
         .substage-card.bonus.completed::after,
         .substage-card.bonus.completed::before {
             opacity: 0;
+        }
+
+        .substage-card.up-next {
+            border-color: #f1c40f;
+            z-index: 2;
+            animation: nextStagePulse 1.1s ease-in-out infinite;
+        }
+
+        .substage-card.up-next .substage-kind {
+            color: #f9e79f;
+            font-weight: 700;
+        }
+
+        @keyframes nextStagePulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7); }
+            50% { box-shadow: 0 0 0 7px rgba(241, 196, 15, 0); }
         }
 
         .substage-index {

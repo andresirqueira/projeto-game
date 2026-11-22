@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     
     <title>🦅 Asas em Combate</title>
-    <link rel="stylesheet" href="styles.css?v=20261103o">
+    <link rel="stylesheet" href="styles.css?v=20261121b">
 </head>
 <body>
     <!-- Overlay de Rotação (Mobile Portrait) -->
@@ -212,25 +212,23 @@
         <div class="story-overlay" id="storyOverlay">
             <div class="story-box">
                 <h3>📖 A História</h3>
-                <div class="story-content">
-                    <div class="story-section">
-                        <h4>🪄 A Maldição</h4>
-                        <p>Há muito tempo, uma sombra mágica envolveu as terras. Uma maldição poderosa caiu sobre todos os pássaros, transformando-os em criaturas manipuladas, forçadas a competir sem controle próprio.</p>
-                    </div>
-                    <div class="story-section">
-                        <h4>🦅 O Herói</h4>
-                        <p>Você é o escolhido! Um pássaro corajoso que resistiu à maldição e mantém sua liberdade. Agora, cabe a você libertar seus irmãos dessa prisão mágica, enfrentando-os em combate para quebrar o feitiço que os controla.</p>
-                    </div>
-                    <div class="story-section">
-                        <h4>🗺️ A Jornada</h4>
-                        <p>Sua missão levará você através de múltiplas áreas: da Floresta sombria até a Metrópole, cada uma guardada por poderosos guardiões sob o controle da maldição. Vença-os para libertar cada área e restaurar a paz.</p>
-                    </div>
-                    <div class="story-section">
-                        <h4>👑 O Boss Final</h4>
-                        <p>No final de sua jornada, você enfrentará o verdadeiro responsável por toda essa maldição. Prepare-se para a batalha final que decidirá o destino de todos os pássaros!</p>
-                    </div>
+                <div class="story-content" id="storyContent">
+                    <p>A história entra conforme as fases forem escritas.</p>
                 </div>
                 <button class="close-story-btn" onclick="toggleStory()">✖ FECHAR</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="lore-overlay" id="loreOverlay" data-tone="passage">
+        <div class="lore-card">
+            <div class="lore-kicker" id="loreKicker"></div>
+            <canvas id="loreCanvas" width="480" height="180"></canvas>
+            <div class="lore-who" id="loreWho"></div>
+            <p class="lore-line" id="loreLine" onclick="advanceLore()"></p>
+            <div class="lore-actions">
+                <button type="button" class="lore-skip" onclick="skipLore()">Pular</button>
+                <button type="button" class="lore-next" onclick="advanceLore()">Continuar</button>
             </div>
         </div>
     </div>
@@ -332,6 +330,7 @@
     <script src="fases/floresta/10-vento-na-copa.js"></script>
     <script src="fases/floresta/11-sombra-da-coruja.js"></script>
     <script src="fases/floresta/12-ninho-da-coruja.js"></script>
-    <script src="script.js?v=20261103p"></script>
+    <script src="fases/floresta/historia.js?v=20261103q"></script>
+    <script src="script.js?v=20261121b"></script>
 </body>
 </html>

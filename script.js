@@ -2358,9 +2358,13 @@ function drawPassageFrog(frog, context) {
         drawCtx.beginPath();
         drawCtx.arc(ex, ey, s, 0, Math.PI * 2);
         drawCtx.fill();
-        drawCtx.fillStyle = '#1a1a1a';
+        drawCtx.fillStyle = '#e74c3c';
         drawCtx.beginPath();
-        drawCtx.ellipse(ex + s * 0.15, ey, s * 0.28, s * 0.55, 0, 0, Math.PI * 2);
+        drawCtx.ellipse(ex + s * 0.15, ey, s * 0.34, s * 0.58, 0, 0, Math.PI * 2);
+        drawCtx.fill();
+        drawCtx.fillStyle = '#7b241c';
+        drawCtx.beginPath();
+        drawCtx.ellipse(ex + s * 0.15, ey, s * 0.14, s * 0.26, 0, 0, Math.PI * 2);
         drawCtx.fill();
         drawCtx.fillStyle = '#ffffff';
         drawCtx.beginPath();
@@ -2414,10 +2418,15 @@ function drawPassageBee(x, y, angle, scale) {
     ctx.beginPath();
     ctx.arc(4.6 * s, 0, 1.55 * s, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = '#f4f6f7';
+    ctx.beginPath();
+    ctx.arc(5.15 * s, -0.55 * s, 0.95 * s, 0, Math.PI * 2);
+    ctx.arc(5.15 * s, 0.55 * s, 0.95 * s, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#e74c3c';
     ctx.beginPath();
-    ctx.arc(5.15 * s, -0.55 * s, 0.72 * s, 0, Math.PI * 2);
-    ctx.arc(5.15 * s, 0.55 * s, 0.72 * s, 0, Math.PI * 2);
+    ctx.arc(5.35 * s, -0.55 * s, 0.62 * s, 0, Math.PI * 2);
+    ctx.arc(5.35 * s, 0.55 * s, 0.62 * s, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 }
@@ -2462,13 +2471,17 @@ function drawPassageSnake(snake) {
         ctx.beginPath();
         ctx.arc(snake.x + 14, snake.y - 3, 7, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = '#f4f6f7';
+        ctx.beginPath();
+        ctx.arc(snake.x + 16, snake.y - 5, 3.4, 0, Math.PI * 2);
+        ctx.fill();
         ctx.fillStyle = '#e74c3c';
         ctx.beginPath();
-        ctx.arc(snake.x + 16, snake.y - 4, 2.2, 0, Math.PI * 2);
+        ctx.arc(snake.x + 16.8, snake.y - 5, 2.1, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#7b241c';
         ctx.beginPath();
-        ctx.arc(snake.x + 16.6, snake.y - 3.7, 0.9, 0, Math.PI * 2);
+        ctx.arc(snake.x + 17.3, snake.y - 4.7, 0.9, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#e74c3c';
         ctx.lineWidth = 1.5;
@@ -2502,13 +2515,17 @@ function drawPassageSnake(snake) {
         ctx.beginPath();
         ctx.ellipse(0, 0, 15, 8, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = '#f4f6f7';
+        ctx.beginPath();
+        ctx.arc(6, -2.4, 3.6, 0, Math.PI * 2);
+        ctx.fill();
         ctx.fillStyle = '#e74c3c';
         ctx.beginPath();
-        ctx.arc(6, -2, 2.3, 0, Math.PI * 2);
+        ctx.arc(7, -2.4, 2.2, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#7b241c';
         ctx.beginPath();
-        ctx.arc(6.6, -1.7, 0.9, 0, Math.PI * 2);
+        ctx.arc(7.6, -2.1, 0.9, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#e74c3c';
         ctx.lineWidth = 1.5;
@@ -2561,10 +2578,15 @@ function drawPassageEnemy(enemy, theme) {
     ctx.lineTo(1, -8);
     ctx.closePath();
     ctx.fill();
+    ctx.fillStyle = '#f4f6f7';
+    ctx.beginPath();
+    ctx.arc(-5, -1, 4, 0, Math.PI * 2);
+    ctx.arc(5, -1, 4, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#e74c3c';
     ctx.beginPath();
-    ctx.arc(-5, -1, 2.6, 0, Math.PI * 2);
-    ctx.arc(5, -1, 2.6, 0, Math.PI * 2);
+    ctx.arc(-4.2, -1, 2.5, 0, Math.PI * 2);
+    ctx.arc(5.8, -1, 2.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#7b241c';
     ctx.beginPath();
@@ -2915,17 +2937,18 @@ function drawPassageFish(fish) {
     ctx.lineTo(-fish.radius * 1.9, fish.radius * 0.65);
     ctx.closePath();
     ctx.fill();
+    const eyeR = fish.radius * 0.32;
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.arc(fish.radius * 0.55, -fish.radius * 0.12, fish.radius * 0.22, 0, Math.PI * 2);
+    ctx.arc(fish.radius * 0.5, -fish.radius * 0.08, eyeR, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#e74c3c';
     ctx.beginPath();
-    ctx.arc(fish.radius * 0.62, -fish.radius * 0.12, fish.radius * 0.1, 0, Math.PI * 2);
+    ctx.arc(fish.radius * 0.58, -fish.radius * 0.08, eyeR * 0.62, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#7b241c';
     ctx.beginPath();
-    ctx.arc(fish.radius * 0.66, -fish.radius * 0.1, fish.radius * 0.045, 0, Math.PI * 2);
+    ctx.arc(fish.radius * 0.64, -fish.radius * 0.05, eyeR * 0.28, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 }
@@ -18503,6 +18526,20 @@ function areaReturnLabel(area) {
     return name ? 'Voltar pra ' + name : 'Voltar';
 }
 
+function nextStageReady() {
+    let nextArea = currentArea;
+    let nextSubstage = currentSubstage + 1;
+    if (isBossStage()) {
+        nextArea = currentArea + 1;
+        nextSubstage = 1;
+    } else if (nextSubstage > getAreaStageCount(currentArea)) {
+        return false;
+    }
+    if (!isAreaPlayable(nextArea)) return false;
+    const unlocked = gameProgress.unlockedStages[nextArea];
+    return !!(unlocked && unlocked.includes(nextSubstage));
+}
+
 function drawResultScene(playerWon, isDraw) {
     const winnerCanvas = document.getElementById('winnerCanvas');
     const ctxW = winnerCanvas.getContext('2d');
@@ -19081,12 +19118,46 @@ function endGame() {
 
     gameOverDiv.classList.toggle('boss-victory', isVictory && isBossStage());
     gameOverDiv.classList.toggle('stage-victory', isVictory && !isBossStage());
+    if (isVictory && isBossStage()) {
+        const outro = loreLinesFor(currentArea + '-' + currentSubstage + '-depois');
+        if (outro.length) {
+            gameOverDiv.style.display = 'none';
+            const bossType = bossCpuTypes[currentArea];
+            const bossName = bossType && bossType.name ? bossType.name : 'Coruja';
+            openLore(outro, function () {
+                gameOverDiv.style.display = 'block';
+            }, { tone: 'after', title: bossName + ' livre' });
+            return;
+        }
+    }
     gameOverDiv.style.display = 'block';
+    if (isVictory && !isBossStage()) scheduleStageMap();
 }
 
 // Volta para a lista de fases da área atual
+let stageMapTimer = null;
+let stageListFocus = 0;
+
+function cancelStageMap(clearFocus) {
+    if (stageMapTimer) {
+        clearTimeout(stageMapTimer);
+        stageMapTimer = null;
+    }
+    if (clearFocus) stageListFocus = 0;
+}
+
+function scheduleStageMap() {
+    cancelStageMap(false);
+    stageListFocus = nextStageReady() ? currentSubstage + 1 : 0;
+    stageMapTimer = setTimeout(function () {
+        stageMapTimer = null;
+        goToAreaStages();
+    }, 2200);
+}
+
 function goToAreaStages() {
     const area = currentArea;
+    cancelStageMap(false);
     const winnerCanvas = document.getElementById('winnerCanvas');
     if (winnerCanvas && winnerCanvas.animFrame) {
         cancelAnimationFrame(winnerCanvas.animFrame);
@@ -19118,6 +19189,7 @@ function goToAreaStages() {
 
 // Ir para próxima fase
 function goToNextStage() {
+    cancelStageMap(true);
     // Parar animação do canvas de resultado
     const winnerCanvas = document.getElementById('winnerCanvas');
     if (winnerCanvas && winnerCanvas.animFrame) {
@@ -19153,6 +19225,7 @@ function goToNextStage() {
 
 // Ir para roadmap (mantém menu visível ao fundo)
 function goToRoadmap() {
+    cancelStageMap(true);
     // Parar animação do canvas de resultado
     const winnerCanvas = document.getElementById('winnerCanvas');
     if (winnerCanvas && winnerCanvas.animFrame) {
@@ -19231,6 +19304,7 @@ function stopBuzzSound() {
 }
 
 function restartGame() {
+    cancelStageMap(true);
     // Parar som de vespas se estiver tocando
     stopBuzzSound();
     
@@ -19355,8 +19429,8 @@ function restartGame() {
         cancelAnimationFrame(winnerCanvas.animFrame);
     }
 
-    // Mostrar contagem regressiva
-    showCountdown();
+    // Frases da fase. Passagem entra direto; bônus e chefe seguem para a contagem.
+    showStageIntroOrStart();
 }
 
 // Timer
@@ -20577,7 +20651,9 @@ function openArea(area) {
         const card = document.createElement('div');
         // Adicionar classe de maldição baseada no progresso da área (exceto se o card específico estiver completo)
         let curseCardClass = isCompleted ? '' : curseClass;
-        card.className = `substage-card stage-${i} ${substage.isBoss ? 'boss' : ''} ${substage.isBonus ? 'bonus' : ''} ${stageDef && stageDef.night ? 'night' : ''} ${isUnlocked ? 'unlocked' : 'locked'} ${isCompleted ? 'completed' : ''} ${curseCardClass}`.trim();
+        const focusNext = stageListFocus;
+        const isNext = focusNext === i && isUnlocked && !isCompleted;
+        card.className = `substage-card stage-${i} ${substage.isBoss ? 'boss' : ''} ${substage.isBonus ? 'bonus' : ''} ${stageDef && stageDef.night ? 'night' : ''} ${isUnlocked ? 'unlocked' : 'locked'} ${isCompleted ? 'completed' : ''} ${isNext ? 'up-next' : ''} ${curseCardClass}`.trim();
 
         if (isUnlocked) {
             card.onclick = () => selectSubstage(area, i);
@@ -20640,7 +20716,7 @@ function openArea(area) {
             <div class="substage-index">${indexLabel}</div>
             <div class="substage-copy">
                 <div class="substage-number">${displayName}</div>
-                <div class="substage-kind">${kind}</div>
+                <div class="substage-kind">${kind}${isNext ? ' · Próxima' : ''}</div>
             </div>
             <div class="substage-stars">
                 <span class="${stars >= 1 ? 'filled' : ''}">${stars >= 1 ? '★' : '☆'}</span>
@@ -20652,7 +20728,11 @@ function openArea(area) {
         `;
 
         grid.appendChild(card);
+        if (isNext) {
+            card.scrollIntoView({ block: 'nearest' });
+        }
     }
+    stageListFocus = 0;
 
     // Abrir overlay de sub-fases
     const substagesOverlay = document.getElementById('substagesOverlay');
@@ -21034,7 +21114,7 @@ function selectSubstage(area, substage) {
     // Pre-warm das funções de desenho específicas da fase (melhora performance na primeira execução)
     preWarmStageFunctions();
 
-    showCountdown();
+    showStageIntroOrStart();
 }
 
 // Manter compatibilidade com função antiga
@@ -23447,6 +23527,470 @@ function setCountdownCard(tone, kicker, title, chips, hint) {
 }
 
 // Contagem regressiva
+let loreState = null;
+
+function loreLinesFor(key) {
+    const book = window.FOREST_LORE || {};
+    const lines = book[key];
+    if (!Array.isArray(lines)) return [];
+    return lines.filter((line) => line && typeof line.text === 'string' && line.text.length);
+}
+
+function escapeStoryText(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function renderStoryBook() {
+    const content = document.getElementById('storyContent');
+    if (!content) return;
+    const book = window.FOREST_LORE || {};
+    const stages = areaStages[1] || [];
+    let html = '';
+    const writeLines = (lines) => {
+        lines.forEach((line) => {
+            if (!line || !line.text) return;
+            if (line.kind === 'say' && line.who) {
+                html += '<p><strong>' + escapeStoryText(line.who) + ':</strong> ' + escapeStoryText(line.text) + '</p>';
+            } else {
+                html += '<p>' + escapeStoryText(line.text) + '</p>';
+            }
+        });
+    };
+    stages.forEach((stage, index) => {
+        const lines = book['1-' + (index + 1)];
+        if (!Array.isArray(lines) || !lines.length) return;
+        const name = (stage && stage.name) || ('1-' + (index + 1));
+        html += '<div class="story-section"><h4>' + escapeStoryText(name) + '</h4>';
+        writeLines(lines);
+        html += '</div>';
+    });
+    const outro = book['1-12-depois'];
+    if (Array.isArray(outro) && outro.length) {
+        html += '<div class="story-section"><h4>Depois da Coruja</h4>';
+        writeLines(outro);
+        html += '</div>';
+    }
+    content.innerHTML = html || '<p>A história entra conforme as fases forem escritas.</p>';
+}
+
+function onLoreKey(event) {
+    if (!loreState) return;
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        skipLore();
+    } else if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.stopPropagation();
+        advanceLore();
+    }
+}
+
+function openLore(lines, onDone, options) {
+    closeLore(false);
+    const overlay = document.getElementById('loreOverlay');
+    if (!overlay || !lines.length) {
+        if (onDone) onDone();
+        return;
+    }
+    const opts = options || {};
+    loreState = {
+        lines: lines,
+        index: 0,
+        shown: 0,
+        full: '',
+        timer: null,
+        frame: null,
+        onDone: onDone
+    };
+    overlay.dataset.tone = opts.tone || 'passage';
+    const kicker = document.getElementById('loreKicker');
+    if (kicker) kicker.textContent = opts.title || '';
+    overlay.style.display = 'flex';
+    document.addEventListener('keydown', onLoreKey, true);
+    renderLoreLine(true);
+}
+
+function closeLore(finish) {
+    const state = loreState;
+    loreState = null;
+    if (state && state.timer) clearInterval(state.timer);
+    if (state && state.frame) cancelAnimationFrame(state.frame);
+    document.removeEventListener('keydown', onLoreKey, true);
+    const overlay = document.getElementById('loreOverlay');
+    if (overlay) overlay.style.display = 'none';
+    if (finish && state && state.onDone) state.onDone();
+}
+
+function currentLoreLine() {
+    if (!loreState) return null;
+    return loreState.lines[loreState.index] || null;
+}
+
+function renderLoreLine(animate) {
+    const line = currentLoreLine();
+    if (!line) {
+        closeLore(true);
+        return;
+    }
+    const whoEl = document.getElementById('loreWho');
+    const textEl = document.getElementById('loreLine');
+    const speaker = line.kind === 'say' && line.who ? line.who : '';
+    if (whoEl) {
+        whoEl.textContent = speaker;
+        whoEl.style.display = speaker ? 'block' : 'none';
+    }
+    loreState.full = line.text;
+    loreState.shown = animate ? 0 : line.text.length;
+    if (textEl) textEl.textContent = line.text.slice(0, loreState.shown);
+    if (loreState.timer) clearInterval(loreState.timer);
+    loreState.timer = null;
+    if (animate && loreState.shown < line.text.length) {
+        loreState.timer = setInterval(() => {
+            if (!loreState) return;
+            loreState.shown += 1;
+            const el = document.getElementById('loreLine');
+            if (el) el.textContent = loreState.full.slice(0, loreState.shown);
+            if (loreState.shown >= loreState.full.length) {
+                clearInterval(loreState.timer);
+                loreState.timer = null;
+            }
+        }, 28);
+    }
+    startLoreCanvas();
+}
+
+function advanceLore() {
+    if (!loreState) return;
+    const line = currentLoreLine();
+    if (!line) {
+        closeLore(true);
+        return;
+    }
+    if (loreState.shown < line.text.length) {
+        loreState.shown = line.text.length;
+        const el = document.getElementById('loreLine');
+        if (el) el.textContent = line.text;
+        if (loreState.timer) {
+            clearInterval(loreState.timer);
+            loreState.timer = null;
+        }
+        return;
+    }
+    loreState.index += 1;
+    renderLoreLine(true);
+}
+
+function skipLore() {
+    closeLore(true);
+}
+
+function startLoreCanvas() {
+    const canvas = document.getElementById('loreCanvas');
+    if (!canvas || !loreState) return;
+    const ctxL = canvas.getContext('2d');
+    if (loreState.frame) cancelAnimationFrame(loreState.frame);
+    function paint() {
+        if (!loreState) return;
+        const line = currentLoreLine();
+        const time = Date.now();
+        const w = canvas.width;
+        const h = canvas.height;
+        const overlay = document.getElementById('loreOverlay');
+        const tone = overlay ? overlay.dataset.tone : 'passage';
+        ctxL.globalAlpha = 1;
+        ctxL.clearRect(0, 0, w, h);
+        const sky = ctxL.createLinearGradient(0, 0, 0, h);
+        if (tone === 'night') {
+            sky.addColorStop(0, '#1b2444');
+            sky.addColorStop(1, '#0c101c');
+        } else if (tone === 'boss') {
+            sky.addColorStop(0, '#3a1c24');
+            sky.addColorStop(1, '#1a1014');
+        } else if (tone === 'after') {
+            sky.addColorStop(0, '#3d3418');
+            sky.addColorStop(1, '#1c2a18');
+        } else if (tone === 'bonus') {
+            sky.addColorStop(0, '#3a3214');
+            sky.addColorStop(1, '#1a1608');
+        } else {
+            sky.addColorStop(0, '#1e4d32');
+            sky.addColorStop(1, '#102418');
+        }
+        ctxL.fillStyle = sky;
+        ctxL.fillRect(0, 0, w, h);
+        ctxL.fillStyle = tone === 'night' ? '#12160f' : '#1b3a22';
+        ctxL.fillRect(0, h - 36, w, 36);
+        const bounce = Math.sin(time / 280) * 6;
+        const isOwl = line && line.who === 'Coruja';
+        if (isOwl) {
+            const boss = bossCpuTypes[1];
+            drawHappyBird(ctxL, w * 0.62, 96 + bounce, boss.color, boss.wingColor, 1.05, 'owl');
+        } else {
+            drawHappyBird(
+                ctxL,
+                w * 0.38,
+                98 + bounce,
+                selectedPlayerColor || '#2ecc71',
+                selectedPlayerWing || '#27ae60',
+                1.05
+            );
+        }
+        if (loreState) loreState.frame = requestAnimationFrame(paint);
+    }
+    paint();
+}
+
+function showStageIntroOrStart() {
+    const lines = loreLinesFor(currentArea + '-' + currentSubstage);
+    if (!lines.length) {
+        continueAfterStageIntro();
+        return;
+    }
+    const stageDef = getAreaStageDef(currentArea, currentSubstage);
+    let tone = 'passage';
+    if (isBossStage()) tone = 'boss';
+    else if (isBonusStage) tone = 'bonus';
+    else if (stageDef && stageDef.night) tone = 'night';
+    openLore(lines, continueAfterStageIntro, {
+        tone: tone,
+        title: (stageDef && stageDef.name) || ''
+    });
+}
+
+function continueAfterStageIntro() {
+    if (isPassageStage && currentArea === 1 && currentSubstage === 1) {
+        showClareiraPose();
+        return;
+    }
+    if (isPassageStage) beginMatch();
+    else showCountdown();
+}
+
+let clareiraPose = null;
+
+function showClareiraPose() {
+    closeLore(false);
+    const countdown = document.getElementById('countdownOverlay');
+    if (countdown) countdown.style.display = 'none';
+    hideTouchControls();
+    gameRunning = false;
+    gameStarted = false;
+    const baseY = player.y;
+    clareiraPose = { baseY: baseY, started: Date.now(), frame: 0, done: false };
+
+    function finishPose() {
+        if (!clareiraPose || clareiraPose.done) return;
+        clareiraPose.done = true;
+        cancelAnimationFrame(clareiraPose.frame);
+        document.removeEventListener('pointerdown', finishPose, true);
+        document.removeEventListener('keydown', onPoseKey, true);
+        player.y = clareiraPose.baseY;
+        clareiraPose = null;
+        beginMatch();
+        firstFrame = false;
+    }
+
+    function onPoseKey(event) {
+        if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') {
+            event.preventDefault();
+            finishPose();
+        }
+    }
+
+    document.addEventListener('pointerdown', finishPose, true);
+    document.addEventListener('keydown', onPoseKey, true);
+
+    function tick() {
+        if (!clareiraPose || clareiraPose.done) return;
+        const elapsed = Date.now() - clareiraPose.started;
+        if (elapsed >= 2000) {
+            finishPose();
+            return;
+        }
+        player.y = clareiraPose.baseY - Math.abs(Math.sin(elapsed / 180)) * 5;
+        draw();
+        drawClareiraGag(elapsed);
+        clareiraPose.frame = requestAnimationFrame(tick);
+    }
+
+    tick();
+}
+
+function drawClareiraGag(elapsed) {
+    const x = player.x;
+    const y = player.y;
+    const body = player.color || selectedPlayerColor || '#2ecc71';
+    const wing = selectedPlayerWing || '#27ae60';
+    ctx.save();
+    ctx.globalAlpha = 1;
+
+    if (elapsed > 250) {
+        ctx.save();
+        ctx.translate(x - 8, y - 26);
+        ctx.rotate(-1.05);
+        ctx.fillStyle = wing;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 24, 11, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    if (elapsed > 350) {
+        ctx.fillStyle = body;
+        ctx.beginPath();
+        ctx.arc(x + 22, y + 8, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x + 14, y + 8, 9, 0.25, Math.PI - 0.35);
+        ctx.stroke();
+    }
+
+    if (elapsed > 400 && elapsed < 1150) {
+        ctx.fillStyle = body;
+        ctx.beginPath();
+        ctx.arc(x + 10, y - 5, 11, Math.PI, 0);
+        ctx.fill();
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x + 10, y - 5, 11, Math.PI * 0.12, Math.PI * 0.88);
+        ctx.stroke();
+    }
+
+    const line = 'Show de bola. Vamos nessa.';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const padX = 12;
+    const textW = ctx.measureText(line).width;
+    const boxW = textW + padX * 2;
+    const boxH = 36;
+    let boxX = x + 36;
+    let boxY = y - 78;
+    if (boxX + boxW > canvas.width - 12) boxX = canvas.width - 12 - boxW;
+    if (boxY < 12) boxY = 12;
+    ctx.fillStyle = 'rgba(7, 22, 12, 0.92)';
+    drawHudRound(boxX, boxY, boxW, boxH, 12);
+    ctx.fill();
+    ctx.strokeStyle = '#82e0aa';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + 18, y - 16);
+    ctx.lineTo(boxX + 22, boxY + boxH);
+    ctx.lineTo(boxX + 40, boxY + boxH);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(7, 22, 12, 0.92)';
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(line, boxX + padX, boxY + boxH / 2);
+    ctx.restore();
+}
+
+function beginMatch() {
+    closeLore(false);
+    if (window.countdownInterval) {
+        clearInterval(window.countdownInterval);
+        window.countdownInterval = null;
+    }
+    const countdownCanvas = document.getElementById('countdownCanvas');
+    if (countdownCanvas && countdownCanvas.animFrame) {
+        cancelAnimationFrame(countdownCanvas.animFrame);
+        countdownCanvas.animFrame = null;
+    }
+    const overlay = document.getElementById('countdownOverlay');
+    if (overlay) overlay.style.display = 'none';
+
+    gameStarted = true;
+    gameRunning = true;
+    gamePaused = false;
+    firstFrame = true;
+
+    const pauseBtn = document.getElementById('pauseBtnGame');
+    if (pauseBtn) {
+        pauseBtn.textContent = '⏸️';
+        pauseBtn.title = 'Pausar (ESC)';
+    }
+
+    function reinitTouchControls() {
+        const joystickBase = document.getElementById('joystickBase');
+        const joystickStick = document.getElementById('joystickStick');
+        if (joystickBase && joystickStick) {
+            const rect = joystickBase.getBoundingClientRect();
+            touchControls.joystickBaseX = rect.left + rect.width / 2;
+            touchControls.joystickBaseY = rect.top + rect.height / 2;
+            touchControls.joystickRadius = rect.width / 2;
+        }
+        showTouchControls();
+    }
+
+    reinitTouchControls();
+    setTimeout(reinitTouchControls, 50);
+    setTimeout(reinitTouchControls, 150);
+    setTimeout(reinitTouchControls, 300);
+    setTimeout(reinitTouchControls, 500);
+    setTimeout(reinitTouchControls, 800);
+
+    if (!foodSpawnInterval) {
+        foodSpawnInterval = setInterval(() => {
+            if (gameRunning && !isBonusStage && !isPassageStage) {
+                const quantidade = 1 + Math.floor(Math.random() * 5);
+                for (let i = 0; i < quantidade; i++) {
+                    spawnFood();
+                }
+            }
+        }, 2000);
+    }
+    if (!specialFoodSpawnInterval) {
+        specialFoodSpawnInterval = setInterval(() => {
+            if (gameRunning && !isBonusStage && !isPassageStage) {
+                spawnSpecialFood();
+            }
+        }, 8000 + Math.random() * 7000);
+    }
+    if (!speedItemSpawnInterval) {
+        speedItemSpawnInterval = setInterval(() => {
+            if (gameRunning && !isBonusStage && !isPassageStage) {
+                spawnSpeedItem();
+            }
+        }, 10000 + Math.random() * 8000);
+    }
+    if (!wormSpawnInterval) {
+        wormSpawnInterval = setInterval(() => {
+            if (gameRunning && isBonusStage) {
+                spawnWorm();
+            }
+        }, 300 + Math.random() * 500);
+    }
+
+    if (debugMode || window.debugMode) {
+        const debugPanel = document.getElementById('debugPanel');
+        const debugIndicator = document.getElementById('debugIndicator');
+        const fpsCounter = document.getElementById('fpsCounter');
+        if (debugPanel) debugPanel.classList.add('active');
+        if (debugIndicator) debugIndicator.classList.add('active');
+        if (fpsCounter) fpsCounter.style.display = 'block';
+    }
+
+    if (!isPassageStage) {
+        spawnFood();
+        spawnFood();
+        spawnFood();
+    }
+    startTimer();
+    if (window.gameLoopAnimFrame) {
+        cancelAnimationFrame(window.gameLoopAnimFrame);
+    }
+    window.gameLoopAnimFrame = requestAnimationFrame(gameLoop);
+}
+
 function showCountdown() {
     const overlay = document.getElementById('countdownOverlay');
     const numberEl = document.getElementById('countdownNumber');
@@ -23916,104 +24460,7 @@ function showCountdown() {
             if (animFrame) {
                 cancelAnimationFrame(animFrame);
             }
-            if (countdownCanvas && countdownCanvas.animFrame) {
-                cancelAnimationFrame(countdownCanvas.animFrame);
-                countdownCanvas.animFrame = null;
-            }
-            overlay.style.display = 'none';
-
-            // Agora inicia o jogo de verdade
-            gameStarted = true;
-            gameRunning = true;
-            gamePaused = false; // Garantir que não está pausado ao iniciar
-            firstFrame = true; // Resetar flag para otimizar primeiro frame
-            
-            // Atualizar botão de pause para mostrar "pausar"
-            const pauseBtn = document.getElementById('pauseBtnGame');
-            if (pauseBtn) {
-                pauseBtn.textContent = '⏸️';
-                pauseBtn.title = 'Pausar (ESC)';
-            }
-            
-            // Reinicializar controles touch quando o jogo começar (importante para landscape)
-            // Chamar imediatamente e depois com delays
-            function reinitTouchControls() {
-                const joystickBase = document.getElementById('joystickBase');
-                const joystickStick = document.getElementById('joystickStick');
-                if (joystickBase && joystickStick) {
-                    // Recalcular posição do joystick
-                    const rect = joystickBase.getBoundingClientRect();
-                    touchControls.joystickBaseX = rect.left + rect.width / 2;
-                    touchControls.joystickBaseY = rect.top + rect.height / 2;
-                    touchControls.joystickRadius = rect.width / 2;
-                }
-                // Mostrar controles
-                showTouchControls();
-            }
-            
-            // Chamar imediatamente
-            reinitTouchControls();
-            
-            // Forçar múltiplas tentativas para garantir que apareça (especialmente em landscape)
-            setTimeout(reinitTouchControls, 50);
-            setTimeout(reinitTouchControls, 150);
-            setTimeout(reinitTouchControls, 300);
-            setTimeout(reinitTouchControls, 500);
-            setTimeout(reinitTouchControls, 800);
-
-            // Recriar intervals de spawn (podem ter sido limpos em endGame anterior)
-            if (!foodSpawnInterval) {
-                foodSpawnInterval = setInterval(() => {
-                    if (gameRunning && !isBonusStage && !isPassageStage) {
-                        const quantidade = 1 + Math.floor(Math.random() * 5);
-                        for (let i = 0; i < quantidade; i++) {
-                            spawnFood();
-                        }
-                    }
-                }, 2000);
-            }
-            if (!specialFoodSpawnInterval) {
-                specialFoodSpawnInterval = setInterval(() => {
-                    if (gameRunning && !isBonusStage && !isPassageStage) {
-                        spawnSpecialFood();
-                    }
-                }, 8000 + Math.random() * 7000);
-            }
-            if (!speedItemSpawnInterval) {
-                speedItemSpawnInterval = setInterval(() => {
-                    if (gameRunning && !isBonusStage && !isPassageStage) {
-                        spawnSpeedItem();
-                    }
-                }, 10000 + Math.random() * 8000);
-            }
-            if (!wormSpawnInterval) {
-                wormSpawnInterval = setInterval(() => {
-                    if (gameRunning && isBonusStage) {
-                        spawnWorm();
-                    }
-                }, 300 + Math.random() * 500);
-            }
-
-            // Mostrar painel e indicador de debug se estiver ativo
-            if (debugMode || window.debugMode) {
-                const debugPanel = document.getElementById('debugPanel');
-                const debugIndicator = document.getElementById('debugIndicator');
-                const fpsCounter = document.getElementById('fpsCounter');
-                if (debugPanel) debugPanel.classList.add('active');
-                if (debugIndicator) debugIndicator.classList.add('active');
-                if (fpsCounter) fpsCounter.style.display = 'block';
-            }
-
-            if (!isPassageStage) {
-                spawnFood();
-                spawnFood();
-                spawnFood();
-            }
-            startTimer();
-            if (window.gameLoopAnimFrame) {
-                cancelAnimationFrame(window.gameLoopAnimFrame);
-            }
-            window.gameLoopAnimFrame = requestAnimationFrame(gameLoop);
+            beginMatch();
         }
     }, 800);
 }
@@ -24579,6 +25026,7 @@ function toggleStory() {
     if (storyOverlay.classList.contains('active')) {
         storyOverlay.classList.remove('active');
     } else {
+        renderStoryBook();
         storyOverlay.classList.add('active');
     }
 }
