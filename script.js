@@ -1943,9 +1943,8 @@ function updatePassage() {
     if (!gameRunning) return;
 
     const worldX = player.x + passageState.scroll;
-    if (worldX >= passageState.length - 150) {
-        passageState.cleared = true;
-        endGame();
+    if (!passageState.cleared && worldX >= passageState.length - 150) {
+        beginPassageExit();
     }
 }
 
@@ -2596,24 +2595,139 @@ function drawPassageEnemy(enemy, theme) {
     ctx.restore();
 }
 
+let passageExit = null;
+
+function beginPassageExit() {
+    if (!passageState || passageState.cleared || passageExit) return;
+    passageState.cleared = true;
+    gameRunning = false;
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    hideTouchControls();
+    const startX = player.x;
+    const startY = player.y;
+    const startScroll = passageState.scroll;
+    const portalWorld = passageState.length - 120;
+    const endScroll = Math.max(startScroll, portalWorld - canvas.width * 0.58);
+    const endX = portalWorld - endScroll;
+    passageExit = { started: Date.now(), startX: startX, startY: startY, startScroll: startScroll, endScroll: endScroll, endX: endX, frame: 0 };
+
+    function tick() {
+        if (!passageExit) return;
+        const t = Math.min(1, (Date.now() - passageExit.started) / 1500);
+        const ease = t * t * (3 - 2 * t);
+        passageState.scroll = passageExit.startScroll + (passageExit.endScroll - passageExit.startScroll) * ease;
+        player.x = passageExit.startX + (passageExit.endX - passageExit.startX) * ease;
+        player.y = passageExit.startY + (canvas.height * 0.46 - passageExit.startY) * ease;
+        player.facingRight = true;
+        draw();
+        drawExitFlourish(t);
+        if (t >= 1) {
+            cancelAnimationFrame(passageExit.frame);
+            passageExit = null;
+            endGame();
+            return;
+        }
+        passageExit.frame = requestAnimationFrame(tick);
+    }
+
+    tick();
+}
+
+function drawExitFlourish(t) {
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(255, 248, 214, ' + (t * t * 0.42) + ')';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const x = player.x;
+    const y = player.y;
+    const wing = selectedPlayerWing || '#27ae60';
+    ctx.fillStyle = wing;
+    ctx.beginPath();
+    ctx.ellipse(x - 8, y - 6, 36 + t * 14, 13, -1.05, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + 16, y - 2, 30 + t * 10, 12, 0.45, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let i = 0; i < 8; i++) {
+        const life = t * 1.35 - i * 0.09;
+        if (life <= 0) continue;
+        const fade = Math.max(0, 1 - life);
+        ctx.globalAlpha = fade;
+        const cx = x - 24 + (i % 4) * 16;
+        const cy = y - life * 110;
+        ctx.fillStyle = '#f1c40f';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#b7950b';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
 function drawPassagePortal() {
     const x = passageState.length - 120;
-    const y = canvas.height / 2;
-    const pulse = 8 + Math.sin(Date.now() / 180) * 4;
-    ctx.fillStyle = 'rgba(241, 196, 15, 0.28)';
+    const ground = canvas.height - 16;
+    const night = !!(passageState && passageState.night);
+    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 220);
+    const rush = passageExit ? Math.min(1, (Date.now() - passageExit.started) / 1500) : 0;
+    const top = 86;
+    ctx.save();
+    ctx.globalAlpha = 1;
+
+    const shaft = ctx.createLinearGradient(x, top, x, ground);
+    shaft.addColorStop(0, 'rgba(255, 252, 230, ' + (0.45 + pulse * 0.2 + rush * 0.35) + ')');
+    shaft.addColorStop(1, 'rgba(241, 196, 15, ' + (0.78 + rush * 0.18) + ')');
+    ctx.fillStyle = shaft;
     ctx.beginPath();
-    ctx.arc(x, y, 58 + pulse * 0.3, 0, Math.PI * 2);
+    ctx.moveTo(x - 48, top + 28);
+    ctx.lineTo(x + 48, top + 28);
+    ctx.lineTo(x + 20, ground);
+    ctx.lineTo(x - 20, ground);
+    ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#f1c40f';
-    ctx.lineWidth = 8;
+
+    ctx.strokeStyle = 'rgba(255, 248, 214, ' + (0.7 + rush * 0.3) + ')';
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(x, y, 52, 0, Math.PI * 2);
+    ctx.moveTo(x - 18, top + 34);
+    ctx.lineTo(x - 8, ground - 8);
+    ctx.moveTo(x + 18, top + 34);
+    ctx.lineTo(x + 8, ground - 8);
     ctx.stroke();
+
+    ctx.fillStyle = night ? '#3e2a1a' : '#5d3a1a';
+    ctx.fillRect(x - 84, top + 24, 28, ground - top - 24);
+    ctx.fillRect(x + 56, top + 24, 28, ground - top - 24);
+    ctx.fillStyle = night ? '#2a1c12' : '#3e2712';
+    ctx.fillRect(x - 76, top + 24, 8, ground - top - 24);
+    ctx.fillRect(x + 64, top + 24, 8, ground - top - 24);
+
+    ctx.fillStyle = night ? '#145032' : '#196f3d';
+    ctx.beginPath();
+    ctx.ellipse(x, top + 30, 98, 48, 0, Math.PI, 0, true);
+    ctx.fill();
+    ctx.fillStyle = night ? '#1d6b42' : '#27ae60';
+    ctx.beginPath();
+    ctx.ellipse(x - 34, top + 26, 40, 16, -0.2, 0, Math.PI * 2);
+    ctx.ellipse(x + 36, top + 28, 38, 15, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.fillStyle = '#fff8dc';
-    ctx.font = 'bold 16px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('SAÍDA', x, y);
+    for (let i = 0; i < 7; i++) {
+        const mote = (Date.now() / 900 + i / 7) % 1;
+        ctx.globalAlpha = (1 - mote) * (0.55 + rush * 0.45);
+        ctx.beginPath();
+        ctx.arc(x + Math.sin(i * 1.7) * 16, ground - 18 - mote * 220, 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
 }
 
 function drawPassageWorld() {
@@ -18512,12 +18626,25 @@ function drawStageVictoryScene() {
     winnerCanvas.animFrame = animFrame;
 }
 
-function victoryStarsMarkup(stars) {
-    let html = '<div class="victory-stars">';
-    for (let i = 0; i < 5; i++) {
-        html += i < stars ? '<span class="on">★</span>' : '<span class="off">☆</span>';
-    }
+let victoryStarToken = 0;
+
+function victoryStarsMarkup() {
+    let html = '<div class="victory-stars" id="victoryStars">';
+    for (let i = 0; i < 5; i++) html += '<span class="off">★</span>';
     return html + '</div>';
+}
+
+function lightVictoryStars(count) {
+    const token = ++victoryStarToken;
+    const el = document.getElementById('victoryStars');
+    if (!el) return;
+    const spans = el.querySelectorAll('span');
+    for (let i = 0; i < count; i++) {
+        setTimeout(function () {
+            if (token !== victoryStarToken || !spans[i]) return;
+            spans[i].className = 'on';
+        }, 280 * (i + 1));
+    }
 }
 
 function areaReturnLabel(area) {
@@ -18879,7 +19006,6 @@ function endGame() {
             playSound('win');
             const victoryStars = calculateCurrentStars();
             window.victoryStars = victoryStars;
-            drawStageVictoryScene();
         } else {
             const stageDef = getAreaStageDef(currentArea, currentSubstage);
             resultTitle.textContent = (stageDef && stageDef.name) || 'Vitória';
@@ -19012,10 +19138,12 @@ function endGame() {
     }
 
     // Mostrar informações de vitória ou derrota
+    let shownStars = 0;
     if (isVictory) {
         // Vitória - mostrar moedas ganhas e estrelas
         const coinsEarned = window.lastCoinsEarned || 0;
         const stars = window.victoryStars || calculateCurrentStars();
+        shownStars = stars;
 
         if (isBossStage()) {
             const nextArea = currentArea + 1;
@@ -19025,9 +19153,9 @@ function endGame() {
                 const nextAreaName = areaConfig[nextArea] ? areaConfig[nextArea].name : 'próxima área';
                 nextLine = `<span class="boss-next">${nextAreaName} aberta</span>`;
             }
-            resultText.innerHTML = `<span class="boss-coins">+${coinsEarned} moedas</span>${nextLine}${victoryStarsMarkup(stars)}`;
+            resultText.innerHTML = `<span class="boss-coins">+${coinsEarned} moedas</span>${nextLine}${victoryStarsMarkup()}`;
         } else {
-            resultText.innerHTML = `<span class="boss-coins">+${coinsEarned} moedas</span>${victoryStarsMarkup(stars)}`;
+            resultText.innerHTML = `<span class="boss-coins">+${coinsEarned} moedas</span>${victoryStarsMarkup()}`;
         }
         window.lastCoinsEarned = null; // Limpar
         window.victoryStars = null; // Limpar
@@ -19126,12 +19254,14 @@ function endGame() {
             const bossName = bossType && bossType.name ? bossType.name : 'Coruja';
             openLore(outro, function () {
                 gameOverDiv.style.display = 'block';
-            }, { tone: 'after', title: bossName + ' livre' });
+                lightVictoryStars(shownStars);
+            }, { tone: 'after', title: bossName + ' livre', world: true });
             return;
         }
     }
     gameOverDiv.style.display = 'block';
-    if (isVictory && !isBossStage()) scheduleStageMap();
+    if (isVictory) lightVictoryStars(shownStars);
+    if (isVictory && !isBossStage()) scheduleStageMap(shownStars);
 }
 
 // Volta para a lista de fases da área atual
@@ -19143,16 +19273,20 @@ function cancelStageMap(clearFocus) {
         clearTimeout(stageMapTimer);
         stageMapTimer = null;
     }
-    if (clearFocus) stageListFocus = 0;
+    if (clearFocus) {
+        stageListFocus = 0;
+        victoryStarToken++;
+    }
 }
 
-function scheduleStageMap() {
+function scheduleStageMap(stars) {
     cancelStageMap(false);
     stageListFocus = nextStageReady() ? currentSubstage + 1 : 0;
+    const count = stars || 1;
     stageMapTimer = setTimeout(function () {
         stageMapTimer = null;
         goToAreaStages();
-    }, 2200);
+    }, 1100 + count * 280);
 }
 
 function goToAreaStages() {
@@ -23604,14 +23738,25 @@ function openLore(lines, onDone, options) {
         full: '',
         timer: null,
         frame: null,
-        onDone: onDone
+        onDone: onDone,
+        world: !!opts.world,
+        baseY: player.y
     };
     overlay.dataset.tone = opts.tone || 'passage';
+    overlay.classList.toggle('lore-world', !!opts.world);
     const kicker = document.getElementById('loreKicker');
     if (kicker) kicker.textContent = opts.title || '';
     overlay.style.display = 'flex';
     document.addEventListener('keydown', onLoreKey, true);
+    if (opts.world) {
+        const game = document.getElementById('game');
+        if (game) game.addEventListener('pointerdown', onLoreWorldPointer, true);
+    }
     renderLoreLine(true);
+}
+
+function onLoreWorldPointer() {
+    if (loreState && loreState.world) advanceLore();
 }
 
 function closeLore(finish) {
@@ -23619,9 +23764,15 @@ function closeLore(finish) {
     loreState = null;
     if (state && state.timer) clearInterval(state.timer);
     if (state && state.frame) cancelAnimationFrame(state.frame);
+    if (state && state.baseY != null) player.y = state.baseY;
     document.removeEventListener('keydown', onLoreKey, true);
+    const game = document.getElementById('game');
+    if (game) game.removeEventListener('pointerdown', onLoreWorldPointer, true);
     const overlay = document.getElementById('loreOverlay');
-    if (overlay) overlay.style.display = 'none';
+    if (overlay) {
+        overlay.style.display = 'none';
+        overlay.classList.remove('lore-world');
+    }
     if (finish && state && state.onDone) state.onDone();
 }
 
@@ -23641,7 +23792,7 @@ function renderLoreLine(animate) {
     const speaker = line.kind === 'say' && line.who ? line.who : '';
     if (whoEl) {
         whoEl.textContent = speaker;
-        whoEl.style.display = speaker ? 'block' : 'none';
+        whoEl.style.display = speaker && !(loreState && loreState.world) ? 'block' : 'none';
     }
     loreState.full = line.text;
     loreState.shown = animate ? 0 : line.text.length;
@@ -23660,7 +23811,8 @@ function renderLoreLine(animate) {
             }
         }, 28);
     }
-    startLoreCanvas();
+    if (loreState.world) startLoreWorld();
+    else startLoreCanvas();
 }
 
 function advanceLore() {
@@ -23744,6 +23896,111 @@ function startLoreCanvas() {
     paint();
 }
 
+function loreWrappedLines(text, maxW) {
+    const words = (text || '').split(' ');
+    const lines = [];
+    let current = '';
+    for (let i = 0; i < words.length; i++) {
+        const trial = current ? current + ' ' + words[i] : words[i];
+        if (current && ctx.measureText(trial).width > maxW) {
+            lines.push(current);
+            current = words[i];
+        } else {
+            current = trial;
+        }
+    }
+    if (current) lines.push(current);
+    if (!lines.length) lines.push('');
+    return lines;
+}
+
+function startLoreWorld() {
+    if (!loreState) return;
+    if (loreState.frame) {
+        cancelAnimationFrame(loreState.frame);
+        loreState.frame = null;
+    }
+    function paint() {
+        if (!loreState || !loreState.world) return;
+        const line = currentLoreLine();
+        const speaker = line && line.kind === 'say' ? line.who : '';
+        if (speaker && speaker !== 'Coruja' && loreState.baseY != null) {
+            player.y = loreState.baseY - Math.abs(Math.sin(Date.now() / 220)) * 4;
+        } else if (loreState.baseY != null) {
+            player.y = loreState.baseY;
+        }
+        draw();
+        drawLoreSpeech();
+        if (loreState) loreState.frame = requestAnimationFrame(paint);
+    }
+    paint();
+}
+
+function drawLoreSpeech() {
+    const line = currentLoreLine();
+    if (!line || !loreState) return;
+    const speaker = line.kind === 'say' && line.who ? line.who : '';
+    const text = loreState.full.slice(0, loreState.shown);
+    const overlay = document.getElementById('loreOverlay');
+    const tone = overlay ? overlay.dataset.tone : 'passage';
+    const stroke = tone === 'night' || tone === 'boss' ? '#d2b4de' : (tone === 'after' ? '#f9e79f' : '#82e0aa');
+    const maxW = speaker ? 260 : 460;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const fullRows = loreWrappedLines(loreState.full, maxW);
+    const rows = loreWrappedLines(text, maxW);
+    const textW = fullRows.reduce(function (wide, row) {
+        return Math.max(wide, ctx.measureText(row).width);
+    }, speaker ? ctx.measureText(speaker).width : 80);
+    const boxW = Math.max(120, textW + 36);
+    const boxH = (speaker ? 24 : 10) + fullRows.length * 24 + 14;
+    let anchorX = canvas.width / 2;
+    let anchorY = canvas.height - 36;
+    let boxX = (canvas.width - boxW) / 2;
+    let boxY = canvas.height - boxH - 86;
+    if (speaker === 'Coruja') {
+        anchorX = cpu.x;
+        anchorY = cpu.y;
+        boxX = anchorX - boxW - 18;
+        boxY = anchorY - boxH - 28;
+    } else if (speaker) {
+        anchorX = player.x;
+        anchorY = player.y;
+        boxX = anchorX + 28;
+        boxY = anchorY - boxH - 24;
+    }
+    if (boxX < 12) boxX = 12;
+    if (boxX + boxW > canvas.width - 12) boxX = canvas.width - 12 - boxW;
+    if (boxY < 12) boxY = 12;
+    ctx.fillStyle = 'rgba(7, 22, 12, 0.92)';
+    drawHudRound(boxX, boxY, boxW, boxH, 14);
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    if (speaker) {
+        ctx.beginPath();
+        ctx.moveTo(anchorX + (speaker === 'Coruja' ? -8 : 14), anchorY - 10);
+        ctx.lineTo(boxX + 28, boxY + boxH);
+        ctx.lineTo(boxX + 52, boxY + boxH);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#f9e79f';
+        ctx.font = 'bold 13px Arial';
+        ctx.fillText(speaker, boxX + 16, boxY + 16);
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 18px Arial';
+    for (let i = 0; i < rows.length; i++) {
+        ctx.fillText(rows[i], boxX + 16, boxY + (speaker ? 36 : 20) + i * 24);
+    }
+    ctx.restore();
+}
+
 function showStageIntroOrStart() {
     const lines = loreLinesFor(currentArea + '-' + currentSubstage);
     if (!lines.length) {
@@ -23757,7 +24014,8 @@ function showStageIntroOrStart() {
     else if (stageDef && stageDef.night) tone = 'night';
     openLore(lines, continueAfterStageIntro, {
         tone: tone,
-        title: (stageDef && stageDef.name) || ''
+        title: (stageDef && stageDef.name) || '',
+        world: true
     });
 }
 

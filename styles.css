@@ -278,11 +278,13 @@
             margin-bottom: 4px;
         }
 
-        .game-over.boss-victory #winnerCanvas,
         .game-over.stage-victory #winnerCanvas {
-            width: 380px;
-            height: auto;
-            margin-bottom: 6px;
+            display: none;
+        }
+
+        .game-over.stage-victory {
+            background: rgba(6, 16, 10, 0.84);
+            border-color: #f1c40f;
         }
 
         .game-over.boss-victory p,
@@ -328,7 +330,15 @@
 
         .game-over.boss-victory .victory-stars .on,
         .game-over.stage-victory .victory-stars .on {
+            display: inline-block !important;
             color: #f1c40f;
+            animation: starPop 0.35s ease;
+        }
+
+        @keyframes starPop {
+            0% { transform: scale(0.4); }
+            70% { transform: scale(1.15); }
+            100% { transform: scale(1); }
         }
 
         .game-over.boss-victory .victory-stars .off,
@@ -1024,6 +1034,34 @@
             font-weight: 700;
             background: #27ae60;
             border: none;
+        }
+
+        .lore-overlay.lore-world {
+            background: transparent;
+            align-items: flex-end;
+            padding-bottom: 18px;
+            pointer-events: none;
+        }
+
+        .lore-overlay.lore-world .lore-card {
+            width: auto;
+            max-height: none;
+            overflow: visible;
+            padding: 0;
+            border: none;
+            background: transparent;
+            pointer-events: none;
+        }
+
+        .lore-overlay.lore-world #loreCanvas,
+        .lore-overlay.lore-world .lore-kicker,
+        .lore-overlay.lore-world .lore-who,
+        .lore-overlay.lore-world .lore-line {
+            display: none;
+        }
+
+        .lore-overlay.lore-world .lore-actions {
+            pointer-events: auto;
         }
 
         /* Menu de Pausa */
